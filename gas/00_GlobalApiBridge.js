@@ -18,6 +18,28 @@
 // ============ ТРИГГЕРЫ (SIMPLE TRIGGERS) ============
 
 /**
+ * Simple Trigger: Запускается при открытии документа.
+ * Инициализирует меню (старое и новое).
+ */
+function onOpen(e) {
+  // 1. Инициализация Legacy меню (из Config)
+  if (typeof Lib !== 'undefined' && typeof Lib.onOpen === 'function') {
+    try {
+      Lib.onOpen(e);
+    } catch (err) {
+      console.error("Ошибка при создании Legacy меню: " + err);
+    }
+  }
+
+  // 2. Инициализация меню Агента
+  if (typeof createAgentMenu === 'function') {
+    createAgentMenu();
+  } else {
+    console.error("createAgentMenu не найдена!");
+  }
+}
+
+/**
  * Simple Trigger: Автоматическая синхронизация при редактировании ячеек.
  * Срабатывает при любом изменении в таблице.
  */

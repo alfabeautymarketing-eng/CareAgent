@@ -930,11 +930,11 @@
     const currentDocumentId = ss.getId();
     const projectKey = DOC_TO_PROJECT[currentDocumentId];
     if (!projectKey) {
-      throw new Error(
-        'КРИТИЧЕСКАЯ ОШИБКА: Документ (ID: ' +
-          currentDocumentId +
-          ') не зарегистрирован. Добавьте его в карту DOC_TO_PROJECT.'
-      );
+      const errorMsg = 'CRITICAL: Document ID ' + currentDocumentId + ' not found in DOC_TO_PROJECT. Using fallback "SS".';
+      console.error(errorMsg);
+      Logger.log(errorMsg);
+      // Fallback to SS to prevent crash and allow menu to load
+      return "SS"; 
     }
     return projectKey;
   }
@@ -942,11 +942,10 @@
   const activeProjectKey = _detectProjectKey();
   const activeProjectConfig = PROJECTS[activeProjectKey];
   if (!activeProjectConfig) {
-    throw new Error(
-      'КРИТИЧЕСКАЯ ОШИБКА: Конфигурация для проекта "' +
-        activeProjectKey +
-        '" не найдена в блоке PROJECTS.'
-    );
+      const errorMsg = 'CRITICAL: Configuration for project "' + activeProjectKey + '" not found.';
+      console.error(errorMsg);
+      // This should theoretically not happen if fallback is valid, but just in case:
+      throw new Error(errorMsg);
   }
 
   function _extend(target) {
