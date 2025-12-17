@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <base target="_top">
+ <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+ <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+ <style>
+    /* --- ОБНОВЛЕННЫЕ СТИЛИ (Версия 2.0) --- */
+    html, body { font-family: 'Roboto', Arial, sans-serif; background-color: #f8f9fa; color: #202124; }
+    body { padding: 25px; font-size: 14px; }
+    
+    h4 {
+         font-size: 1.5em; font-weight: 500; color: #202124; margin-top: 0; margin-bottom: 20px;
+         padding-bottom: 12px; border-bottom: 1px solid #dadce0;
+    }
+
+    .form-section {
+        background-color: #fff; border: 1px solid #dadce0; border-radius: 8px;
+        padding: 20px 25px; margin-bottom: 20px;
+        box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+    }
+    legend {
+      font-size: 1.15em; font-weight: 500; color: #1a73e8;
+      padding-bottom: 10px; margin-bottom: 15px; width: 100%;
+      border-bottom: 1px solid #e8eaed;
+    }
+
+    .form-group { margin-bottom: 18px; }
+    label:not(.checkbox-label) { display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9em; color: #3c4043; }
+    
+    select, input[type="text"] {
+        width: 100%; padding: 10px 12px; height: 42px; box-sizing: border-box;
+        border: 1px solid #dadce0; border-radius: 4px; font-size: 1em;
+        transition: border-color 0.2s; background-color: #fff;
+    }
+    select:focus, input:focus { border-color: #1a73e8; box-shadow: 0 0 0 1px #1a73e8; outline: none; }
+    select[disabled] { background-color: #f1f3f4; cursor: not-allowed; color: #80868b; }
+
+    .inline-group { display: flex; gap: 20px; align-items: flex-start; }
+    .inline-group > div { flex: 1; min-width: 200px; }
+
+    .checkbox-group { display: flex; align-items: center; cursor: pointer; user-select: none; }
+    .checkbox-group input[type="checkbox"] { margin-right: 12px; width: 18px; height: 18px; }
+    
+    /* --- Стили для КНОПОК --- */
+    .button-bar { display: flex; justify-content: flex-end; gap: 12px; margin-top: 10px; }
+    button {
+        font-size: 0.9em; font-weight: 500; padding: 0 24px; height: 38px;
+        border-radius: 4px; cursor: pointer; transition: all 0.2s ease;
+        border: 1px solid #dadce0; background-color: #fff; color: #1a73e8;
+    }
+    button:hover { background-color: #f1f3f4; }
+    button.action { background-color: #1a73e8; color: white; border-color: #1a73e8; }
+    button.action:hover { background-color: #2962ff; box-shadow: 0 1px 3px 1px rgba(60,64,67,.15); }
+    button:disabled { background-color: #f1f3f4; color: #bdbdbd; border-color: #e0e0e0; cursor: default; box-shadow: none; }
+
+    #externalDocGroup { display: none; margin-top: 20px;}
+    .loading-overlay { /* ... как было ... */ }
+    .error-message { color: #d93025; font-size: 0.85em; margin-top: 4px; display: none; }
+    .input-error { border-color: #d93025 !important; }
+
+ </style>
+</head>
+<body>
+ <div id="loadingOverlay" class="loading-overlay">Загрузка...</div>
+
+ <form id="ruleForm">
+   <h4 id="formTitle">Настройка правила синхронизации</h4>
+   <input type="hidden" id="ruleId">
+
+   <fieldset class="form-section">
+     <legend>1. Источник данных</legend>
+     <div class="inline-group">
+       <div class="form-group">
+         <label for="sourceSheetSelect">Исходный лист:</label>
+         <select id="sourceSheetSelect"></select>
+         <small class="error-message" id="sourceSheetError"></small>
+       </div>
+       <div class="form-group">
+         <label for="sourceHeaderSelect">Исходный столбец (по заголовку):</label>
+         <select id="sourceHeaderSelect"></select>
+         <small class="error-message" id="sourceHeaderError"></small>
+       </div>
+     </div>
+   </fieldset>
+
+   <fieldset class="form-section">
+       <legend>2. Цель синхронизации</legend>
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="isExternal">
+          <label for="isExternal" class="checkbox-label">Внешний документ</label>
+        </div>
+
+        <div id="externalDocGroup">
+          <div class="form-group">
+            <label for="externalDocSelect">Внешний документ:</label>
+            <select id="externalDocSelect"></select>
+            <small class="error-message" id="externalDocError"></small>
+          </div>
+          <div class="inline-group">
+            <div class="form-group">
+              <label for="externalSheetSelect">Целевой лист:</label>
+              <select id="externalSheetSelect" disabled></select>
+              <small class="error-message" id="externalSheetError"></small>
+            </div>
+            <div class="form-group">
+              <label for="externalHeaderSelect">Целевой столбец:</label>
+              <select id="externalHeaderSelect" disabled></select>
+              <small class="error-message" id="externalHeaderError"></small>
+            </div>
+          </div>
+        </div>
+
+        <div id="internalTargetGroup">
+            <div class="inline-group">
+                <div class="form-group">
+                    <label for="targetSheetSelect">Целевой лист:</label>
+                    <select id="targetSheetSelect"></select>
+                    <small class="error-message" id="targetSheetError"></small>
+                </div>
+                <div class="form-group">
+                    <label for="targetHeaderSelect">Целевой столбец:</label>
+                    <select id="targetHeaderSelect"></select>
+                    <small class="error-message" id="targetHeaderError"></small>
+                </div>
+            </div>
+        </div>
+   </fieldset>
+   
+   <fieldset class="form-section">
+      <legend>3. Настройки</legend>
+      <div class="checkbox-group">
+          <input type="checkbox" id="isEnabled" checked>
+          <label for="isEnabled" class="checkbox-label">Правило активно</label>
+      </div>
+   </fieldset>
+
+   <div class="button-bar">
+      <button type="button" onclick="google.script.host.close()">Отмена</button>
+      <button type="button" id="saveRule" class="action">Сохранить правило</button>
+   </div>
+ </form>
+
+ <script>
+  // --- Глобальные элементы ---
+  const elements = {
+    loadingOverlay: document.getElementById('loadingOverlay'),
+    ruleIdInput: document.getElementById('ruleId'),
+    sourceSheet: document.getElementById('sourceSheetSelect'),
+    sourceHeader: document.getElementById('sourceHeaderSelect'),
+    isExternal: document.getElementById('isExternal'),
+    externalDocGroup: document.getElementById('externalDocGroup'),
+    internalTargetGroup: document.getElementById('internalTargetGroup'),
+    externalDoc: document.getElementById('externalDocSelect'),
+    externalSheet: document.getElementById('externalSheetSelect'),
+    externalHeader: document.getElementById('externalHeaderSelect'),
+    targetSheet: document.getElementById('targetSheetSelect'),
+    targetHeader: document.getElementById('targetHeaderSelect'),
+    isEnabled: document.getElementById('isEnabled'),
+    saveButton: document.getElementById('saveRule'),
+  };
+
+  // --- Инициализация ---
+  document.addEventListener('DOMContentLoaded', initializeDialog);
+
+  function initializeDialog() {
+    showOverlay('Загрузка данных...');
+    google.script.run
+      .withSuccessHandler(sheetsList => {
+        populateSelect(elements.sourceSheet, sheetsList, "-- Выберите лист --");
+        populateSelect(elements.targetSheet, sheetsList, "-- Выберите лист --");
+        loadColumnsFor('source');
+        loadColumnsFor('target');
+        loadExternalDocs();
+      })
+      .withFailureHandler(handleError)
+      .getSheetsList();
+
+    // --- Обработчики событий ---
+    elements.saveButton.addEventListener('click', saveRule);
+    elements.isExternal.addEventListener('change', toggleExternal);
+    elements.sourceSheet.addEventListener('change', () => loadColumnsFor('source'));
+    elements.targetSheet.addEventListener('change', () => loadColumnsFor('target'));
+    elements.externalDoc.addEventListener('change', loadExternalSheets);
+    elements.externalSheet.addEventListener('change', loadExternalHeaders);
+  }
+
+  // --- Логика загрузки данных ---
+  function loadColumnsFor(type) {
+    const sheetSelect = (type === 'source') ? elements.sourceSheet : elements.targetSheet;
+    const headerSelect = (type === 'source') ? elements.sourceHeader : elements.targetHeader;
+    const sheetName = sheetSelect.value;
+    
+    headerSelect.disabled = true;
+    populateSelect(headerSelect, [], 'Загрузка...');
+    if (!sheetName) {
+      populateSelect(headerSelect, [], '-- Выберите лист --');
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(headers => populateSelect(headerSelect, headers, '-- Выберите столбец --'))
+      .withFailureHandler(handleError)
+      .getSheetColumns(sheetName);
+  }
+
+  function loadExternalDocs() {
+     google.script.run
+      .withSuccessHandler(docs => populateSelect(elements.externalDoc, docs.map(d => ({ text: `${d.name} (${d.status.includes('✅') ? 'OK' : 'Нет доступа'})`, value: d.docId })), '-- Выберите документ --'))
+      .withFailureHandler(handleError)
+      .getExternalDocsList();
+  }
+
+  function loadExternalSheets() {
+    const docId = elements.externalDoc.value;
+    elements.externalSheet.disabled = true;
+    elements.externalHeader.disabled = true;
+    populateSelect(elements.externalSheet, [], 'Загрузка...');
+    populateSelect(elements.externalHeader, [], '-- Выберите лист --');
+    if (!docId) return;
+
+    google.script.run
+      .withSuccessHandler(sheets => populateSelect(elements.externalSheet, sheets, '-- Выберите лист --'))
+      .withFailureHandler(handleError)
+      .getExternalSheetsList(docId);
+  }
+
+  function loadExternalHeaders() {
+    const docId = elements.externalDoc.value;
+    const sheetName = elements.externalSheet.value;
+    elements.externalHeader.disabled = true;
+    populateSelect(elements.externalHeader, [], 'Загрузка...');
+    if (!docId || !sheetName) return;
+
+    google.script.run
+      .withSuccessHandler(headers => populateSelect(elements.externalHeader, headers, '-- Выберите столбец --'))
+      .withFailureHandler(handleError)
+      .getExternalSheetColumns(docId, sheetName);
+  }
+  
+  // --- UI-хелперы ---
+  function toggleExternal() {
+    const isChecked = elements.isExternal.checked;
+    elements.externalDocGroup.style.display = isChecked ? 'block' : 'none';
+    elements.internalTargetGroup.style.display = isChecked ? 'none' : 'block';
+  }
+
+  function populateSelect(selectEl, options, defaultText) {
+      selectEl.innerHTML = '';
+      selectEl.add(new Option(defaultText, ''));
+      if (options && options.length > 0) {
+        options.forEach(opt => {
+          if (typeof opt === 'object') {
+            selectEl.add(new Option(opt.text, opt.value)); // Для внешних документов
+          } else {
+            selectEl.add(new Option(opt, opt)); // Для листов и заголовков
+          }
+        });
+      }
+      selectEl.disabled = !options || options.length === 0;
+      hideOverlay();
+  }
+
+  // --- Сохранение и Валидация ---
+  function saveRule() {
+    // Валидация будет добавлена на следующем шаге
+    const ruleData = {
+      id: elements.ruleIdInput.value || null,
+      sourceSheet: elements.sourceSheet.value,
+      sourceHeader: elements.sourceHeader.value,
+      targetSheet: elements.isExternal.checked ? elements.externalSheet.value : elements.targetSheet.value,
+      targetHeader: elements.isExternal.checked ? elements.externalHeader.value : elements.targetHeader.value,
+      isExternal: elements.isExternal.checked,
+      targetDocId: elements.isExternal.checked ? elements.externalDoc.value : '',
+      enabled: elements.isEnabled.checked,
+    };
+    
+    showOverlay('Сохранение правила...');
+    google.script.run
+      .withSuccessHandler(response => {
+        if (response && response.success) {
+          google.script.host.close();
+        } else {
+          handleError(new Error(response.error || 'Неизвестная ошибка сохранения'));
+        }
+      })
+      .withFailureHandler(handleError)
+      .saveSyncRule(ruleData);
+  }
+  
+  // --- Общие функции ---
+  function showOverlay(msg = 'Загрузка...') { elements.loadingOverlay.textContent = msg; elements.loadingOverlay.style.display = 'flex'; }
+  function hideOverlay() { elements.loadingOverlay.style.display = 'none'; }
+  function handleError(error) {
+    hideOverlay();
+    alert('Произошла ошибка: ' + error.message);
+    console.error(error);
+  }
+ </script>
+</body>
+</html>

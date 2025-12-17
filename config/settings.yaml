@@ -1,0 +1,38 @@
+# AgentCare Configuration
+
+app:
+  name: AgentCare
+  version: 0.1.0
+
+# Sync settings
+sync:
+  batch_size: 100
+  timeout_seconds: 300
+  lock_timeout_seconds: 30
+  max_retries: 3
+
+# Cache settings
+cache:
+  ttl_seconds: 3600
+  key_prefix: "agentcare"
+
+# Gemini AI settings
+gemini:
+  model: gemini-2.5-flash
+  max_retries: 5
+  retry_delays: [2, 5, 10, 20, 30]
+  temperature: 0.1
+  max_tokens: 4096
+
+# Logging
+logging:
+  level: INFO
+  format: json
+  include_timestamp: true
+
+# Rate limits (requests per minute)
+rate_limits:
+  webhook: 100
+  sync: 20
+  price: 5
+  ai: 30

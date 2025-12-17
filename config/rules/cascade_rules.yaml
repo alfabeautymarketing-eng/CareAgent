@@ -1,0 +1,244 @@
+# Cascade Rules Configuration
+# Основано на 03Синхронизация.js из MyGoogleScripts
+
+# ==============================================================================
+# КАСКАД СЕРТИФИКАЦИИ (основной)
+# ==============================================================================
+certification_cascade:
+  name: "Certification Cascade"
+  description: "Каскадное обновление полей при изменении данных сертификации"
+  enabled: true
+
+  # Триггерные колонки - при изменении любой из них запускается каскад
+  source_headers:
+    - "Наименования рус по ДС"
+    - "Наименования англ по ДС"
+    - "Объём"
+    - "Код ТН ВЭД"
+
+  # Целевые поля
+  target_fields:
+    RUS: "Наименования рус по ДС"
+    ENG: "Наименования англ по ДС"
+    VOL: "Объём"
+    TNVED: "Код ТН ВЭД"
+    VOL_EN: "Объём англ."
+    DS_NAME: "Наименование ДС"
+    INV_RU: "Наименование для инвойса"
+    INV_EN: "Наименование для инвойса Англ"
+
+  # Правила трансформации
+  transformations:
+    # Объём англ. - замены
+    volume_en:
+      source: "Объём"
+      replacements:
+        - from: "мл"
+          to: "ml"
+        - from: "гр"
+          to: "g"
+        - from: "шт"
+          to: "pcs"
+        - from: "мг"
+          to: "mg"
+
+    # Наименование ДС - комбинация рус + англ
+    ds_name:
+      # Если рус заканчивается на запятую → без разделителя
+      # Иначе → с разделителем " / "
+      formula: |
+        if rus_name.endswith(","):
+            return f"{rus_name} {eng_name}"
+        else:
+            return f"{rus_name} / {eng_name}"
+
+    # Наименование для инвойса (рус)
+    invoice_name_ru:
+      formula: |
+        result = f"{ds_name} {volume}"
+        if tn_ved:
+            result += f"\nКод ТН ВЭД: {tn_ved}"
+        return result
+
+    # Наименование для инвойса (англ)
+    invoice_name_en:
+      formula: |
+        result = f"{eng_name} {volume_en}"
+        if tn_ved:
+            result += f"\nCode: {tn_ved}"
+        return result
+
+  # Условия применения
+  conditions:
+    # Применяется только если все обязательные поля заполнены
+    required_fields:
+      - "Наименования рус по ДС"
+      - "Наименования англ по ДС"
+      - "Объём"
+    # Запись только если значение изменилось
+    write_only_if_changed: true
+    # Нормализация для сравнения: toLowerCase + ё→е
+    normalize_comparison: true
+
+# ==============================================================================
+# СИНХРОНИЗАЦИЯ ID МЕЖДУ ЛИСТАМИ
+# ==============================================================================
+id_sync_rules:
+  - name: sync_id_p_to_all_sheets
+    description: "Синхронизация ID-P со всех листов"
+    enabled: true
+    source:
+      sheet: "Главная"
+      column: "ID-P"
+    targets:
+      - sheet: "Сертификация"
+        column: "ID"
+      - sheet: "Этикетки"
+        column: "ID"
+      - sheet: "Заказ"
+        column: "ID"
+      - sheet: "Динамика цены"
+        column: "ID"
+      - sheet: "Расчет цены"
+        column: "ID"
+      - sheet: "ABC-Анализ"
+        column: "ID"
+      - sheet: "Прайс"
+        column: "ID"
+    match_by: "ID"
+    create_if_missing: true
+
+  - name: sync_article_to_all_sheets
+    description: "Синхронизация артикула"
+    enabled: true
+    source:
+      sheet: "Главная"
+      columns:
+        - "Арт. Рус"
+        - "Арт. произв."
+    targets:
+      - sheet: "Сертификация"
+      - sheet: "Этикетки"
+      - sheet: "Заказ"
+      - sheet: "Для таможни"
+    match_by: "ID"
+
+# ==============================================================================
+# КАСКАД ЦЕН
+# ==============================================================================
+price_cascade:
+  name: "Price Cascade"
+  description: "Каскадное обновление цен"
+  enabled: true
+
+  # Источник
+  source:
+    sheet: "Главная"
+    column: "ЦЕНА EXW из Б/З"
+
+  # Целевые листы
+  targets:
+    - sheet: "Динамика цены"
+      column: "ЦЕНА EXW из Б/З"
+    - sheet: "Расчет цены"
+      column: "ЦЕНА EXW из Б/З"
+
+  # Формулы на целевых листах (применяются после копирования)
+  formulas:
+    price_dynamics:
+      - column: "EXW ALFASPA 2025, €"
+        formula: "=ЦЕНА_EXW * (1 - СКИДКА/100)"
+      - column: "Закупочная цена 2025, ₽"
+        formula: "=EXW_ALFASPA * КУРС_ЕВРО * КОЭФФИЦИЕНТ"
+      - column: "DDP-МОСКВА 2025, ₽"
+        formula: "=ЗАКУПОЧНАЯ + ЛОГИСТИКА + ТАМОЖНЯ"
+
+    price_calculation:
+      # INDEX/MATCH формулы для подтягивания из Динамика цены
+      - column: "EXW  текущая, €"
+        formula: "=INDEX('Динамика цены'!$E:$E, MATCH($B{row}, 'Динамика цены'!$B:$B, 0))"
+
+# ==============================================================================
+# ТРИГГЕРЫ ЛИСТА "ЗАКАЗ"
+# ==============================================================================
+order_triggers:
+  - name: "акции_trigger"
+    sheet: "Заказ"
+    trigger_column: "АКЦИИ"
+    actions:
+      - fill_column: "условие#"
+      - fill_column: "коментарий#"
+      - fill_column: "Срок#"
+
+  - name: "набор_trigger"
+    sheet: "Заказ"
+    trigger_column: "Набор"
+    actions:
+      - fill_column: "условие"
+      - fill_column: "коментарий"
+      - fill_column: "Срок"
+
+  - name: "срок_годности_trigger"
+    sheet: "Заказ"
+    trigger_columns:
+      - "СГ 1"
+      - "СГ 2"
+      - "СГ 3"
+    actions:
+      - auto_fill: "Срок#"
+      - auto_fill: "Срок"
+
+# ==============================================================================
+# ВАЛИДАЦИЯ
+# ==============================================================================
+validation_rules:
+  - name: validate_status
+    sheet: "Главная"
+    column: "Статус"
+    allowed_values:
+      - "Активный"
+      - "Неактивный"
+      - "Новинка"
+      - "New в работу"
+      - "Архив"
+    on_invalid: "warn"
+
+  - name: validate_tn_ved
+    sheet: "Сертификация"
+    column: "Код ТН ВЭД"
+    allowed_values:
+      - "3304"
+      - "3305"
+      - "3307"
+    on_invalid: "warn"
+
+  - name: validate_doc_type
+    sheet: "Сертификация"
+    column: "Вид документа"
+    allowed_values:
+      - "353пп"
+      - "ДС"
+      - "СГР"
+    on_invalid: "warn"
+
+# ==============================================================================
+# НАСТРОЙКИ ПО УМОЛЧАНИЮ
+# ==============================================================================
+defaults:
+  # Обработка ошибок
+  on_error: "log"           # log, stop, rollback
+  retry_on_conflict: true
+  max_retries: 3
+
+  # Блокировка
+  lock_timeout_ms: 30000
+
+  # Сравнение значений
+  comparison:
+    normalize: true         # Нормализация перед сравнением
+    case_sensitive: false   # Регистронезависимое сравнение
+    trim_whitespace: true   # Убирать пробелы по краям
+
+  # Логирование
+  log_changes: true
+  log_sheet: "Журнал синхро"

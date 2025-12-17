@@ -1,0 +1,204 @@
+# SS Project Configuration (ООО Сан)
+# Полная конфигурация - базовый/простейший проект
+
+project:
+  code: ss
+  name: "ООО Сан"
+  description: Base price project - simplest configuration
+
+# Google Sheets
+spreadsheet:
+  id: "YOUR_SS_SPREADSHEET_ID_HERE"
+
+# ============================================================
+# Реестр листов (SHEETS) - минимальный набор
+# ============================================================
+sheets:
+  primary: "Главная"
+  certification: "Сертификация"
+  labels: "Этикетки"
+  news: "New sert"
+  invoice_full: "Для таможни"
+  order: "Ордер"
+  order_form: "Заказ"
+  price: "Прайс"
+  stocks: "-остатки"
+  price_dynamics: "Динамика цены"
+  price_calculation: "Расчет цены"
+  local_lookup: "Вид и код"
+  rules: "Правила синхро"
+  log: "Журнал синхро"
+  log_debug: "Журнал логов"
+
+# Листы для автосоздания строк при новом артикуле
+base_sheets_for_creation:
+  - "Сертификация"
+  - "Этикетки"
+  - "Заказ"
+  - "Динамика цены"
+  - "Расчет цены"
+
+# ============================================================
+# Колонки (упрощённый набор)
+# ============================================================
+columns:
+  primary:
+    - "ID"
+    - "ID-P"
+    - "Статус"
+    - "Примечание/записная книжка"
+    - "Арт. Рус"
+    - "Арт. произв."
+    - "Код база"
+    - "Код в 1С"
+    - "Название  ENG прайс произв"
+    - "Наименования англ по ДС"
+    - "Наименования рус по ДС"
+    - "Объём"
+    - "Форма выпуска"
+    - "шт./уп."
+    - "Категория товара"
+    - "Линия"
+    - "Группа"
+    - "BAR CODE"
+    # Нет ID-G и ID-L - не используются в SS
+
+# ============================================================
+# Маппинг колонок
+# ============================================================
+column_mapping:
+  id: "ID"
+  id_p: "ID-P"
+  status: "Статус"
+  article_rus: "Арт. Рус"
+  article_producer: "Арт. произв."
+  code_base: "Код база"
+  code_1c: "Код в 1С"
+  barcode: "BAR CODE"
+  name_eng_price: "Название  ENG прайс произв"
+  name_eng_ds: "Наименования англ по ДС"
+  name_rus_ds: "Наименования рус по ДС"
+  volume: "Объём"
+  form: "Форма выпуска"
+  units_per_pack: "шт./уп."
+  category: "Категория товара"
+  line: "Линия"
+  group: "Группа"
+  price_exw: "ЦЕНА EXW из Б/З"
+  tn_ved: "Код ТН ВЭД"
+
+# ============================================================
+# Parser settings - ОДИН РЕЖИМ ОБРАБОТКИ
+# ============================================================
+parser:
+  main:
+    type: ss_main
+    function: processSsPriceSheet
+    sheet_name: "Прайс"
+    header_row: 1
+    # Индексы колонок в Excel поставщика
+    excel_columns:
+      CODE: 1                   # Арт. произв.
+      PRODUCT_NAME: 2           # Название ENG
+      SIZE: 3                   # Объём
+      PACK: 4                   # Форма выпуска
+      BAR_CODE_ACL: 5           # BAR CODE
+      QTY_BOX: 6                # шт./уп.
+      EX_WORKS_CARROS: 7        # Цена EXW (колонка "EX WORKS CARROS (06)")
+
+    # Маркеры режимов
+    markers:
+      # При обнаружении "PROFESSIONAL PRODUCTS" добавляет "-ПРОФ" к группе
+      professional_mode:
+        trigger: "PROFESSIONAL PRODUCTS"
+        group_suffix: "-ПРОФ"
+      # При обнаружении "PROMOTIONAL MATERIALS" прекращает обработку
+      stop_processing:
+        trigger: "PROMOTIONAL MATERIALS"
+
+    # Специальная логика для SAMPLES
+    samples_logic:
+      # Для группы SAMPLES: извлекает число из "Форма выпуска" в "шт./уп."
+      enabled: true
+      group_name: "SAMPLES"
+      extract_number_from: "form"       # Форма выпуска
+      extract_number_to: "units_per_pack"  # шт./уп.
+      pattern: "\\d+"                   # Любое число
+
+# ============================================================
+# Порядок синхронизации SS
+# ============================================================
+sync_order:
+  - step: clearIdpColumnOnSheets
+    description: "Очистка ID-P на всех листах"
+  - step: clearPriceExwColumnOnSheets
+    description: "Очистка цены EXW"
+  - step: _syncIdWithMain
+    description: "Синхронизация ID между листами"
+  - step: fillIdpOnSheetsByIdFromPrimary
+    description: "Заполнение ID-P на всех листах"
+  - step: copyPriceFromPrimaryToSheets
+    description: "Копирование цены"
+  - step: recalculatePriceDynamicsFormulas
+    description: "Формулы на Динамика цены"
+  - step: updatePriceCalculationFormulas
+    description: "INDEX/MATCH формулы на Расчет цены"
+  - step: applyCalculationFormulas
+    description: "Расчётные формулы"
+  - step: updateStatusesAfterProcessing
+    description: "Обновление статусов"
+
+# ============================================================
+# Features - SS minimal
+# ============================================================
+features:
+  testers: false
+  samples: false
+  rrp: false
+  discounts: false
+  group_id: false
+  line_id: false
+  abc_analysis: false
+  tz_by_status: false
+  order_verification: false
+  for_database: false
+  # SS-специфичные
+  professional_mode_marker: true    # Маркер "-ПРОФ"
+  stop_on_promotional: true         # Остановка на PROMOTIONAL MATERIALS
+  samples_number_extraction: true   # Извлечение числа для SAMPLES
+
+# ============================================================
+# Business constants
+# ============================================================
+constants:
+  not_found_text: "!!! НЕ НАЙДЕНО !!!"
+  default_number_format: "#,##0.00"
+  statuses:
+    new: "New в работу"
+    active: "Активный"
+    inactive: "Неактивный"
+    archive: "Архив"
+  doc_types:
+    - "353пп"
+    - "ДС"
+    - "СГР"
+  tn_ved_codes:
+    - "3304"
+    - "3305"
+    - "3307"
+
+# ============================================================
+# Google Drive folders
+# ============================================================
+drive:
+  root_folder_id: "YOUR_SS_ROOT_FOLDER_ID"
+  templates_folder_id: "YOUR_SS_TEMPLATES_FOLDER_ID"
+  invoices_folder_id: "YOUR_SS_INVOICES_FOLDER_ID"
+
+# ============================================================
+# Sync settings
+# ============================================================
+sync:
+  lock_timeout_ms: 30000
+  cache_expiration_seconds: 3600
+  cache_key_prefix: "ECOSYSTEM_CACHE_V2.2_"

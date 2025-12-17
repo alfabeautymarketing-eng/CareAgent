@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <base target="_top">
+ <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+ <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+ <style>
+   /* --- Базовые стили --- */
+   html, body { height: 100%; margin: 0; padding: 0; }
+   body {
+     padding: 25px;
+     font-family: 'Roboto', Arial, sans-serif;
+     font-size: 14px;
+     background-color: #f8f9fa;
+     color: #202124;
+     box-sizing: border-box;
+     display: flex;
+     flex-direction: column;
+     height: 100%;
+   }
+   h4 {
+     font-size: 1.4em; font-weight: 500; color: #202124;
+     margin-top: 0; margin-bottom: 15px;
+     padding-bottom: 10px; border-bottom: 1px solid #dadce0;
+   }
+
+   /* --- Стили для полей ввода и меток --- */
+   .form-group { margin-bottom: 16px; }
+   label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em; color: #3c4043; }
+   input[type="text"], input[type="url"] {
+     width: 100%; padding: 9px 12px; min-height: 40px; box-sizing: border-box;
+     border: 1px solid #dadce0; border-radius: 4px; font-size: 1em;
+     transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out; background-color: #fff;
+   }
+   input:focus { border-color: #1a73e8; box-shadow: 0 0 0 1px #1a73e8 inset; outline: none; }
+   .input-error { border-color: #d93025 !important; }
+   small.help-text { font-size: 0.8em; color: #5f6368; margin-top: 4px; display: block; }
+
+   /* --- Стили КНОПОК --- */
+   button {
+     font-size: 0.9em; font-weight: 500; padding: 10px 24px; min-width: 100px;
+     border-radius: 4px; cursor: pointer; transition: all 0.2s ease-in-out;
+     border: 1px solid transparent;
+     box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+     text-align: center; margin: 0; line-height: 1.5;
+   }
+   button.action { background-color: #1a73e8; color: white; border-color: transparent; }
+   button.action:hover { background-color: #2962ff; box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 2px 6px 2px rgba(60,64,67,.15); }
+   button:disabled { background-color: #f1f1f1; color: #bdbdbd; border-color: #e0e0e0; cursor: default; box-shadow: none; }
+   /* Кнопки "Отмена" и "Закрыть" */
+   #cancelAddBtn, #closeDialogBtn {
+     background-color: #ffffff; color: #1a73e8; border-color: #dadce0; box-shadow: none;
+   }
+    #cancelAddBtn:hover, #closeDialogBtn:hover {
+      background-color: #f8f9fa; border-color: #bdc1c6;
+   }
+
+   /* --- Панель кнопок (нижняя) --- */
+   .button-bar {
+     padding-top: 20px; margin-top: 20px;
+     border-top: 1px solid #dadce0; display: flex;
+     justify-content: flex-end; align-items: center; gap: 12px;
+   }
+
+   /* --- Оверлей загрузки --- */
+   .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; font-weight: bold; font-size: 1.1em; display: none; text-align: center; color: #333; }
+
+   /* --- Список документов --- */
+   .doc-list {
+     margin-top: 15px; margin-bottom: 0;
+     max-height: 250px; overflow-y: auto; border: 1px solid #dadce0;
+     border-radius: 6px; background-color: #fff; flex-grow: 1; min-height: 80px;
+   }
+   .doc-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-bottom: 1px solid #e8eaed; transition: background-color 0.15s ease-in-out; }
+   .doc-item:last-child { border-bottom: none; }
+   .doc-item:hover { background-color: #f1f3f4; }
+   .doc-details { display: flex; flex-direction: column; flex-grow: 1; margin-right: 15px; overflow: hidden; }
+   .doc-name { font-weight: 500; color: #3c4043; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+   .doc-id { font-size: 0.85em; color: #5f6368; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+   .doc-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+   .doc-status { font-size: 0.8em; font-weight: 500; padding: 3px 8px; border-radius: 10px; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.5px; }
+   .status-ok { background-color: #e6f4ea; color: #137333; border: 1px solid #a8d1b3; }
+   .status-error { background-color: #fce8e6; color: #a50e0e; border: 1px solid #f7c4c0;}
+   .status-checking { background-color: #e8f0fe; color: #174ea6; border: 1px solid #adc6ff;}
+   .action-icon { cursor: pointer; background: none; border: none; padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background-color 0.15s ease-in-out; width: 32px; height: 32px; }
+   .action-icon:hover { background-color: rgba(60, 64, 67, 0.1); }
+   .delete-btn-icon { color: #d93025; }
+   .delete-btn-icon:hover { color: #a50e0e; }
+   .action-icon svg { width: 18px; height: 18px; fill: currentColor; }
+
+   /* --- Форма добавления --- */
+   #addForm {
+     border: 1px solid #dadce0; padding: 20px 25px; margin-top: 15px; border-radius: 8px;
+     background-color: #fff; box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+   }
+   #addForm legend { font-weight: 500; color: #1a73e8; margin-bottom: 15px; font-size: 1.1em; }
+
+   /* --- Сообщения --- */
+   #formMessage {
+     font-size: 0.9em; padding: 8px 12px; border-radius: 4px;
+     display: none; border: 1px solid transparent;
+     margin-top: 15px; text-align: left;
+   }
+   #formMessage.message-success { background-color: #e6f4ea; color: #137333; border-color: #a8d1b3; display: block; }
+   #formMessage.message-error { background-color: #fce8e6; color: #a50e0e; border-color: #f7c4c0; display: block; }
+   .empty-list-message { padding: 20px; text-align: center; color: #5f6368; font-style: italic; }
+
+ </style>
+</head>
+<body>
+ <div id="loadingOverlay" class="loading-overlay">Загрузка...</div>
+
+ <h4>Зарегистрированные внешние документы</h4>
+
+ <button type="button" id="showAddFormBtn" class="action" style="margin-bottom: 15px; align-self: flex-start;">Добавить новый документ</button>
+
+ <form id="addForm" style="display: none;">
+   <legend id="formLegend">Добавить новый внешний документ</legend>
+   <input type="hidden" id="regIdInput">
+
+   <div class="form-group">
+     <label for="docNameInput">Название (для удобства): <span style="color: #d93025;">*</span></label>
+     <input type="text" id="docNameInput" required placeholder="Например: Основной склад, Отчет продаж">
+   </div>
+
+   <div class="form-group">
+     <label for="docIdInput">ID или URL документа: <span style="color: #d93025;">*</span></label>
+     <input type="text" id="docIdInput" required placeholder="Вставьте ID или полную ссылку на Google Таблицу">
+     <small class="help-text">Пример: https://docs.google.com/spreadsheets/d/ВАШ_ID/edit или просто ВАШ_ID</small>
+   </div>
+
+   </form>
+
+ <div class="doc-list" id="docListContainer">
+   <div class="empty-list-message">Загрузка списка...</div>
+ </div>
+
+ <div id="formMessage" class="message"></div>
+
+ <div class="button-bar">
+     <button type="button" id="cancelAddBtn" style="display: none;">Отмена</button>
+     <button type="button" id="saveDocBtn" class="action" style="display: none;">Сохранить</button>
+     <button type="button" id="closeDialogBtn" onclick="google.script.host.close()">Закрыть</button>
+ </div>
+
+ <script>
+   const loadingOverlay = document.getElementById('loadingOverlay');
+   const docListContainer = document.getElementById('docListContainer');
+   const addForm = document.getElementById('addForm');
+   const showAddFormBtn = document.getElementById('showAddFormBtn');
+   const saveDocBtn = document.getElementById('saveDocBtn'); // В нижней панели
+   const cancelAddBtn = document.getElementById('cancelAddBtn'); // В нижней панели
+   const closeDialogBtn = document.getElementById('closeDialogBtn');
+   const regIdInput = document.getElementById('regIdInput');
+   const docNameInput = document.getElementById('docNameInput');
+   const docIdInput = document.getElementById('docIdInput');
+   const formMessage = document.getElementById('formMessage'); // Отдельный div
+   const formLegend = document.getElementById('formLegend');
+
+   document.addEventListener('DOMContentLoaded', loadDocuments);
+
+   // --- Обработчики событий ---
+   showAddFormBtn.addEventListener('click', () => {
+     resetForm();
+     formLegend.textContent = 'Добавить новый внешний документ';
+     addForm.style.display = 'block';
+     showAddFormBtn.style.display = 'none';
+     docListContainer.style.display = 'none';
+     formMessage.style.display = 'none';
+     cancelAddBtn.style.display = 'inline-block';
+     saveDocBtn.style.display = 'inline-block';
+   });
+
+   cancelAddBtn.addEventListener('click', () => {
+     addForm.style.display = 'none';
+     showAddFormBtn.style.display = 'inline-block';
+     docListContainer.style.display = 'block';
+     cancelAddBtn.style.display = 'none';
+     saveDocBtn.style.display = 'none';
+     hideMessage();
+   });
+
+   saveDocBtn.addEventListener('click', saveDocument);
+
+   docListContainer.addEventListener('click', function(event) {
+       const button = event.target.closest('.action-icon');
+       if (!button) return;
+       const regId = button.getAttribute('data-regid');
+       const docName = button.getAttribute('data-docname');
+       if (button.classList.contains('delete-btn-icon')) {
+           if (regId && confirm(`Вы уверены, что хотите удалить регистрацию для документа "${docName}"?\nПравила синхронизации, использующие этот документ, перестанут работать!`)) {
+               deleteDocument(regId);
+           }
+       }
+   });
+
+   // --- Функции ---
+   function showOverlay(msg = 'Загрузка...') { /* ... как было ... */ loadingOverlay.textContent = msg; loadingOverlay.style.display = 'flex'; }
+   function hideOverlay() { /* ... как было ... */ loadingOverlay.style.display = 'none'; }
+   function showMessage(msg, isError = false) { /* ... как было ... */
+       formMessage.textContent = msg;
+       formMessage.className = `message ${isError ? 'message-error' : 'message-success'}`;
+       formMessage.style.display = 'block';
+   }
+   function hideMessage() { /* ... как было ... */
+       formMessage.textContent = '';
+       formMessage.className = 'message';
+       formMessage.style.display = 'none';
+   }
+   function resetForm() { /* ... как было ... */
+     regIdInput.value = ''; docNameInput.value = ''; docIdInput.value = '';
+     docNameInput.classList.remove('input-error'); docIdInput.classList.remove('input-error');
+   }
+   function validateForm() { /* ... как было ... */
+       let isValid = true;
+       docNameInput.classList.remove('input-error'); docIdInput.classList.remove('input-error');
+       hideMessage();
+       if (!docNameInput.value.trim()) { docNameInput.classList.add('input-error'); isValid = false; }
+       if (!docIdInput.value.trim()) { docIdInput.classList.add('input-error'); isValid = false; }
+       if (!isValid) { showMessage("Заполните все обязательные поля.", true); }
+       return isValid;
+   }
+   function loadDocuments() { /* ... как было ... */
+     showOverlay('Загрузка списка документов...');
+     docListContainer.innerHTML = '<div class="empty-list-message">Загрузка списка...</div>';
+     google.script.run
+       .withSuccessHandler(docs => { renderDocumentList(docs); hideOverlay(); })
+       .withFailureHandler(err => {
+         docListContainer.innerHTML = `<div class="empty-list-message" style="color: #d93025;">Ошибка загрузки: ${err.message}</div>`;
+         hideOverlay(); alert("Не удалось загрузить список: " + err.message);
+       })
+       .getExternalDocsList();
+   }
+   function renderDocumentList(docs) { /* ... как было ... */
+     if (!docs || docs.length === 0) {
+       docListContainer.innerHTML = `<div class="empty-list-message">Внешние документы еще не зарегистрированы.</div>`; return;
+     }
+     let html = '';
+     docs.forEach(doc => {
+       let statusClass = 'status-checking'; let statusText = doc.status || '?';
+       if (statusText.includes('✅')) { statusClass = 'status-ok'; statusText = 'Доступ есть'; }
+       else if (statusText.includes('❌')) { statusClass = 'status-error'; statusText = 'Нет доступа'; }
+       else { statusText = 'Проверка?'; }
+       html += `
+         <div class="doc-item">
+           <div class="doc-details"> <span class="doc-name">${doc.name}</span> <span class="doc-id">ID: ${doc.docId}</span> </div>
+           <div class="doc-actions">
+             <span class="doc-status ${statusClass}">${statusText}</span>
+             <button type="button" class="action-icon delete-btn-icon" title="Удалить регистрацию" data-regid="${doc.regId}" data-docname="${doc.name}">
+               <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg>
+             </button>
+           </div>
+         </div>`;
+     });
+     docListContainer.innerHTML = html;
+   }
+   function saveDocument() { /* ... как было ... */
+       if (!validateForm()) return;
+     const data = { regId: regIdInput.value || null, name: docNameInput.value.trim(), docIdOrUrl: docIdInput.value.trim() };
+     showOverlay('Сохранение и проверка доступа...');
+     saveDocBtn.disabled = true; cancelAddBtn.disabled = true;
+
+     google.script.run
+       .withSuccessHandler(response => {
+         hideOverlay(); saveDocBtn.disabled = false; cancelAddBtn.disabled = false;
+         if (response && response.success) {
+           resetForm(); addForm.style.display = 'none';
+           showAddFormBtn.style.display = 'inline-block'; docListContainer.style.display = 'block';
+           cancelAddBtn.style.display = 'none'; saveDocBtn.style.display = 'none'; // Скрываем кнопки
+           loadDocuments();
+           alert(response.message || "Успешно сохранено!");
+         } else { showMessage(response.message || "Неизвестная ошибка.", true); }
+       })
+       .withFailureHandler(err => {
+         hideOverlay(); saveDocBtn.disabled = false; cancelAddBtn.disabled = false;
+         showMessage("Критическая ошибка: " + err.message, true); console.error("Save external doc error:", err);
+       })
+       .saveExternalDoc(data);
+   }
+   function deleteDocument(regId) { /* ... как было ... */
+       showOverlay('Удаление записи...');
+       const deleteButtons = docListContainer.querySelectorAll('.delete-btn-icon');
+       deleteButtons.forEach(btn => btn.disabled = true);
+       google.script.run
+           .withSuccessHandler(response => {
+               hideOverlay();
+               if (response && response.success) { alert(response.message || "Запись удалена."); loadDocuments(); }
+               else { alert("Ошибка удаления: " + (response.message || "Неизвестная ошибка")); deleteButtons.forEach(btn => btn.disabled = false); }
+           })
+           .withFailureHandler(err => {
+               hideOverlay(); alert("Критическая ошибка при удалении: " + err.message);
+               console.error("Delete external doc error:", err); deleteButtons.forEach(btn => btn.disabled = false);
+           })
+           .deleteExternalDoc(regId);
+   }
+
+ </script>
+</body>
+</html>

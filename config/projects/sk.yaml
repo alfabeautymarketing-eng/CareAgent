@@ -1,0 +1,260 @@
+# SK Project Configuration (Carmado)
+# Полная конфигурация на основе MyGoogleScripts/EcosystemLib/01Config.js
+
+project:
+  code: sk
+  name: Carmado
+  description: Project with samples, RRP, and discounts
+
+# Google Sheets
+spreadsheet:
+  id: "YOUR_SK_SPREADSHEET_ID_HERE"
+
+# ============================================================
+# Реестр листов (SHEETS)
+# ============================================================
+sheets:
+  primary: "Главная"
+  certification: "Сертификация"
+  labels: "Этикетки"
+  news: "New sert"
+  invoice_full: "Для таможни"
+  order: "Ордер"
+  order_form: "Заказ"
+  price: "Прайс"
+  stocks: "-остатки"
+  price_dynamics: "Динамика цены"
+  price_calculation: "Расчет цены"
+  abc_analysis: "ABC-Анализ"
+  for_database: "Для базы"
+  local_lookup: "Вид и код"
+  rules: "Правила синхро"
+  log: "Журнал синхро"
+  log_debug: "Журнал логов"
+  external_docs: "Внешние документы"
+
+# Листы для автосоздания строк при новом артикуле
+base_sheets_for_creation:
+  - "Сертификация"
+  - "Этикетки"
+  - "Заказ"
+  - "Динамика цены"
+  - "Расчет цены"
+  - "ABC-Анализ"
+
+# ============================================================
+# Колонки (упрощённо - основные отличия от MT)
+# ============================================================
+columns:
+  primary:
+    - "ID"
+    - "ID-P"
+    - "Статус"
+    - "Примечание/записная книжка"
+    - "Арт. Рус"
+    - "Арт. произв."
+    - "Код база"
+    - "Код в 1С"
+    - "Название  ENG прайс произв"
+    - "Наименования англ по ДС"
+    - "Наименования рус по ДС"
+    - "Объём"
+    - "Форма выпуска"
+    - "шт./уп."
+    - "Категория товара"
+    - "Линия"
+    - "Группа"
+    - "BAR CODE"
+    - "ID-G"
+    - "ID-L"
+    - "RRP"           # Специфично для SK
+    - "Скидка %"      # Специфично для SK
+
+# (остальные колонки аналогичны MT, см. mt.yaml)
+
+# ============================================================
+# Маппинг колонок (логическое имя → текст заголовка)
+# ============================================================
+column_mapping:
+  id: "ID"
+  id_p: "ID-P"
+  id_g: "ID-G"
+  id_l: "ID-L"
+  status: "Статус"
+  article_rus: "Арт. Рус"
+  article_producer: "Арт. произв."
+  code_base: "Код база"
+  code_1c: "Код в 1С"
+  barcode: "BAR CODE"
+  name_eng_price: "Название  ENG прайс произв"
+  name_eng_ds: "Наименования англ по ДС"
+  name_rus_ds: "Наименования рус по ДС"
+  volume: "Объём"
+  form: "Форма выпуска"
+  units_per_pack: "шт./уп."
+  category: "Категория товара"
+  line: "Линия"
+  group: "Группа"
+  price_exw: "ЦЕНА EXW из Б/З"
+  rrp: "RRP"
+  discount: "Скидка %"
+  tn_ved: "Код ТН ВЭД"
+
+# ============================================================
+# Parser settings - ДВА РЕЖИМА ОБРАБОТКИ
+# ============================================================
+parser:
+  # Режим 1: Основной прайс
+  main:
+    type: sk_main
+    function: processSkPriceSheet
+    sheet_name: "Прайс"
+    header_row: 1
+    excel_columns:
+      CODE: "CODE"
+      PRODUCT: "PRODUCT"
+      UNITS: "UNITS"
+      PRICE: "PRICE"
+      TOTAL: "TOTAL"
+      RRP: "RRP"
+    # ВАЖНО: Парсинг по цвету фона ячейки
+    group_detection:
+      method: "background_color"
+      group_color: "#ffff00"        # config.GROUP_HEADER_COLOR
+    # Комбинирование полей
+    transformations:
+      combined_group: "{line} - {group}"  # "Линия - Группа"
+    # Дополнительные шаги
+    post_processing:
+      - fill_discount_for_price_dynamics  # Заполняет 20% скидку
+      - clear_idl_column                   # Очистка ID-L (только SK)
+
+  # Режим 2: Пробники
+  probes:
+    type: sk_probes
+    function: processSkPriceProbes
+    # Точный блок заголовков для поиска
+    header_block:
+      - "REFERENC."
+      - "PRODUCT"
+      - "PRODUCTO"
+      - "TYPE"
+      - "AREA"
+      - "UNITS"
+      - "PRICE"
+      - "TOTAL"
+    # Маркер остановки
+    stop_marker: "CATÁLOGOS Y MATERIALES IMPRESOS / CATALOGUES & PRINTED MATERIALS"
+    # Логика определения группы:
+    # Если артикул НЕ начинается с "00" → это группа
+    group_detection:
+      condition: "not_starts_with_00"
+      pattern: "^0{2}"
+    # Последовательная нумерация ID-P
+    idp_assignment:
+      method: "sequential"
+      function: _assignSequentialIdpForProbes_
+      override_from_source: true
+
+# ============================================================
+# Порядок синхронизации SK
+# ============================================================
+sync_order:
+  - step: clearIdpColumnOnSheets
+    description: "Очистка ID-P на всех листах"
+  - step: clearIdlColumnOnSheets
+    description: "Очистка ID-L (ТОЛЬКО SK)"
+    sk_only: true
+  - step: clearPriceExwColumnOnSheets
+    description: "Очистка цены EXW"
+  - step: _syncIdWithMain
+    description: "Синхронизация ID между листами"
+  - step: fillIdpOnSheetsByIdFromPrimary
+    description: "Заполнение ID-P на всех листах"
+  - step: copyPriceFromPrimaryToSheets
+    description: "Копирование цены"
+  - step: _fillDiscountForPriceDynamics
+    description: "Заполнение скидки 20% на Динамика цены (ТОЛЬКО SK)"
+    sk_only: true
+    discount_percent: 20
+  - step: recalculatePriceDynamicsFormulas
+    description: "Формулы на Динамика цены"
+  - step: updatePriceCalculationFormulas
+    description: "INDEX/MATCH формулы на Расчет цены"
+  - step: applyCalculationFormulas
+    description: "Расчётные формулы"
+
+# ============================================================
+# Features - SK specific
+# ============================================================
+features:
+  testers: false
+  samples: true
+  rrp: true
+  discounts: true
+  group_id: true
+  line_id: true
+  abc_analysis: true
+  tz_by_status: false
+  order_verification: false
+  # SK-специфичные
+  color_based_parsing: true     # Парсинг по цвету
+  combined_line_group: true     # "Линия - Группа"
+  discount_on_dynamics: true    # 20% скидка на Динамика цены
+  clear_idl_separately: true    # Отдельная очистка ID-L
+
+# ============================================================
+# Discount rules (SK specific)
+# ============================================================
+discounts:
+  enabled: true
+  # Фиксированная скидка на Динамика цены
+  price_dynamics_discount: 20   # 20%
+  # Категорийные скидки (опционально)
+  categories:
+    - name: "Уход"
+      percent: 10
+    - name: "Макияж"
+      percent: 15
+    - name: "Парфюмерия"
+      percent: 5
+    - name: "Волосы"
+      percent: 8
+  default_percent: 0
+
+# ============================================================
+# Business constants
+# ============================================================
+constants:
+  not_found_text: "!!! НЕ НАЙДЕНО !!!"
+  default_number_format: "#,##0.00"
+  statuses:
+    new: "New в работу"
+    active: "Активный"
+    inactive: "Неактивный"
+    archive: "Архив"
+  doc_types:
+    - "353пп"
+    - "ДС"
+    - "СГР"
+  tn_ved_codes:
+    - "3304"
+    - "3305"
+    - "3307"
+
+# ============================================================
+# Google Drive folders
+# ============================================================
+drive:
+  root_folder_id: "YOUR_SK_ROOT_FOLDER_ID"
+  templates_folder_id: "YOUR_SK_TEMPLATES_FOLDER_ID"
+  invoices_folder_id: "YOUR_SK_INVOICES_FOLDER_ID"
+  documents_folder_id: "YOUR_SK_DOCUMENTS_FOLDER_ID"
+
+# ============================================================
+# Sync settings
+# ============================================================
+sync:
+  lock_timeout_ms: 30000
+  cache_expiration_seconds: 3600
+  cache_key_prefix: "ECOSYSTEM_CACHE_V2.2_"
