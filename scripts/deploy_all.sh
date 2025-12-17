@@ -5,6 +5,19 @@ set -e
 GAS_DIR="./gas"
 PROJECTS_FILE="./config/projects.json"
 
+# If the expected GAS directory does not exist, try to locate GAS files
+# in the repository root (some workflows keep GAS files at repo root).
+if [ ! -d "$GAS_DIR" ]; then
+    if [ -f "appsscript.json" ] || ls *.gs *.js 1> /dev/null 2>&1; then
+        echo "⚠️  $GAS_DIR not found. Found GAS files in repository root — using '.' as GAS_DIR"
+        GAS_DIR="."
+    else
+        echo "⚠️  $GAS_DIR not found and no GAS files detected. Creating $GAS_DIR and attempting to copy known file types..."
+        mkdir -p "$GAS_DIR"
+        cp *.gs *.js appsscript.json "$GAS_DIR/" 2>/dev/null || true
+    fi
+fi
+
 # 1. Deploy Server Side (Python/Docker)
 echo "🚀 Deploying Python Server..."
 ./deploy.sh

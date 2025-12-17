@@ -1,0 +1,68 @@
+name: Auto Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install clasp
+        run: npm install -g @google/clasp
+
+      - name: Restore secrets and keys (if provided)
+        env:
+          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
+          CLASP_SERVICE_ACCOUNT: ${{ secrets.CLASP_SERVICE_ACCOUNT }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          if [ -n "$CLASP_CREDENTIALS" ]; then
+            echo "$CLASP_CREDENTIALS" > ~/.clasprc.json
+            chmod 600 ~/.clasprc.json
+            echo "CLASP_CREDENTIALS restored"
+          else
+            echo "No CLASP_CREDENTIALS provided"
+          fi
+
+          if [ -n "$CLASP_SERVICE_ACCOUNT" ]; then
+            echo "$CLASP_SERVICE_ACCOUNT" > ./sa.json
+            chmod 600 ./sa.json
+            echo "Service account saved to sa.json"
+          fi
+
+          if [ -n "$SSH_PRIVATE_KEY" ]; then
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            eval "$(ssh-agent -s)"
+            ssh-add ~/.ssh/id_rsa
+            echo "SSH key added"
+          else
+            echo "No SSH_PRIVATE_KEY provided"
+          fi
+
+      - name: Make deploy script executable
+        run: chmod +x ./scripts/deploy_all.sh
+
+      - name: Run deploy script
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: ./scripts/deploy_all.sh

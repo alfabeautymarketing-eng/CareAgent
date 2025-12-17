@@ -44,6 +44,7 @@ docker compose up -d
 - [API](docs/API.md)
 - [Dependencies](docs/DEPENDENCIES.md)
 - [Deployment](docs/DEPLOYMENT.md)
+- [GAS & CI: clasp credentials and GitHub secrets](docs/GAS_CI_SECRETS.md)
 
 ## Projects
 
@@ -54,4 +55,5 @@ docker compose up -d
 ## License
 
 MIT
+
 # CareAgent
