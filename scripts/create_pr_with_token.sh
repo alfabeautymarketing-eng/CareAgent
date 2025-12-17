@@ -67,6 +67,12 @@ if [ "$confirm" != "yes" ]; then
   echo "Aborted by user."; exit 0
 fi
 
+# If dry-run requested, exit before prompting for token
+if [ "$DRY_RUN" = true ]; then
+  echo "DRY RUN: would run 'gh auth login' and create PR from $BRANCH with title: $PR_TITLE"
+  exit 0
+fi
+
 # Determine token (from arg / env / clipboard / prompt)
 if [ -n "$TOKEN_ARG" ]; then
   GHTOKEN="$TOKEN_ARG"
