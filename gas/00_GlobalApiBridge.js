@@ -55,9 +55,14 @@ function onOpen(e) {
  * Срабатывает при любом изменении в таблице.
  */
 function onEdit(e) {
+  // Simple Trigger 'onEdit' cannot call UrlFetchApp (Sync requires it).
+  // We rely on 'handleOnEdit' (Installable Trigger) for synchronization.
+  // Leaving this empty to prevent "Permission denied" errors in logs.
+  /*
   if (typeof Lib !== 'undefined' && typeof Lib.onEdit_internal_ === 'function') {
     Lib.onEdit_internal_(e);
   }
+  */
 }
 
 /**

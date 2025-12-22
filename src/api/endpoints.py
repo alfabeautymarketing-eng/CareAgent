@@ -44,13 +44,18 @@ class AddArticleRequest(BaseModel):
     article: str
     spreadsheet_id: Optional[str] = None
 
+class DeleteArticlesRequest(BaseModel):
+    project: str
+    articles: List[str]
+    spreadsheet_id: Optional[str] = None
+
 class SyncEventRequest(BaseModel):
     """Request from GAS onEdit trigger."""
     spreadsheet_id: str
     sheet_name: str
     row: int
     col: int
-    value: Any
+    value: Optional[Any] = None
     old_value: Optional[Any] = None
     user_email: Optional[str] = None
     header_name: Optional[str] = None
@@ -196,6 +201,31 @@ async def add_article(request: AddArticleRequest):
         }
     except Exception as e:
         logger.error("add_article_endpoint_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/sync/delete-articles")
+async def delete_articles(request: DeleteArticlesRequest):
+    """Delete articles from relevant sheets."""
+    logger.info("delete_articles_requested", project=request.project, count=len(request.articles))
+    
+    spreadsheet_id = request.spreadsheet_id
+    if not spreadsheet_id:
+        project_map = {v: k for k, v in PROJECT_IDS.items()}
+        spreadsheet_id = project_map.get(request.project)
+        
+    if not spreadsheet_id:
+        raise HTTPException(status_code=400, detail=f"Could not resolve spreadsheet_id for project {request.project}")
+
+    try:
+        result = sync_service.delete_articles(spreadsheet_id, request.articles)
+        return {
+            "status": "success",
+            "message": f"Deleted {result.get('total_deleted')} rows total",
+            "details": result
+        }
+    except Exception as e:
+        logger.error("delete_articles_endpoint_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -608,31 +638,22 @@ BASE_MENU_GROUPS: List[dict] = [
     {
         "title": "⚙️ Синхронизация",
         "items": [
-            {"label": "Настроить правила", "function_name": "showSyncConfigDialog"},
-            {"label": "🧹 Очистить уведомления", "function_name": "clearAllToasts"},
-            {"label": "Управление внешними документами", "function_name": "showExternalDocManagerDialog"},
-            {"separator": True},
             {
-                "submenu": "Операции с артикулами",
+                "submenu": "⚙️ Настройки",
                 "items": [
-                    {"label": "Добавить артикул", "function_name": "addArticleManually"},
-                    {"label": "Удалить выбранные строки (с синхронизацией)", "function_name": "deleteSelectedRowsWithSync"},
-                    {"separator": True},
-                    {"label": "Синхронизировать ДАННЫЕ выбранной строки", "function_name": "syncSelectedRow"},
-                    {"label": "Проверить и синхронизировать ВСЮ таблицу", "function_name": "runFullSync"},
+                    {"label": "🔄 Обновить триггеры", "function_name": "setupTriggers"},
+                    {"label": "📝 Настроить правила", "function_name": "showSyncConfigDialog"},
+                    {"label": "📄 Внешние документы", "function_name": "showExternalDocManagerDialog"},
+                    {"label": "📋 Создать/Пересоздать журнал синхро", "function_name": "recreateLogSheet"},
+                    {"label": "🧹 Очистить журнал", "function_name": "quickCleanLogSheet"},
                 ],
             },
             {"separator": True},
-            {"label": "Установить/Переустановить триггеры", "function_name": "setupTriggers"},
+            {"label": "➕ Добавить артикул", "function_name": "addArticleManually"},
+            {"label": "❌ Удалить артикул", "function_name": "deleteSelectedRowsWithSync"},
             {"separator": True},
-            {
-                "submenu": "📋 Журнал",
-                "items": [
-                    {"label": "Пересоздать журнал синхро", "function_name": "recreateLogSheet"},
-                    {"label": "Пересоздать журнал логов", "function_name": "recreateDebugLogSheet"},
-                    {"label": "Очистить журнал (быстро)", "function_name": "quickCleanLogSheet"},
-                ],
-            },
+            {"label": "🔄 Синхронизировать строку", "function_name": "syncSelectedRow"},
+            {"label": "🔄 Синхронизировать всю таблицу", "function_name": "runFullSync"},
         ],
     },
     {

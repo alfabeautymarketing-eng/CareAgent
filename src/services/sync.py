@@ -290,10 +290,114 @@ class SyncService:
                 results.append({"rule_id": rule.id, "status": "failed", "error": str(e)})
 
         # 5. Handle Cascades (Certification, etc)
-        # This mirrors _triggerCascadeUpdates
-        self._handle_cascades(spreadsheet_id, sheet_name, row, col, source_header)
+        if source_header:
+            self._handle_cascades(spreadsheet_id, sheet_name, row, source_header)
         
         return {"status": "processed", "rules_matched": len(matching_rules), "results": results}
+
+    def _handle_cascades(self, spreadsheet_id: str, sheet_name: str, row_idx: int, col_name: str):
+        """
+        Handle specific business logic cascades.
+        """
+        if sheet_name == "Сертификация":
+            self._process_certification_cascade(spreadsheet_id, sheet_name, row_idx, col_name)
+
+    def _process_certification_cascade(self, spreadsheet_id: str, sheet_name: str, row_idx: int, updated_header: str):
+        """
+        Replicates _runCertificationCascade from GAS.
+        Handles: "Наименование ДС", "Объём англ.", "Наименование для инвойса", etc.
+        """
+        key = updated_header.lower().strip()
+        triggers = {
+            "наименования рус по дс",
+            "наименования англ по дс",
+            "объём",
+            "код тн вэд"
+        }
+        
+        # Check if updated header is a trigger
+        if key not in triggers:
+            return
+
+        try:
+            ws = self.sheets_service.get_worksheet(spreadsheet_id, sheet_name)
+            headers = ws.row_values(1)
+            # Map header name to 1-based index
+            header_map = {h.lower().strip(): i + 1 for i, h in enumerate(headers)}
+            
+            # Helper to get/set
+            def get_val(name):
+                idx = header_map.get(name.lower().strip())
+                if not idx: return None
+                val = ws.cell(row_idx, idx).value
+                return str(val).strip() if val else ""
+            
+            def set_val(name, val):
+                idx = header_map.get(name.lower().strip())
+                if idx:
+                    current = ws.cell(row_idx, idx).value
+                    if str(current or "").strip() != str(val).strip():
+                        ws.update_cell(row_idx, idx, val)
+                        logger.info("cascade_update", sheet=sheet_name, row=row_idx, field=name, val=val)
+
+            # 1. Fetch Source Values
+            rus_name = get_val("Наименования рус по ДС") or ""
+            eng_name = get_val("Наименования англ по ДС") or ""
+            volume = get_val("Объём") or ""
+            tnved = get_val("Код ТН ВЭД") or ""
+            current_vol_en = get_val("Объём англ.") or ""
+
+            # 2. Compute "Наименование ДС"
+            # Logic: If rus_name ok and eng_name ok. If rus_name ends with comma, join with space, else " / "
+            new_ds_name = ""
+            if rus_name and eng_name:
+                sep = " " if rus_name.strip().endswith(",") else " / "
+                new_ds_name = f"{rus_name}{sep}{eng_name}"
+            else:
+                new_ds_name = rus_name or eng_name
+
+            # 3. Compute "Объём англ." (only if volume was the trigger)
+            new_vol_en = current_vol_en
+            if key == "объём":
+                new_vol_en = volume
+                replacements = [
+                    ("мл", "ml"),
+                    ("гр", "g"),
+                    ("Тестер", "Tester"),
+                    ("шт. х", "*")
+                ]
+                for old, new in replacements:
+                    # case-insensitive replace
+                    import re
+                    new_vol_en = re.sub(re.escape(old), new, new_vol_en, flags=re.IGNORECASE)
+                new_vol_en = " ".join(new_vol_en.split()) # normalize spaces
+
+            # 4. Compute "Наименование для инвойса" (INV_RU)
+            # Logic: DS_NAME + " " + VOL + (if tnved: \nКод ТН ВЭД: ...)
+            new_inv_ru = f"{new_ds_name} {volume}".strip()
+            if tnved:
+                new_inv_ru += f"\nКод ТН ВЭД: {tnved}"
+
+            # 5. Compute "Наименование для инвойса Англ" (INV_EN)
+            # Logic: EngName + " " + VolEn + (if tnved: \nCode: ...)
+            # Determine which VolEn to use? Logic says "new_vol_en || current_vol_en"
+            vol_en_to_use = new_vol_en if new_vol_en else current_vol_en
+            new_inv_en = f"{eng_name} {vol_en_to_use}".strip()
+            if tnved:
+                new_inv_en += f"\nCode: {tnved}"
+
+            # 6. Write Changes
+            if rus_name or eng_name:
+                set_val("Наименование ДС", new_ds_name)
+            
+            if key == "объём":
+                set_val("Объём англ.", new_vol_en)
+            
+            set_val("Наименование для инвойса", new_inv_ru)
+            set_val("Наименование для инвойса Англ", new_inv_en)
+
+        except Exception as e:
+            logger.error("cascade_failed", error=str(e), sheet=sheet_name)
 
     def add_article(self, spreadsheet_id: str, article: str) -> Dict[str, Any]:
         """
@@ -331,6 +435,55 @@ class SyncService:
                 results[sheet_name] = f"Error: {str(e)}"
                 
         return results
+
+    def delete_articles(self, spreadsheet_id: str, articles: List[str]) -> Dict[str, Any]:
+        """
+        Delete rows with matching articles from all relevant sheets.
+        """
+        # Same list as add_article for now, mirroring the ecosystem
+        TARGET_SHEETS = [
+            "Заказ", 
+            "Этикетки", 
+            "Сертификация", 
+            "Динамика цены", 
+            "Расчет цены",
+            "ABC-Анализ",
+            "New sert"
+        ]
+        
+        results = {}
+        deleted_count = 0
+        
+        for sheet_name in TARGET_SHEETS:
+            try:
+                ws = self.sheets_service.get_worksheet(spreadsheet_id, sheet_name)
+                
+                # Fetch Col A (IDs)
+                col_a = ws.col_values(1)
+                
+                # Find rows to delete (bottom-up to preserve indices)
+                rows_to_delete = [] # list of (index (1-based), article)
+                
+                for i, val in enumerate(col_a):
+                    if val in articles:
+                        rows_to_delete.append(i + 1)
+                
+                if not rows_to_delete:
+                    results[sheet_name] = "No matches"
+                    continue
+                    
+                # Delete bottom-up
+                for row_idx in sorted(rows_to_delete, reverse=True):
+                    ws.delete_rows(row_idx)
+                    
+                results[sheet_name] = f"Deleted {len(rows_to_delete)} rows"
+                deleted_count += len(rows_to_delete)
+                
+            except Exception as e:
+                logger.error("delete_articles_failed_sheet", sheet=sheet_name, error=str(e))
+                results[sheet_name] = f"Error: {str(e)}"
+                
+        return {"total_deleted": deleted_count, "details": results}
 
     def _apply_rule(self, current_spreadsheet_id: str, rule: SyncRule, key: str, value: Any):
         """
