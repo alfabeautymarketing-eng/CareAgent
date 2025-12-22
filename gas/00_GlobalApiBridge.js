@@ -19,23 +19,34 @@
 
 /**
  * Simple Trigger: Запускается при открытии документа.
- * Инициализирует меню (старое и новое).
+ * Инициализирует меню из Python сервера и упорядочивает листы.
  */
 function onOpen(e) {
-  // 1. Инициализация Legacy меню (из Config)
-  if (typeof Lib !== 'undefined' && typeof Lib.onOpen === 'function') {
-    try {
-      Lib.onOpen(e);
-    } catch (err) {
-      console.error("Ошибка при создании Legacy меню: " + err);
-    }
-  }
-
-  // 2. Инициализация меню Агента
+  // 1. Инициализация меню из Python сервера
   if (typeof createAgentMenu === 'function') {
     createAgentMenu();
   } else {
     console.error("createAgentMenu не найдена!");
+  }
+
+  // 2. Автоматическое упорядочивание листов через Python сервер
+  if (typeof reorderSheetsSilent === 'function') {
+    try {
+      reorderSheetsSilent();
+    } catch (err) {
+      console.error("Ошибка при упорядочивании листов: " + err);
+    }
+  }
+
+  // 3. Активация листа "Главная" после загрузки
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var mainSheet = ss.getSheetByName("Главная");
+    if (mainSheet) {
+      ss.setActiveSheet(mainSheet);
+    }
+  } catch (err) {
+    console.error("Ошибка при активации листа Главная: " + err);
   }
 }
 
@@ -251,46 +262,49 @@ function addNewYearColumnsToPriceDynamics() {
   throw new Error('Lib.addNewYearColumnsToPriceDynamics не определена');
 }
 
+// ============ СОРТИРОВКА (PYTHON SERVER) ============
+// Эти функции перенаправляют вызовы на Python сервер для быстрой сортировки
+
 function sortSkOrderByManufacturer() {
-  if (typeof Lib !== 'undefined' && Lib.sortSkOrderByManufacturer) {
-    return Lib.sortSkOrderByManufacturer();
+  if (typeof callServerStructureSort === 'function') {
+    return callServerStructureSort('byManufacturer');
   }
-  throw new Error('Lib.sortSkOrderByManufacturer не определена');
+  throw new Error('callServerStructureSort не определена');
 }
 
 function sortSkOrderByPrice() {
-  if (typeof Lib !== 'undefined' && Lib.sortSkOrderByPrice) {
-    return Lib.sortSkOrderByPrice();
+  if (typeof callServerStructureSort === 'function') {
+    return callServerStructureSort('byPrice');
   }
-  throw new Error('Lib.sortSkOrderByPrice не определена');
+  throw new Error('callServerStructureSort не определена');
 }
 
 function sortMtOrderByManufacturer() {
-  if (typeof Lib !== 'undefined' && Lib.sortMtOrderByManufacturer) {
-    return Lib.sortMtOrderByManufacturer();
+  if (typeof callServerStructureSort === 'function') {
+    return callServerStructureSort('byManufacturer');
   }
-  throw new Error('Lib.sortMtOrderByManufacturer не определена');
+  throw new Error('callServerStructureSort не определена');
 }
 
 function sortMtOrderByPrice() {
-  if (typeof Lib !== 'undefined' && Lib.sortMtOrderByPrice) {
-    return Lib.sortMtOrderByPrice();
+  if (typeof callServerStructureSort === 'function') {
+    return callServerStructureSort('byPrice');
   }
-  throw new Error('Lib.sortMtOrderByPrice не определена');
+  throw new Error('callServerStructureSort не определена');
 }
 
 function sortSsOrderByManufacturer() {
-  if (typeof Lib !== 'undefined' && Lib.sortSsOrderByManufacturer) {
-    return Lib.sortSsOrderByManufacturer();
+  if (typeof callServerStructureSort === 'function') {
+    return callServerStructureSort('byManufacturer');
   }
-  throw new Error('Lib.sortSsOrderByManufacturer не определена');
+  throw new Error('callServerStructureSort не определена');
 }
 
 function sortSsOrderByPrice() {
-  if (typeof Lib !== 'undefined' && Lib.sortSsOrderByPrice) {
-    return Lib.sortSsOrderByPrice();
+  if (typeof callServerStructureSort === 'function') {
+    return callServerStructureSort('byPrice');
   }
-  throw new Error('Lib.sortSsOrderByPrice не определена');
+  throw new Error('callServerStructureSort не определена');
 }
 
 function showAllOrderData() {
@@ -433,9 +447,11 @@ function createFolderStructure() {
   }
   throw new Error('Lib.createFolderStructure не определена');
 }
+// ============ УПОРЯДОЧИВАНИЕ ЛИСТОВ (PYTHON SERVER) ============
+
 function reorderAuxiliarySheets() {
-  if (typeof Lib !== 'undefined' && Lib.reorderAuxiliarySheets) {
-    return Lib.reorderAuxiliarySheets();
+  if (typeof reorderSheets === 'function') {
+    return reorderSheets();
   }
-  throw new Error('Lib.reorderAuxiliarySheets не определена');
+  throw new Error('reorderSheets не определена');
 }

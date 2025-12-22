@@ -791,491 +791,63 @@ if (ss) {
   }
 
   /**
-   * Разбор изменённого диапазона: применение правил + автосоздание строк при новом ID
+   * ═══════════════════════════════════════════════════════════════════════════
+   * 🐍 MIGRATED TO PYTHON: Локальная логика синхронизации перенесена в
+   *    Python сервер (src/services/sync.py). Эта функция теперь только
+   *    собирает данные и отправляет их на сервер через callServerSyncEvent.
+   * ═══════════════════════════════════════════════════════════════════════════
+   * Разбор изменённого диапазона и отправка события на сервер Python.
    * @private
    */
   function _processEditEvent(e) {
     const range = e.range;
     const sheet = range.getSheet();
     const sheetName = sheet.getName();
-    const isOrderForm = sheetName === Lib.CONFIG.SHEETS.ORDER_FORM;
-    const isPriceSheet = sheetName === Lib.CONFIG.SHEETS.PRICE;
+    
+    // Получаем значение заголовка для контекста (упрощенная, но надежная логика для передачи на сервер)
+    // Сервер может перепроверить, но лучше дать ему подсказку.
+    const col = range.getColumn();
+    const row = range.getRow();
+    
+    let headerName = "";
+    try {
+        // Пробуем взять из первой строки (стандарт)
+        headerName = String(sheet.getRange(1, col).getValue() || "").trim();
+        // TODO: Если нужна сложная логика merged ranges/Order form, сервер может это уточнить,
+        // но пока шлем основной заголовок.
+    } catch(err) {
+        // ignore
+    }
+    
+    const rowKey = String(sheet.getRange(row, 1).getValue() || "").trim();
+    const userEmail = (e.user && e.user.getEmail()) ? e.user.getEmail() : "";
 
-    // читаем новые значения "оптом"
-    const values = range.getValues();
-    const richTextValues = range.getRichTextValues();
-    const headerRowIndex = 1; // единственная строка заголовков
-
-    for (let r = 0; r < range.getNumRows(); r++) {
-      const row = range.getRow() + r;
-      if (row <= headerRowIndex && !isOrderForm) continue; // шапку не трогаем
-
-      if (isOrderForm && row <= headerRowIndex) {
-        Lib.logDebug(
-          "[Order:onEdit] анализ строки заголовков " +
-            row +
-            " (colStart=" +
-            range.getColumn() +
-            ")"
-        );
-      }
-
-      // Новая строка по ID (колонка A была пустой → стала непустой)
-      if (range.getColumn() === 1 && String(e.oldValue || "").trim() === "") {
-        const newKey = String(e.value || "").trim();
-        if (newKey) _ensureRowExistsOnBaseSheets(newKey);
-      }
-
-      // Основная синхронизация по правилам для каждой затронутой колонки
-      for (let c = 0; c < range.getNumColumns(); c++) {
-        const col = range.getColumn() + c;
-        // Чтение верхней подписи: сначала value, если пусто — displayValue, учесть merged ranges
-        var header = String(sheet.getRange(1, col).getValue() || "").trim();
-        if (!header) {
-          try {
-            header = String(
-              sheet.getRange(1, col).getDisplayValue() || ""
-            ).trim();
-          } catch (e) {
-            /* ignore */
-          }
+    const payload = {
+      spreadsheet_id: SpreadsheetApp.getActiveSpreadsheet().getId(),
+      sheet_name: sheetName,
+      row: row,
+      col: col,
+      value: e.value, // Может быть undefined при range edit
+      old_value: e.oldValue,
+      user_email: userEmail,
+      header_name: headerName,
+      row_key: rowKey
+    };
+    
+    Lib.logInfo(`[Sync -> Python] Отправка R${row}C${col} лист="${sheetName}" заголовок="${headerName}"`);
+    
+    if (typeof callServerSyncEvent === 'function') {
+        try {
+            callServerSyncEvent(payload);
+            Lib.logDebug('[Sync -> Python] Запрос отправлен успешно');
+        } catch (err) {
+            Lib.logError('[Sync -> Python] Ошибка отправки: ' + err.message, err);
         }
-        var dataHeader = header;
-        if (isOrderForm && row > headerRowIndex) {
-          try {
-            dataHeader = String(
-              sheet.getRange(headerRowIndex, col).getValue() || ""
-            ).trim();
-            if (!dataHeader) {
-              // fallback to displayValue
-              try {
-                dataHeader = String(
-                  sheet.getRange(headerRowIndex, col).getDisplayValue() || ""
-                ).trim();
-              } catch (e) {
-                /* ignore */
-              }
-            }
-          } catch (e) {
-            dataHeader = header;
-          }
-        }
-        const headerForRules = header || dataHeader;
-
-        if (isOrderForm && row <= headerRowIndex) {
-          Lib.logDebug(
-            "[Order:onEdit] R" + row + "C" + col + ' header="' + header + '"'
-          );
-        } else if (isOrderForm && row > headerRowIndex) {
-          Lib.logDebug(
-            "[Order:onEdit] R" +
-              row +
-              "C" +
-              col +
-              ' header1="' +
-              header +
-              '" dataHeader="' +
-              dataHeader +
-              '"'
-          );
-        }
-        // Если всё ещё нет заголовка — попробуем узнать, может ячейка в merged range
-        if (!headerForRules) {
-          try {
-            var mrList = sheet.getMergedRanges();
-            for (var mi = 0; mi < mrList.length; mi++) {
-              var mr = mrList[mi];
-              var r1 = mr.getRow();
-              var r2 = mr.getLastRow();
-              var c1 = mr.getColumn();
-              var c2 = mr.getLastColumn();
-              if (1 >= r1 && 1 <= r2 && col >= c1 && col <= c2) {
-                // верхняя строка 1 в merged range
-                try {
-                  headerForRules = String(mr.getValues()[0][0] || "").trim();
-                } catch (e) {
-                  headerForRules = header;
-                }
-                break;
-              }
-              if (
-                headerRowIndex >= r1 &&
-                headerRowIndex <= r2 &&
-                col >= c1 &&
-                col <= c2
-              ) {
-                try {
-                  headerForRules = String(mr.getValues()[0][0] || "").trim();
-                } catch (e) {
-                  headerForRules = header;
-                }
-                break;
-              }
-            }
-          } catch (e) {
-            /* ignore */
-          }
-        }
-        if (!headerForRules) continue;
-
-        const normalizedHeaderForPrice = String(headerForRules || "")
-          .trim()
-          .replace(/\s+/g, " ")
-          .toLowerCase();
-
-        // ============================================================================
-        // СПЕЦИАЛЬНАЯ ОБРАБОТКА: Автозаполнение "Срок#" из "СГ 1-3" при выборе "АКЦИИ"
-        // ============================================================================
-        if (
-          isOrderForm &&
-          row > headerRowIndex &&
-          (headerForRules === "АКЦИИ" || dataHeader === "АКЦИИ")
-        ) {
-          try {
-            var promotionValue = values[r][c];
-            if (promotionValue && String(promotionValue).trim() !== "") {
-              Lib.logInfo(
-                '[Order:onEdit] Обнаружено изменение в столбце "АКЦИИ" (строка ' +
-                  row +
-                  '), запускаем автозаполнение "Срок#"'
-              );
-              _autoFillDeadlineFromExpiry(sheet, row);
-            }
-          } catch (autoFillError) {
-            Lib.logError(
-              '[Order:onEdit] Ошибка автозаполнения "Срок#" из "СГ 1-3"',
-              autoFillError
-            );
-          }
-        }
-        // ============================================================================
-
-        // ============================================================================
-        // СПЕЦИАЛЬНАЯ ОБРАБОТКА: Автозаполнение "Срок" из "СГ 1-3" при выборе "Набор"
-        // ============================================================================
-        if (
-          isOrderForm &&
-          row > headerRowIndex &&
-          (headerForRules === "Набор" || dataHeader === "Набор")
-        ) {
-          try {
-            var setValue = values[r][c];
-            if (setValue && String(setValue).trim() !== "") {
-              Lib.logInfo(
-                '[Order:onEdit] Обнаружено изменение в столбце "Набор" (строка ' +
-                  row +
-                  '), запускаем автозаполнение "Срок"'
-              );
-              _autoFillSetDeadlineFromExpiry(sheet, row);
-            }
-          } catch (autoFillError2) {
-            Lib.logError(
-              '[Order:onEdit] Ошибка автозаполнения "Срок" из "СГ 1-3"',
-              autoFillError2
-            );
-          }
-        }
-        // ============================================================================
-
-        // В новой модели строка 1 - единственная строка заголовков,
-        // строки 2-3 больше не имеют специального значения
-        // определяем, нужно ли напрямую вызывать override для Order
-        let shouldInvokeOrderOverrideDirectly = false;
-        if (isOrderForm) {
-          if (row === 1) {
-            // Правка заголовка в строке 1
-            var topHeader = String(headerForRules || header || "").trim();
-            var normalizedTopHeader = topHeader.toLowerCase();
-            if (
-              normalizedTopHeader === "кол-во месяцев" ||
-              /^\s*потребность\s+на\s*\d+\s*месяц/i.test(topHeader)
-            ) {
-              shouldInvokeOrderOverrideDirectly = true;
-            }
-          }
-          // В новой модели строки 2 и 3 больше не имеют специального значения,
-          // их обработка проходит через обычные правила синхронизации
-        }
-
-        const allRules = _loadSyncRules();
-        const applicable = allRules.filter(
-          (rule) =>
-            rule &&
-            typeof rule === "object" &&
-            rule.sourceSheet === sheetName &&
-            rule.sourceHeader === headerForRules &&
-            rule.targetSheet &&
-            rule.targetHeader
-        );
-
-        // Диагностическое логирование для всех листов
-        if (isOrderForm || applicable.length > 0 || allRules.length > 0) {
-          Lib.logDebug(
-            '[Sync:onEdit] sheet="' +
-              sheetName +
-              '", row=' +
-              row +
-              ', col=' +
-              col +
-              ', header="' +
-              header +
-              '", dataHeader="' +
-              dataHeader +
-              '", headerForRules="' +
-              headerForRules +
-              '", totalRules=' +
-              allRules.length +
-              ', applicable=' +
-              applicable.length
-          );
-        }
-        if (applicable.length === 0) {
-          if (shouldInvokeOrderOverrideDirectly) {
-            Lib.logDebug(
-              '[Order:onEdit] прямой вызов override для "' +
-                header +
-                '" (row ' +
-                row +
-                ", col " +
-                col +
-                ")"
-            );
-            _invokeOnUpdateOverride(sheet, row, col, "Order:onEdit:noRules");
-          } else if (isOrderForm) {
-            const headerForTrigger = dataHeader || header;
-            const normalizedHeader = String(headerForTrigger || "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .toLowerCase();
-            const normalizedTopHeader = String(header || "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .toLowerCase();
-            let normalizedHeaderKey = normalizedHeader;
-            if (
-              normalizedHeaderKey === "да" &&
-              normalizedTopHeader === "добавить в прайс"
-            ) {
-              normalizedHeaderKey = normalizedTopHeader;
-            }
-            let triggerLabel = null;
-            if (row > headerRowIndex) {
-              switch (normalizedHeaderKey) {
-                case "предварительный заказ":
-                  triggerLabel = "preOrder";
-                  break;
-                case "заказ в упаковках":
-                  triggerLabel = "packs";
-                  break;
-                case "заказ":
-                  triggerLabel = "order";
-                  break;
-                case "шт./уп.":
-                  triggerLabel = "unitsPerPack";
-                  break;
-                case "exw alfaspa текущая, €":
-                  triggerLabel = "price";
-                  break;
-                case "предварительная сумма заказа":
-                  triggerLabel = "sum";
-                  break;
-                case "добавить в прайс":
-                  triggerLabel = "addToPrice";
-                  break;
-                case "акции":
-                  triggerLabel = "promotions";
-                  break;
-                case "набор":
-                  triggerLabel = "sets";
-                  break;
-                default:
-                  break;
-              }
-            }
-            if (triggerLabel) {
-              Lib.logDebug(
-                '[Order:onEdit] прямой вызов override для "' +
-                  header +
-                  '" (row ' +
-                  row +
-                  ", col " +
-                  col +
-                  ", trigger=" +
-                  triggerLabel +
-                  ")"
-              );
-              _invokeOnUpdateOverride(
-                sheet,
-                row,
-                col,
-                "Order:onEdit:" + triggerLabel
-              );
-            } else if (row > headerRowIndex) {
-              // Доп. случай: изменения в колонках Остаток/Резерв/Товар в пути/Продажи/Остаток 1-3/СГ 1-3/СПИСАНО → пересчёт производных
-              const compact = normalizedHeader.replace(/\s+/g, "");
-              const shouldRecalcDerived =
-                normalizedHeader === "остаток" ||
-                normalizedHeader.indexOf("остаток1") === 0 ||
-                normalizedHeader.indexOf("остаток 1") === 0 ||
-                normalizedHeader.indexOf("остаток2") === 0 ||
-                normalizedHeader.indexOf("остаток 2") === 0 ||
-                normalizedHeader.indexOf("остаток3") === 0 ||
-                normalizedHeader.indexOf("остаток 3") === 0 ||
-                normalizedHeader.indexOf("сг 1") === 0 ||
-                normalizedHeader.indexOf("сг 2") === 0 ||
-                normalizedHeader.indexOf("сг 3") === 0 ||
-                normalizedHeader === "списано" ||
-                normalizedHeader === "резерв" ||
-                compact.indexOf("товарвпути") === 0 ||
-                normalizedHeader.indexOf("продажи") === 0 ||
-                normalizedHeader.indexOf("среднемесячные продажи") === 0;
-              if (shouldRecalcDerived) {
-                Lib.logDebug(
-                  '[Order:onEdit] пересчёт производных по колонке "' +
-                    header +
-                    '" (row ' +
-                    row +
-                    ", col " +
-                    col +
-                    ")"
-                );
-                _invokeOnUpdateOverride(sheet, row, col, "Order:onEdit:derived");
-              }
-            }
-          }
-          if (isPriceSheet && row > 1) {
-            if (
-              normalizedHeaderForPrice === "группа линии" ||
-              normalizedHeaderForPrice === "линия прайс"
-            ) {
-              _autoAssignPriceLineId(sheet, row);
-            } else if (normalizedHeaderForPrice === "продублировать") {
-              const duplicateValue = values[r][c];
-              if (_isPriceDuplicateFlagSet(duplicateValue)) {
-                _duplicatePriceRow(sheet, row);
-              }
-            }
-          }
-          continue;
-        }
-        // Если есть правила, но мы редактируем строку 3 с заголовком 'Потребность на N месяцев' — принудим override
-        if (isOrderForm && row === 3) {
-          try {
-            if (/^\s*Потребность\s+на\s*\d+\s*месяц/i.test(row3Label)) {
-              Lib.logDebug(
-                "[Order:onEdit] row3Label matches Потребность pattern and applicable.length=" +
-                  applicable.length +
-                  ", forcing override"
-              );
-              _invokeOnUpdateOverride(sheet, row, col, "Order:onEdit:force");
-              continue;
-            }
-          } catch (e) {
-            /* ignore */
-          }
-        }
-
-        const key = sheet.getRange(row, 1).getValue();
-        if (!key || !String(key).trim()) continue;
-
-        const newValue = values[r][c];
-        const newRich = richTextValues[r][c];
-        const srcInfo = `${sheetName}!(${header} R${row})`;
-
-        applicable.forEach((rule) =>
-          _syncSingleValue(rule, key, newValue, newRich, srcInfo)
-        );
-
-        // ВАЖНО: Завершаем цикл обработки каскадом для текущего листа.
-        // Это необходимо, чтобы локальные вычисления (например на листе Сертификация)
-        // срабатывали даже если нет правил синхронизации "наружу".
-        if (sheetName === Lib.CONFIG.SHEETS.CERTIFICATION) {
-           _triggerCascadeUpdates(sheet, row, col);
-        }
-
-        // Дополнительно: для листа Заказ всегда пересчитываем зависимые поля
-        // даже если есть правила синхронизации (post-sync триггер).
-        if (isOrderForm && row > headerRowIndex) {
-          try {
-            const headerForTrigger = dataHeader || header;
-            const normalizedHeader = String(headerForTrigger || "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .toLowerCase();
-            const normalizedTopHeader = String(header || "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .toLowerCase();
-            let normalizedHeaderKey = normalizedHeader;
-            if (
-              normalizedHeaderKey === "да" &&
-              normalizedTopHeader === "добавить в прайс"
-            ) {
-              normalizedHeaderKey = normalizedTopHeader;
-            }
-            let triggerLabel = null;
-            switch (normalizedHeaderKey) {
-              case "предварительный заказ":
-                triggerLabel = "preOrder";
-                break;
-              case "заказ в упаковках":
-                triggerLabel = "packs";
-                break;
-              case "заказ":
-                triggerLabel = "order";
-                break;
-              case "шт./уп.":
-                triggerLabel = "unitsPerPack";
-                break;
-              case "exw alfaspa текущая, €":
-                triggerLabel = "price";
-                break;
-              case "предварительная сумма заказа":
-                triggerLabel = "sum";
-                break;
-              case "добавить в прайс":
-                triggerLabel = "addToPrice";
-                break;
-              default: {
-                const compact = normalizedHeader.replace(/\s+/g, "");
-                const derived =
-                  normalizedHeader === "остаток" ||
-                  normalizedHeader === "резерв" ||
-                  compact.indexOf("товарвпути") === 0 ||
-                  normalizedHeader.indexOf("продажи") === 0 ||
-                  normalizedHeader.indexOf("среднемесячные продажи") === 0;
-                if (derived) triggerLabel = "derived";
-              }
-            }
-            if (triggerLabel) {
-              _invokeOnUpdateOverride(
-                sheet,
-                row,
-                col,
-                "Order:onEdit:postSync:" + triggerLabel
-              );
-            }
-          } catch (_) {
-            // soft-fail
-          }
-        }
-        if (isPriceSheet && row > 1) {
-          if (
-            applicable.length > 0 &&
-            (normalizedHeaderForPrice === "группа линии" ||
-              normalizedHeaderForPrice === "линия прайс")
-          ) {
-            _autoAssignPriceLineId(sheet, row);
-          } else if (
-            normalizedHeaderForPrice === "продублировать" &&
-            _isPriceDuplicateFlagSet(values[r][c])
-          ) {
-            _duplicatePriceRow(sheet, row);
-          }
-        }
-      }
+    } else {
+        Lib.logError("callServerSyncEvent не найден в глобальной области!");
     }
   }
+
 
   /**
    * Загрузка/кэш правил из листа «Правила синхро»

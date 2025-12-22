@@ -2559,11 +2559,10 @@ var Lib = Lib || {};
       }
     };
 
-    global.Lib.__autoPriceSheetHooksInitialized = true;
     global.Lib.__autoPriceExwOrderHooked = true; // сохраняем старый флаг для совместимости
   }
 
-  _ensureSheetRefreshHooksOnOpen();
+  // _ensureSheetRefreshHooksOnOpen(); // ОТКЛЮЧЕНО: Миграция на Python (load-functions)
 
   // =======================================================================================
   // ГЛОБАЛЬНЫЕ ПРОКСИ-ФУНКЦИИ ДЛЯ МЕНЮ
