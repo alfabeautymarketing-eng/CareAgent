@@ -15,12 +15,13 @@
  * Creates the main Ecosystem menu.
  * Loads configuration from server to build project-specific menu.
  */
-function createAgentMenu() {
+function createAgentMenu(options) {
   try {
     const ui = SpreadsheetApp.getUi();
+    const allowNetwork = !options || options.allowNetwork !== false;
 
     // Try to load menu config from server
-    const config = getMenuConfig({ useCacheOnFail: true });
+    const config = getMenuConfig({ useCacheOnFail: true, skipFetch: !allowNetwork });
 
     if (config) {
       // Build dynamic menu from server config

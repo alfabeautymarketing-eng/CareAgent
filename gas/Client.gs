@@ -57,8 +57,24 @@ function getCachedMenuConfig(spreadsheetId) {
  */
 function getMenuConfig(options) {
   const useCacheOnFail = !options || options.useCacheOnFail !== false;
+  const skipFetch = options && options.skipFetch === true;
   const spreadsheetId = SpreadsheetApp.getActiveSpreadsheet().getId();
   const url = SERVER_URL + '/api/v1/menu/config?spreadsheet_id=' + encodeURIComponent(spreadsheetId);
+
+  if (skipFetch) {
+    const cached = getCachedMenuConfig(spreadsheetId);
+    if (cached) {
+      console.log('Using cached menu config (network skipped) for spreadsheet:', spreadsheetId);
+      return cached;
+    }
+
+    if (!useCacheOnFail) {
+      return null;
+    }
+
+    console.warn('Menu config: network disabled and cache is empty, falling back to offline menu');
+    return null;
+  }
 
   console.log('Fetching menu config from:', url);
   console.log('Spreadsheet ID:', spreadsheetId);
@@ -482,6 +498,19 @@ function reorderSheets() {
       if (result.details.sheets_moved > 0) {
         ss.toast('📑 ' + result.message, 'Python Server', 3);
       }
+      try {
+        if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
+          const moved = result.details && typeof result.details.sheets_moved !== 'undefined'
+            ? result.details.sheets_moved
+            : 'n/a';
+          Lib.logStep('Sheets', 'Листы выстроены сервером: ' + moved);
+        }
+        if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
+          Lib.ensureLogSheetsFirst();
+        }
+      } catch (e) {
+        console.error('Reorder post-processing log failed:', e);
+      }
       return true;
     } else {
       console.error('Reorder error:', text);
@@ -511,9 +540,534 @@ function reorderSheetsSilent() {
   };
 
   try {
-    UrlFetchApp.fetch(SERVER_URL + '/api/v1/sheets/reorder', options);
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/sheets/reorder', options);
+    try {
+      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
+        Lib.logStep('Sheets', 'Бесшумная сортировка листов выполнена (код ' + response.getResponseCode() + ')');
+      }
+      if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
+        Lib.ensureLogSheetsFirst();
+      }
+    } catch (logErr) {
+      console.error('Silent reorder log failed:', logErr);
+    }
   } catch (e) {
     console.error('Silent reorder failed:', e);
+  }
+}
+
+// =======================================================================================
+// AI / AGENT FUNCTIONS (Python Server)
+// =======================================================================================
+
+/**
+ * Check Gemini AI service status via Python server.
+ * Shows connection status, current model, and available models.
+ */
+function menuCheckService() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  try {
+    ss.toast('⏳ Проверка Gemini API...', 'AI Agent', 10);
+
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/ai/status', {
+      muteHttpExceptions: true,
+      timeout: 30
+    });
+
+    const code = response.getResponseCode();
+
+    if (code === 200) {
+      const result = JSON.parse(response.getContentText());
+
+      if (result.status === 'online') {
+        let msg = '✅ Gemini API онлайн!\n\n';
+        msg += '🤖 Модель: ' + result.model + '\n';
+        msg += '📝 Ответ теста: ' + (result.response || 'OK') + '\n\n';
+
+        if (result.available_models && result.available_models.length > 0) {
+          msg += '📋 Доступные модели:\n';
+          result.available_models.slice(0, 5).forEach(function(m) {
+            msg += '   • ' + m + '\n';
+          });
+        }
+
+        ui.alert('Статус AI сервиса', msg, ui.ButtonSet.OK);
+      } else {
+        ui.alert('❌ Ошибка', 'Gemini API недоступен:\n' + (result.error || 'Unknown error'), ui.ButtonSet.OK);
+      }
+    } else {
+      ui.alert('❌ Ошибка сервера', 'Код: ' + code + '\n' + response.getContentText(), ui.ButtonSet.OK);
+    }
+  } catch (e) {
+    ui.alert('❌ Ошибка сети', e.message + '\n\nПроверьте, запущен ли Python сервер.', ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Show current Gemini settings from Python server.
+ */
+function showGeminiSettings() {
+  const ui = SpreadsheetApp.getUi();
+
+  try {
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/ai/settings', {
+      muteHttpExceptions: true,
+      timeout: 10
+    });
+
+    if (response.getResponseCode() === 200) {
+      const settings = JSON.parse(response.getContentText());
+
+      let msg = '⚙️ Настройки Gemini AI\n\n';
+      msg += '🤖 Модель: ' + settings.model + '\n';
+      msg += '🔑 API ключ: ' + settings.api_key_masked + '\n';
+      msg += '   Статус: ' + (settings.api_key_status === 'configured' ? '✅ Настроен' : '❌ Не настроен') + '\n';
+      msg += '🔄 Max retries: ' + settings.max_retries + '\n';
+
+      ui.alert('Настройки Gemini', msg, ui.ButtonSet.OK);
+    } else {
+      ui.alert('❌ Ошибка', 'Не удалось получить настройки', ui.ButtonSet.OK);
+    }
+  } catch (e) {
+    ui.alert('❌ Ошибка', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Analyze the currently selected row via Python server.
+ * Reads INCI link from column H, sends to AI, writes results to L-Y.
+ */
+function menuAnalyzeSelected() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet();
+  const row = sheet.getActiveCell().getRow();
+
+  if (row < 2) {
+    ui.alert('⚠️ Внимание', 'Выберите строку данных (не заголовок)', ui.ButtonSet.OK);
+    return;
+  }
+
+  const sheetName = sheet.getName();
+
+  // Confirm
+  const confirm = ui.alert(
+    'Анализ строки ' + row,
+    'Анализировать строку ' + row + ' в листе "' + sheetName + '"?\n\n' +
+    'AI извлечет состав из PDF и заполнит колонки L-Y.',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (confirm !== ui.Button.YES) {
+    return;
+  }
+
+  try {
+    ss.toast('⏳ Анализ строки ' + row + '... (может занять 10-30 сек)', 'AI Agent', 60);
+
+    const payload = {
+      spreadsheet_id: ss.getId(),
+      sheet_name: sheetName,
+      row_number: row
+    };
+
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/ai/analyze/row', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+      timeout: 120
+    });
+
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      const result = JSON.parse(text);
+      ss.toast('✅ Анализ завершен! Результаты записаны в строку ' + row, 'AI Agent', 5);
+
+      // Show summary
+      const data = result.data;
+      ui.alert(
+        '✅ Анализ завершен',
+        'Строка: ' + row + '\n' +
+        'Время: ' + result.duration + '\n\n' +
+        '📦 Категория: ' + (data.category_code || 'N/A') + ' - ' + (data.category || '') + '\n' +
+        '🏷️ Вид: ' + (data.product_type || 'N/A') + '\n' +
+        '📄 Документ: ' + (data.reg_doc || 'N/A'),
+        ui.ButtonSet.OK
+      );
+    } else {
+      ss.toast('❌ Ошибка анализа', 'AI Agent', 5);
+      ui.alert('❌ Ошибка', 'Код: ' + code + '\n\n' + text, ui.ButtonSet.OK);
+    }
+  } catch (e) {
+    ss.toast('❌ Ошибка', 'AI Agent', 3);
+    ui.alert('❌ Ошибка сети', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Simple AI analysis - quickly classify product without PDF.
+ * Just fills "Вид продукции" and "Почему такой вид" columns.
+ * Use this to test if Gemini API is working.
+ */
+function menuSimpleAnalyze() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet();
+  const row = sheet.getActiveCell().getRow();
+
+  if (row < 2) {
+    ui.alert('⚠️ Внимание', 'Выберите строку данных (не заголовок)', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Read data from row (E - product name, I - purpose, J - application)
+  const productName = sheet.getRange(row, 5).getValue();  // Column E
+  const purpose = sheet.getRange(row, 9).getValue();       // Column I
+  const application = sheet.getRange(row, 10).getValue();  // Column J
+
+  if (!productName) {
+    ui.alert('⚠️ Внимание', 'Наименование продукта (колонка E) пустое', ui.ButtonSet.OK);
+    return;
+  }
+
+  try {
+    ss.toast('⏳ Быстрый анализ: ' + productName.substring(0, 30) + '...', 'AI Agent', 30);
+
+    const payload = {
+      product_name: productName,
+      purpose: purpose || null,
+      application: application || null
+    };
+
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/ai/analyze/simple', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+      timeout: 60
+    });
+
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      const result = JSON.parse(text);
+      const data = result.data;
+
+      // Write results to columns N and O
+      sheet.getRange(row, 14).setValue(data.product_type || '');   // Column N - Вид продукции
+      sheet.getRange(row, 15).setValue(data.product_reason || ''); // Column O - Почему
+
+      ss.toast('✅ Готово! Вид: ' + (data.product_type || 'N/A'), 'AI Agent', 5);
+      
+      ui.alert(
+        '✅ Анализ завершен',
+        'Строка: ' + row + '\n\n' +
+        '🏷️ Вид продукции: ' + (data.product_type || 'N/A') + '\n\n' +
+        '📝 Обоснование: ' + (data.product_reason || 'N/A'),
+        ui.ButtonSet.OK
+      );
+    } else {
+      ss.toast('❌ Ошибка анализа', 'AI Agent', 5);
+      ui.alert('❌ Ошибка', 'Код: ' + code + '\n\n' + text, ui.ButtonSet.OK);
+    }
+  } catch (e) {
+    ss.toast('❌ Ошибка', 'AI Agent', 3);
+    ui.alert('❌ Ошибка сети', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Analyze all empty rows (rows with INCI link but no results).
+ * Runs in background on the server.
+ */
+function menuAnalyzeEmpty() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet();
+  const sheetName = sheet.getName();
+
+  // Confirm
+  const confirm = ui.alert(
+    'Пакетный анализ',
+    'Запустить анализ всех пустых строк в листе "' + sheetName + '"?\n\n' +
+    '⚠️ Это может занять несколько минут.\n' +
+    'Будут обработаны строки с INCI ссылкой, но без заполненных результатов.',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (confirm !== ui.Button.YES) {
+    return;
+  }
+
+  try {
+    ss.toast('⏳ Пакетный анализ запущен в фоне...', 'AI Agent', 10);
+
+    const payload = {
+      spreadsheet_id: ss.getId(),
+      sheet_name: sheetName,
+      delay_between: 2.0
+    };
+
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/ai/analyze/batch', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+      timeout: 30
+    });
+
+    const code = response.getResponseCode();
+
+    if (code === 200) {
+      const result = JSON.parse(response.getContentText());
+      ui.alert(
+        '✅ Анализ запущен',
+        'Пакетный анализ запущен в фоновом режиме.\n\n' +
+        'Лист: ' + result.sheet_name + '\n' +
+        'Статус: ' + result.status + '\n\n' +
+        'Результаты будут записаны в таблицу по мере обработки.\n' +
+        'Проверьте "Журнал логов" для отслеживания прогресса.',
+        ui.ButtonSet.OK
+      );
+    } else {
+      ui.alert('❌ Ошибка', 'Код: ' + code + '\n' + response.getContentText(), ui.ButtonSet.OK);
+    }
+  } catch (e) {
+    ui.alert('❌ Ошибка сети', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Show available ТН ВЭД categories.
+ */
+function menuShowCategories() {
+  const ui = SpreadsheetApp.getUi();
+
+  try {
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/ai/categories', {
+      muteHttpExceptions: true,
+      timeout: 10
+    });
+
+    if (response.getResponseCode() === 200) {
+      const result = JSON.parse(response.getContentText());
+      const categories = result.categories || [];
+
+      let msg = '📦 Категории ТН ВЭД для классификации:\n\n';
+
+      categories.forEach(function(cat) {
+        msg += '• ' + cat.code + ': ' + cat.name + '\n';
+        msg += '   ' + cat.description + '\n\n';
+      });
+
+      ui.alert('Категории ТН ВЭД', msg, ui.ButtonSet.OK);
+    } else {
+      ui.alert('❌ Ошибка', 'Не удалось получить категории', ui.ButtonSet.OK);
+    }
+  } catch (e) {
+    ui.alert('❌ Ошибка', e.message, ui.ButtonSet.OK);
+  }
+}
+
+// =======================================================================================
+// GEMINI API KEY STORAGE (Script Properties - persistent)
+// =======================================================================================
+
+const GEMINI_PROPS = {
+  API_KEY: 'GEMINI_API_KEY',
+  MODEL: 'GEMINI_MODEL'
+};
+
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+
+/**
+ * Get stored Gemini API key from Script Properties.
+ */
+function getStoredGeminiKey() {
+  return PropertiesService.getScriptProperties().getProperty(GEMINI_PROPS.API_KEY) || '';
+}
+
+/**
+ * Get stored Gemini model from Script Properties.
+ */
+function getStoredGeminiModel() {
+  return PropertiesService.getScriptProperties().getProperty(GEMINI_PROPS.MODEL) || DEFAULT_GEMINI_MODEL;
+}
+
+/**
+ * Save Gemini settings to Script Properties.
+ */
+function saveGeminiSettings(apiKey, model) {
+  const props = PropertiesService.getScriptProperties();
+  if (apiKey) {
+    props.setProperty(GEMINI_PROPS.API_KEY, apiKey);
+  }
+  if (model) {
+    props.setProperty(GEMINI_PROPS.MODEL, model);
+  }
+}
+
+/**
+ * Initialize Gemini on server from stored Script Properties.
+ * Called automatically on document open.
+ */
+function initGeminiFromStorage() {
+  const apiKey = getStoredGeminiKey();
+  const model = getStoredGeminiModel();
+
+  if (!apiKey) {
+    console.log('No Gemini API key stored in Script Properties');
+    return false;
+  }
+
+  try {
+    const payload = {
+      api_key: apiKey,
+      model: model
+    };
+
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/ai/configure', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+      timeout: 15
+    });
+
+    const code = response.getResponseCode();
+    if (code === 200) {
+      const result = JSON.parse(response.getContentText());
+      if (result.status === 'success') {
+        console.log('✅ Gemini initialized from storage, model:', result.model);
+        return true;
+      }
+    }
+    console.warn('Gemini init failed:', response.getContentText());
+    return false;
+  } catch (e) {
+    console.error('Gemini init error:', e);
+    return false;
+  }
+}
+
+/**
+ * Setup Gemini API - shows dialog to enter API key.
+ * Key is saved to Script Properties (persistent) and sent to server.
+ */
+function setupGeminiComplete() {
+  const ui = SpreadsheetApp.getUi();
+
+  // Get stored settings
+  const storedKey = getStoredGeminiKey();
+  const storedModel = getStoredGeminiModel();
+  const keyStatus = storedKey ? 'сохранён ✅' : 'не настроен ❌';
+
+  // Ask user what to configure
+  const choice = ui.alert(
+    '⚙️ Настройка Gemini API',
+    'Текущий статус:\n' +
+    '• API ключ: ' + keyStatus + '\n' +
+    '• Модель: ' + storedModel + '\n\n' +
+    'Ключ хранится в Script Properties (постоянно).\n' +
+    'Хотите ввести новый API ключ?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (choice !== ui.Button.YES) {
+    return;
+  }
+
+  // Show dialog for API key
+  const keyResponse = ui.prompt(
+    '🔑 Введите API ключ',
+    'Введите ваш Gemini API ключ:\n\n' +
+    'Получить ключ: https://aistudio.google.com/apikey\n\n' +
+    'Ключ будет сохранён в Script Properties.',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (keyResponse.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+
+  const apiKey = keyResponse.getResponseText().trim();
+
+  if (!apiKey) {
+    ui.alert('❌ Ошибка', 'API ключ не может быть пустым', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Ask for model
+  const modelResponse = ui.prompt(
+    '🤖 Выберите модель',
+    'Введите название модели (или оставьте пустым для ' + DEFAULT_GEMINI_MODEL + '):\n\n' +
+    'Рекомендуемые модели:\n' +
+    '• gemini-2.5-flash (быстрая, по умолчанию)\n' +
+    '• gemini-2.0-flash (стабильная)\n' +
+    '• gemini-2.5-pro (медленнее, но умнее)',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (modelResponse.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+
+  const model = modelResponse.getResponseText().trim() || DEFAULT_GEMINI_MODEL;
+
+  // Save to Script Properties FIRST (persistent storage)
+  saveGeminiSettings(apiKey, model);
+
+  // Then send to server
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ss.toast('⏳ Настройка Gemini API...', 'AI Agent', 10);
+
+  try {
+    const payload = {
+      api_key: apiKey,
+      model: model
+    };
+
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/ai/configure', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+      timeout: 30
+    });
+
+    const code = response.getResponseCode();
+    const result = JSON.parse(response.getContentText());
+
+    if (code === 200 && result.status === 'success') {
+      ss.toast('✅ API ключ сохранён!', 'AI Agent', 3);
+      ui.alert(
+        '✅ Настройка завершена',
+        'Gemini API успешно настроен!\n\n' +
+        'Модель: ' + result.model + '\n' +
+        'Тест: ' + (result.test_response || 'OK') + '\n\n' +
+        'Ключ сохранён в Script Properties.\n' +
+        'Теперь вы можете использовать AI анализ.',
+        ui.ButtonSet.OK
+      );
+    } else {
+      ss.toast('❌ Ошибка настройки', 'AI Agent', 3);
+      ui.alert(
+        '❌ Ошибка настройки',
+        'Не удалось настроить Gemini API:\n\n' +
+        (result.error || result.message || 'Unknown error') + '\n\n' +
+        'Проверьте правильность API ключа.',
+        ui.ButtonSet.OK
+      );
+    }
+  } catch (e) {
+    ss.toast('❌ Ошибка сети', 'AI Agent', 3);
+    ui.alert('❌ Ошибка', 'Ошибка соединения с сервером:\n' + e.message, ui.ButtonSet.OK);
   }
 }
 

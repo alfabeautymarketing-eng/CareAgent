@@ -26,6 +26,15 @@ class SheetsService:
             logger.error("worksheet_not_found", spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, error=str(e))
             raise
 
+    def create_worksheet(self, spreadsheet_id: str, sheet_name: str, rows=100, cols=20):
+        """Create a new worksheet."""
+        try:
+            sh = self.gc.open_by_key(spreadsheet_id)
+            return sh.add_worksheet(title=sheet_name, rows=rows, cols=cols)
+        except Exception as e:
+            logger.error("create_worksheet_failed", spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, error=str(e))
+            raise
+
     def sort_by_header(self, spreadsheet_id: str, sheet_name: str, header_name: str, ascending: bool = True):
         """
         Sort a sheet by a specific header column.
@@ -349,15 +358,21 @@ class SheetsService:
             sheet_map = {ws.title: ws for ws in worksheets}
             current_names = [ws.title for ws in worksheets]
 
-            # Build target order: known sheets first, then unknown
+            # Build target order: log sheets first (any known alias), then desired order, then unknown
             target_order = []
 
-            # Add sheets from desired_order that exist
-            for name in desired_order:
-                if name in sheet_map:
+            # Priority log sheet aliases
+            log_aliases = ["Логи", "Журнал логов", "Журнал синхро"]
+            for name in log_aliases:
+                if name in sheet_map and name not in target_order:
                     target_order.append(name)
 
-            # Add remaining sheets (not in desired_order) at the end
+            # Add sheets from desired_order that exist (excluding already added aliases)
+            for name in desired_order:
+                if name in sheet_map and name not in target_order:
+                    target_order.append(name)
+
+            # Add remaining sheets (not in desired_order and not already queued) at the end
             for name in current_names:
                 if name not in target_order:
                     target_order.append(name)
@@ -376,18 +391,35 @@ class SheetsService:
             requests = []
             for new_index, sheet_name in enumerate(target_order):
                 ws = sheet_map[sheet_name]
+                props = {
+                    "sheetId": ws.id,
+                    "index": new_index
+                }
+                fields = "index"
+
+                # Force unhide for log sheets
+                if sheet_name in log_aliases:
+                    props["hidden"] = False
+                    fields = "index,hidden"
+
                 requests.append({
                     "updateSheetProperties": {
-                        "properties": {
-                            "sheetId": ws.id,
-                            "index": new_index
-                        },
-                        "fields": "index"
+                        "properties": props,
+                        "fields": fields
                     }
                 })
 
             if requests:
                 sh.batch_update({"requests": requests})
+                
+                if hasattr(self, 'logging_service') and self.logging_service:
+                    self.logging_service.add_log(
+                        spreadsheet_id, 
+                        "СИСТЕМА", 
+                        "Выстраивание листов завершено", 
+                        f"Новый порядок: {', '.join(target_order)}", 
+                        "✅ ГОТОВО"
+                    )
 
             sheets_moved = sum(1 for i, name in enumerate(target_order) if i < len(current_names) and current_names[i] != name)
 
@@ -396,7 +428,7 @@ class SheetsService:
                        sheets_moved=sheets_moved)
 
             return {
-                "sheets_moved": sheets_moved,
+                "sheets_moved": len(requests),
                 "final_order": target_order,
                 "message": f"Reordered {sheets_moved} sheets"
             }

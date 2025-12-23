@@ -17,11 +17,48 @@ class SyncRule(BaseModel):
     target_doc_id: Optional[str] = None
 
 class SyncService:
-    def __init__(self):
+    def __init__(self, logging_service: Optional[Any] = None):
         self.sheets_service = SheetsService()
+        self.logging_service = logging_service
         self._rules_cache: List[SyncRule] = []
         self._rules_cache_time = 0
         self._rules_cache_ttl = 300  # 5 minutes
+
+    def _get_project_prefix(self, project_key: str) -> str:
+        """Get standard brand prefix for project."""
+        prefixes = {
+            "MT": "MT-",
+            "SS": "SS-",
+            "SK": "SK-"
+        }
+        return prefixes.get(project_key.upper(), "ID-")
+
+    def _get_next_id(self, spreadsheet_id: str, prefix: str) -> str:
+        """Find max numeric ID with prefix in 'Главная' and return next one."""
+        try:
+            ws = self.sheets_service.get_worksheet(spreadsheet_id, "Главная")
+            col_a = ws.col_values(1)
+            
+            max_num = 0
+            for val in col_a:
+                val = str(val).strip()
+                if val.startswith(prefix):
+                    try:
+                        num_part = val[len(prefix):]
+                        if num_part.isdigit():
+                            num = int(num_part)
+                            if num > max_num:
+                                max_num = num
+                    except (ValueError, TypeError):
+                        continue
+            
+            next_num = max_num + 1
+            return f"{prefix}{next_num:03d}"
+        except Exception as e:
+            logger.error("get_next_id_failed", spreadsheet_id=spreadsheet_id, prefix=prefix, error=str(e))
+            # Fallback to a timestamp based unique ID if calculation fails
+            return f"{prefix}NEW-{int(time.time())}"
+
 
     def _load_rules(self, spreadsheet_id: str, force_reload: bool = False) -> List[SyncRule]:
         """
@@ -90,34 +127,27 @@ class SyncService:
             # Return cached if available even if expired, else empty
             return self._rules_cache
 
-    def sync_row(self, spreadsheet_id: str, project: str, article: str, source_sheet: str) -> Dict[str, Any]:
+    def sync_row(self, spreadsheet_id: str, sheet_name: str, row_number: int, row_key: str, project: str) -> Dict[str, Any]:
         """
-        Sync a single row manually by Article/ID.
+        Sync a single row to target sheets based on rules.
         """
-        logger.info("sync_row_start", project=project, article=article, sheet=source_sheet)
-        
-        # 1. Load Rules
-        rules = self._load_rules(spreadsheet_id)
-        matching_rules = [r for r in rules if r.source_sheet == source_sheet]
-        
-        if not matching_rules:
-            return {"status": "skipped", "reason": "No rules for this sheet"}
-
-        # 2. Get Source Data
-        # We need to find the row with this article to get values for all rule columns
-        try:
-            ws = self.sheets_service.get_worksheet(spreadsheet_id, source_sheet)
+        if self.logging_service:
+            self.logging_service.add_log(spreadsheet_id, "СИНХРО", f"Синхронизация строки {sheet_name}#{row_number}", f"ID={row_key}, Project={project}", "🔄 ЗАПУСК")
             
-            # Assume Column 1 is ID/Article
-            col_a = ws.col_values(1)
-            try:
-                row_idx = col_a.index(article) + 1
-            except ValueError:
-                return {"status": "failed", "error": f"Article '{article}' not found in {source_sheet}"}
-                
+        rules = self._load_rules(spreadsheet_id)
+        effective_rules = [r for r in rules if r.enabled and r.source_sheet == sheet_name]
+        
+        if self.logging_service:
+            self.logging_service.add_log(spreadsheet_id, "СИНХРО", "Проверка правил", f"Найдено {len(effective_rules)} активных правил для листа {sheet_name}", "ℹ️ ИНФО")
+
+        results = []
+        
+        # 2. Get Source Data
+        try:
+            ws = self.sheets_service.get_worksheet(spreadsheet_id, sheet_name)
+            
             # Fetch entire row data (mapped by header)
-            # Optimization: could fetch only needed columns, but row is simpler
-            row_values = ws.row_values(row_idx)
+            row_values = ws.row_values(row_number)
             headers = ws.row_values(1)
             
             # Map headers to values
@@ -128,24 +158,27 @@ class SyncService:
                     
         except Exception as e:
             logger.error("sync_row_fetch_failed", error=str(e))
+            if self.logging_service:
+                self.logging_service.add_log(spreadsheet_id, "СИНХРО", "Ошибка получения данных", f"Не удалось получить данные для строки {row_key} из листа {sheet_name}: {str(e)}", "❌ ОШИБКА")
             raise
 
         # 3. Apply Rules
-        results = []
-        for rule in matching_rules:
+        for rule in effective_rules:
             # Get value for this rule's source column
             val = row_data.get(rule.source_header)
             
-            # If header exists in source but value might be empty/None, that's fine.
-            # If header didn't exist in source map, we skip or error?
             if rule.source_header not in row_data:
                 logger.warning("source_header_missing", header=rule.source_header)
+                if self.logging_service:
+                    self.logging_service.add_log(spreadsheet_id, "СИНХРО", "Пропуск правила", f"Исходный заголовок '{rule.source_header}' не найден в строке {row_key} листа {sheet_name}", "⚠️ ПРЕДУПРЕЖДЕНИЕ")
                 results.append({"rule_id": rule.id, "status": "skipped", "reason": "Source header missing"})
                 continue
                 
-            res = self._apply_rule(spreadsheet_id, rule, article, val)
+            res = self._apply_rule(spreadsheet_id, rule, row_key, val)
             results.append(res)
             
+        if self.logging_service:
+            self.logging_service.add_log(spreadsheet_id, "СИНХРО", "Синхронизация строки завершена", f"Обработано {len(effective_rules)} правил для ID={row_key}. Успешно: {len([r for r in results if r.get('status') == 'success'])}", "✅ УСПЕХ")
         return {"status": "success", "results": results}
 
     def sync_full(self, spreadsheet_id: str, project: str, source_sheet: str) -> Dict[str, Any]:
@@ -213,23 +246,24 @@ class SyncService:
             logger.error("sync_full_failed", error=str(e))
             raise
 
-    def sync_event(self, spreadsheet_id: str, event_data: Dict[str, Any]):
+    async def sync_event(self, spreadsheet_id: str, event_data: Dict[str, Any]):
         """
-        Process a sync event triggered by an edit.
-        event_data: {
-            "sheet_name": str,
-            "row": int,
-            "col": int,
-            "value": Any,
-            "old_value": Any,
-            "user_email": str,
-            "ranges": [...] (if needed, but simple cell edit is primary)
-        }
+        Process a single onEdit event.
         """
         sheet_name = event_data.get("sheet_name")
-        row = event_data.get("row")
-        col = event_data.get("col")
+        row_idx = event_data.get("row")
+        col_idx = event_data.get("col")
+        source_header = event_data.get("header_name")
         new_value = event_data.get("value")
+        row_key = event_data.get("row_key")
+
+        self._log_to_session(
+            spreadsheet_id, 
+            "СИНХРОНИЗАЦИЯ", 
+            f"Обработка события: лист '{sheet_name}', строка {row_idx}",
+            f"Колонка: '{source_header}', Ключ: '{row_key}', Нов.значение: '{new_value}'",
+            "⚙️ ПРОЦЕСС"
+        )
         
         # 1. Load Rules
         rules = self._load_rules(spreadsheet_id)
@@ -264,7 +298,22 @@ class SyncService:
         
         if not matching_rules:
             # logger.info("no_matching_sync_rules", sheet=sheet_name, header=source_header)
+            self._log_to_session(
+                spreadsheet_id, 
+                "СИНХРОНИЗАЦИЯ", 
+                "Проверка правил", 
+                f"Правила для колонки '{source_header}' листа '{sheet_name}' не найдены. Синхронизация пропущена.",
+                "ℹ️ SKIP"
+            )
             return {"status": "skipped", "reason": "No matching rules"}
+
+        self._log_to_session(
+            spreadsheet_id, 
+            "СИНХРОНИЗАЦИЯ", 
+            "Применение правил", 
+            f"Найдено {len(matching_rules)} правил для колонки '{source_header}'",
+            "🔄 ПРОЦЕСС"
+        )
 
         # 4. Get Row Key (ID)
         row_key = event_data.get("row_key") # Value of Col A
@@ -285,15 +334,107 @@ class SyncService:
             try:
                 res = self._apply_rule(spreadsheet_id, rule, row_key, new_value)
                 results.append(res)
+                
+                # Log success for each rule
+                self._log_to_session(
+                    spreadsheet_id,
+                    "СИНХРОНИЗАЦИЯ",
+                    "Синхронизация выполнена",
+                    f"{rule.source_sheet}#{rule.source_header} -> {rule.target_sheet}#{rule.target_header} (ID={row_key})",
+                    "✅ OK"
+                )
             except Exception as e:
-                logger.error("apply_rule_failed", rule_id=rule.id, error=str(e))
+                logger.error("rule_application_failed", error=str(e), rule=rule.id)
                 results.append({"rule_id": rule.id, "status": "failed", "error": str(e)})
+                self._log_to_session(
+                    spreadsheet_id,
+                    "СИНХРОНИЗАЦИЯ",
+                    "Ошибка правила",
+                    f"Не удалось применить правило {rule.id}: {str(e)}",
+                    "❌ ОШИБКА"
+                )
 
         # 5. Handle Cascades (Certification, etc)
+        # Verify arguments to avoid TypeError
         if source_header:
-            self._handle_cascades(spreadsheet_id, sheet_name, row, source_header)
+            try:
+                self._handle_cascades(spreadsheet_id, sheet_name, row, source_header)
+            except Exception as e:
+                logger.error("cascade_invocation_failed", error=str(e))
+                # Do not re-raise to avoid blocking response
         
         return {"status": "processed", "rules_matched": len(matching_rules), "results": results}
+
+    def _log_to_sheet(self, spreadsheet_id: str, source_info: str, target_info: str, 
+                      old_val: str, new_val: str, category: str, hashtags: str, status: str):
+        """Append log to 'Журнал синхро'."""
+        try:
+            ws = self.sheets_service.get_worksheet(spreadsheet_id, "Журнал синхро")
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+            # Headers: Дата/Время, Источник, Цель, Было, Стало, Категория, #Tag, Статус
+            ws.append_row([timestamp, source_info, target_info, str(old_val), str(new_val), category, hashtags, status])
+        except Exception as e:
+            logger.error("log_to_sheet_failed", error=str(e))
+
+    def _apply_rule(self, spreadsheet_id: str, rule: Any, row_key: str, new_value: Any) -> Dict[str, Any]:
+        """Apply a single sync rule."""
+        target_ss_id = rule.target_doc_id if rule.is_external else spreadsheet_id
+        
+        # 1. Connect to target sheet
+        try:
+            ws = self.sheets_service.get_worksheet(target_ss_id, rule.target_sheet)
+        except Exception:
+            return {"rule_id": rule.id, "status": "failed", "error": "Target sheet not found"}
+
+        # 2. Find target column index by header
+        headers = ws.row_values(1)
+        try:
+            target_col = headers.index(rule.target_header) + 1
+        except ValueError:
+             return {"rule_id": rule.id, "status": "failed", "error": f"Target header '{rule.target_header}' not found"}
+
+        # 3. Find target row by Key (Col A)
+        col_a = ws.col_values(1)
+        try:
+            target_row = col_a.index(row_key) + 1
+        except ValueError:
+             return {"rule_id": rule.id, "status": "skipped", "reason": "Key not found in target"}
+        
+        # 4. Update Value
+        old_val = ws.cell(target_row, target_col).value
+        # If value is same, skip? User wants guaranteed sync, so update.
+        # But logging is useful if change happens.
+        
+        ws.update_cell(target_row, target_col, new_value)
+        
+        # 5. Log to sync journal (legacy)
+        self._log_to_sheet(
+            spreadsheet_id, 
+            source_info=f"Rule: {rule.category}", 
+            target_info=f"{rule.target_sheet}!{rule.target_header} (Row {target_row})",
+            old_val=str(old_val),
+            new_val=str(new_value),
+            category=rule.category,
+            hashtags=rule.hashtags,
+            status="SUCCESS"
+        )
+        
+        # 6. Log to session log (new)
+        self._log_to_session(
+            spreadsheet_id,
+            "АВТОМАТИКА",
+            f"Правило выполнено: {rule.category}",
+            f"Передано: {rule.target_sheet}!{rule.target_header} (Row {target_row}) | {old_val} -> {new_value}",
+            "✅ УСПЕХ"
+        )
+        
+        return {"rule_id": rule.id, "status": "success"}
+
+    def _log_to_session(self, spreadsheet_id: str, category: str, action: str, details: str, status: str):
+        """Helper to log to the session sheet if available."""
+        if self.logging_service:
+            self.logging_service.add_log(spreadsheet_id, category, action, details, status)
 
     def _handle_cascades(self, spreadsheet_id: str, sheet_name: str, row_idx: int, col_name: str):
         """
@@ -319,6 +460,14 @@ class SyncService:
         if key not in triggers:
             return
 
+        self._log_to_session(
+            spreadsheet_id, 
+            "КАСКАД", 
+            "Запуск каскадного обновления", 
+            f"Триггер: '{updated_header}' на листе '{sheet_name}' Row={row_idx}",
+            "🔄"
+        )
+
         try:
             ws = self.sheets_service.get_worksheet(spreadsheet_id, sheet_name)
             headers = ws.row_values(1)
@@ -339,6 +488,8 @@ class SyncService:
                     if str(current or "").strip() != str(val).strip():
                         ws.update_cell(row_idx, idx, val)
                         logger.info("cascade_update", sheet=sheet_name, row=row_idx, field=name, val=val)
+                        if hasattr(self, 'logging_service') and self.logging_service:
+                             self.logging_service.add_log(spreadsheet_id, "КАСКАД", "Поле обновлено", f"{name}: '{current}' -> '{val}'", "✅")
 
             # 1. Fetch Source Values
             rus_name = get_val("Наименования рус по ДС") or ""
@@ -399,10 +550,34 @@ class SyncService:
         except Exception as e:
             logger.error("cascade_failed", error=str(e), sheet=sheet_name)
 
-    def add_article(self, spreadsheet_id: str, article: str) -> Dict[str, Any]:
+    async def add_article(self, spreadsheet_id: str, article: Optional[str] = None, project: str = "UNKNOWN") -> Dict[str, Any]:
         """
-        Add a new article to all relevant sheets.
+        Add a new article to all relevant sheets. 
+        If article is empty, generates next ID based on project prefix.
         """
+        # 1. Resolve Project and Prefix
+        if project == "UNKNOWN":
+            # Simple heuristic: we can look into cached rules or just try to find prefix in sheet A1
+            # But usually project is passed from GAS. 
+            # If not, we try to detect from Spreadsheet name or just use PROJECT_KEY if defined.
+            pass
+
+        prefix = self._get_project_prefix(project)
+        
+        # 2. Generate ID if not provided
+        if not article or str(article).strip() == "":
+            if self.logging_service:
+                self.logging_service.add_log(spreadsheet_id, "АРТИКУЛ", "Определение нового ID", f"Проект: {project}, Префикс: {prefix}", "🔄")
+            article = self._get_next_id(spreadsheet_id, prefix)
+            logger.info("auto_generated_article_id", id=article, project=project)
+            if self.logging_service:
+                self.logging_service.add_log(spreadsheet_id, "АРТИКУЛ", "ID определен", f"Новый ID: {article}", "✅")
+        
+        article = str(article).strip()
+        
+        if self.logging_service:
+            self.logging_service.add_log(spreadsheet_id, "АРТИКУЛ", f"Добавление артикула {article}", "Начало процесса создания строк", "🚀")
+
         TARGET_SHEETS = [
             "Заказ", 
             "Этикетки", 
@@ -429,17 +604,27 @@ class SyncService:
                 # We append [article] and let other cols be empty
                 ws.append_row([article])
                 results[sheet_name] = "Added"
+                if self.logging_service:
+                    self.logging_service.add_log(spreadsheet_id, "АРТИКУЛ", "Создание строки", f"Лист: {sheet_name}", "✅ Added")
                 
             except Exception as e:
                 logger.error("add_article_failed_sheet", sheet=sheet_name, error=str(e))
                 results[sheet_name] = f"Error: {str(e)}"
+                if self.logging_service:
+                    self.logging_service.add_log(spreadsheet_id, "АРТИКУЛ", f"Ошибка на листе {sheet_name}", str(e), "❌ ERR")
                 
-        return results
+        if self.logging_service:
+             self.logging_service.add_log(spreadsheet_id, "АРТИКУЛ", f"Процесс завершен: {article}", f"Результатов: {len(results)}", "✅ ГОТОВО")
+
+        return {"status": "success", "article": article, "details": results}
 
     def delete_articles(self, spreadsheet_id: str, articles: List[str]) -> Dict[str, Any]:
         """
         Delete rows with matching articles from all relevant sheets.
         """
+        if self.logging_service:
+            self.logging_service.add_log(spreadsheet_id, "УДАЛЕНИЕ", f"Запуск удаления артов: {len(articles)} шт.", f"Список: {', '.join(articles[:5])}...", "🔄")
+
         # Same list as add_article for now, mirroring the ecosystem
         TARGET_SHEETS = [
             "Заказ", 
@@ -478,59 +663,18 @@ class SyncService:
                     
                 results[sheet_name] = f"Deleted {len(rows_to_delete)} rows"
                 deleted_count += len(rows_to_delete)
+                if self.logging_service:
+                    self.logging_service.add_log(spreadsheet_id, "УДАЛЕНИЕ", f"Лист {sheet_name}", f"Удалено {len(rows_to_delete)} строк", "✅")
                 
             except Exception as e:
                 logger.error("delete_articles_failed_sheet", sheet=sheet_name, error=str(e))
                 results[sheet_name] = f"Error: {str(e)}"
+                if self.logging_service:
+                    self.logging_service.add_log(spreadsheet_id, "УДАЛЕНИЕ", f"Ошибка на листе {sheet_name}", str(e), "❌ ERR")
                 
-        return {"total_deleted": deleted_count, "details": results}
+        if self.logging_service:
+             self.logging_service.add_log(spreadsheet_id, "УДАЛЕНИЕ", "Процесс завершен", f"Всего удалено {deleted_count} строк в {len(results)} листах", "✅ ГОТОВО")
 
-    def _apply_rule(self, current_spreadsheet_id: str, rule: SyncRule, key: str, value: Any):
-        """
-        Apply a single sync rule.
-        """
-        target_ss_id = rule.target_doc_id if rule.is_external else current_spreadsheet_id
-        
-        # 1. Connect to target sheet
-        try:
-            ws = self.sheets_service.get_worksheet(target_ss_id, rule.target_sheet)
-        except Exception:
-            return {"rule_id": rule.id, "status": "failed", "error": "Target sheet not found"}
+        return {"status": "success", "total_deleted": deleted_count, "details": results}
 
-        # 2. Find target column index by header
-        # TODO: optimization - cache headers map
-        headers = ws.row_values(1)
-        try:
-            target_col = headers.index(rule.target_header) + 1
-        except ValueError:
-             return {"rule_id": rule.id, "status": "failed", "error": f"Target header '{rule.target_header}' not found"}
 
-        # 3. Find target row by Key (Col A)
-        # TODO: optimization - cache ID map
-        col_a = ws.col_values(1)
-        try:
-            target_row = col_a.index(key) + 1
-        except ValueError:
-             # Key not found in target, do nothing (according to GAS logic)
-             return {"rule_id": rule.id, "status": "skipped", "reason": "Key not found in target"}
-        
-        # 4. Update Value
-        # Check old value to avoid redundant edits?
-        # For now, just write. gspread update_cell is simple.
-        # Using batch_update or update_cell
-        ws.update_cell(target_row, target_col, value)
-        
-        return {"rule_id": rule.id, "status": "success"}
-
-    def _handle_cascades(self, spreadsheet_id: str, sheet_name: str, row: int, col: int, header: str):
-        """
-        Handle post-sync logic like Certification cascades.
-        """
-        # Logic from GAS: if (sheetName === Lib.CONFIG.SHEETS.CERTIFICATION) ...
-        # We need strict names.
-        
-        if sheet_name == "Сертификация":
-            # Call certification cascade logic
-            pass
-        
-        # TODO: Add Order sheet overrides if relevant

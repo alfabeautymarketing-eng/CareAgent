@@ -5,7 +5,7 @@ API endpoints for sync, price processing, AI analysis.
 from datetime import datetime
 from typing import Optional, List, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 from src.utils.logger import logger
@@ -15,10 +15,14 @@ api_router = APIRouter()
 from src.services.sheets import SheetsService
 from src.services.sync import SyncService
 from src.services.sorting import SortingService
+from src.services.logging import LoggingService
+from src.services.ai import AIService, get_ai_service
 
 sheets_service = SheetsService()
-sync_service = SyncService()
+logging_service = LoggingService(sheets_service)
+sync_service = SyncService(logging_service) # Pass logger to sync service
 sorting_service = SortingService()
+ai_service = get_ai_service()
 
 # ============== Request/Response Models ==============
 
@@ -60,6 +64,16 @@ class SyncEventRequest(BaseModel):
     user_email: Optional[str] = None
     header_name: Optional[str] = None
     row_key: Optional[str] = None
+    row_key: Optional[str] = None
+
+class LogInitRequest(BaseModel):
+    """Request to initialize logs."""
+    spreadsheet_id: str
+
+class SyncBatchEventRequest(BaseModel):
+    """Request for batch onEdit events."""
+    spreadsheet_id: str
+    events: List[SyncEventRequest]
 
 
 class PriceProcessRequest(BaseModel):
@@ -83,12 +97,39 @@ class SortRequest(BaseModel):
 
 class AIAnalyzeRequest(BaseModel):
     """Request for AI analysis."""
-
-    project: str
+    spreadsheet_id: str
+    sheet_name: str = "Информация"
     row_number: Optional[int] = None
-    article: Optional[str] = None
     pdf_url: Optional[str] = None
-    product_name: Optional[str] = None
+    purpose: Optional[str] = None
+    application: Optional[str] = None
+
+
+class AIAnalyzeBatchRequest(BaseModel):
+    """Request for batch AI analysis."""
+    spreadsheet_id: str
+    sheet_name: str = "Информация"
+    delay_between: float = 2.0
+
+
+class AICheckServiceRequest(BaseModel):
+    """Request to check AI service status."""
+    pass
+
+
+class AIPdfAnalyzeRequest(BaseModel):
+    """Request to analyze a PDF directly."""
+    pdf_url: str
+    purpose: Optional[str] = None
+    application: Optional[str] = None
+
+
+class AISimpleAnalyzeRequest(BaseModel):
+    """Request for simple AI analysis (no PDF needed)."""
+    product_name: str
+    inci_text: Optional[str] = None
+    purpose: Optional[str] = None
+    application: Optional[str] = None
 
 
 class TaskStatusResponse(BaseModel):
@@ -159,7 +200,7 @@ async def sync_range(request: SyncRangeRequest):
 async def sync_full(project: str, source_sheet: str, spreadsheet_id: Optional[str] = None):
     """Full sync of a sheet."""
     logger.info("full_sync_requested", project=project, sheet=source_sheet)
-
+    
     if not spreadsheet_id:
         project_map = {v: k for k, v in PROJECT_IDS.items()}
         spreadsheet_id = project_map.get(project)
@@ -185,19 +226,26 @@ async def add_article(request: AddArticleRequest):
     logger.info("add_article_requested", project=request.project, article=request.article)
     
     spreadsheet_id = request.spreadsheet_id
-    if not spreadsheet_id:
+    project_key = request.project
+    
+    # Resolve spreadsheet_id from project if missing
+    if not spreadsheet_id and project_key != "UNKNOWN":
         project_map = {v: k for k, v in PROJECT_IDS.items()}
-        spreadsheet_id = project_map.get(request.project)
+        spreadsheet_id = project_map.get(project_key)
         
+    # Resolve project_key from spreadsheet_id if UNKNOWN
+    if project_key == "UNKNOWN" and spreadsheet_id:
+        project_key = PROJECT_IDS.get(spreadsheet_id, "UNKNOWN")
+
     if not spreadsheet_id:
-        raise HTTPException(status_code=400, detail=f"Could not resolve spreadsheet_id for project {request.project}")
+        raise HTTPException(status_code=400, detail=f"Could not resolve spreadsheet_id")
 
     try:
-        result = sync_service.add_article(spreadsheet_id, request.article)
+        details = await sync_service.add_article(spreadsheet_id, request.article, project_key)
         return {
             "status": "success",
-            "message": f"Article {request.article} added to {len(result)} sheets",
-            "details": result
+            "message": "Артикул обработан",
+            "details": details
         }
     except Exception as e:
         logger.error("add_article_endpoint_failed", error=str(e))
@@ -230,8 +278,11 @@ async def delete_articles(request: DeleteArticlesRequest):
 
 
 @api_router.post("/sync/event")
-async def sync_event(request: SyncEventRequest):
-    """Handle onEdit sync event."""
+async def sync_event(request: SyncEventRequest, background_tasks: BackgroundTasks):
+    """
+    Handle onEdit sync event (async).
+    Uses background tasks for non-blocking execution.
+    """
     logger.info(
         "sync_event_received",
         sheet=request.sheet_name,
@@ -253,18 +304,68 @@ async def sync_event(request: SyncEventRequest):
             "row_key": request.row_key
         }
         
-        result = sync_service.sync_event(request.spreadsheet_id, event_data)
+        # Queue task
+        background_tasks.add_task(sync_service.sync_event, request.spreadsheet_id, event_data)
+        
         return {
-            "status": "success",
-            "details": result
+            "status": "queued",
+            "message": "Sync queued"
         }
     except Exception as e:
         logger.error("sync_event_failed", error=str(e))
-        # We might not want to raise 500 to GAS to avoid showing error to user overly often,
-        # but 500 allows GAS to potentially retry or log it.
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/sync/batch-event")
+async def sync_batch_event(request: SyncBatchEventRequest, background_tasks: BackgroundTasks):
+    """
+    Handle batch onEdit sync events (async).
+    """
+    logger.info("batch_sync_event_received", count=len(request.events))
+    
+    try:
+        count = 0
+        for event in request.events:
+            # Construct event data dict
+            event_data = {
+                "sheet_name": event.sheet_name,
+                "row": event.row,
+                "col": event.col,
+                "value": event.value,
+                "old_value": event.old_value,
+                "user_email": event.user_email,
+                "header_name": event.header_name,
+                "row_key": event.row_key
+            }
+            
+            background_tasks.add_task(sync_service.sync_event, request.spreadsheet_id, event_data)
+            count += 1
+        
+        logging_service.add_log(
+            request.spreadsheet_id, 
+            "СИНХРОНИЗАЦИЯ", 
+            "Получена пачка событий (batch)", 
+            f"Количество: {count}", 
+            "📥 В ОЧЕРЕДИ"
+        )
+        
+        return {
+            "status": "queued",
+            "message": f"Queued {count} events"
+        }
+    except Exception as e:
+        logger.error("sync_batch_event_failed", error=str(e))
+        logging_service.add_log(
+            request.spreadsheet_id,
+            "СИНХРОНИЗАЦИЯ",
+            f"Ошибка при обработке пачки событий (batch)",
+            f"Количество: {len(request.events)}, Ошибка: {str(e)}",
+            "❌ ОШИБКА"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ... (SortRequest model remains)
 # ... (SortRequest model remains)
 
 class LoadFunctionsRequest(BaseModel):
@@ -288,6 +389,13 @@ async def sort_sheet(request: SortRequest):
             request.sheet_name, 
             request.column_name, 
             request.ascending
+        )
+        logging_service.add_log(
+            request.spreadsheet_id,
+            "СОРТИРОВКА",
+            f"Сортировка листа {request.sheet_name}",
+            f"Колонка: {request.column_name}, По возрастанию: {request.ascending}",
+            "✅ УСПЕХ"
         )
         return {"status": "success", "message": f"Sorted by {request.column_name}"}
     except Exception as e:
@@ -388,38 +496,317 @@ async def cancel_price_processing(task_id: str):
 
 # ============== AI Analysis ==============
 
-@api_router.post("/ai/analyze/inci")
-async def analyze_inci(request: AIAnalyzeRequest):
-    """Analyze INCI composition."""
+@api_router.get("/ai/status")
+async def check_ai_service():
+    """
+    Check Gemini AI service status.
+    Returns connection status, current model, and available models.
+    """
+    logger.info("ai_status_check_requested")
+
+    try:
+        result = ai_service.check_service()
+        return {
+            "status": result.get("status"),
+            "model": result.get("model"),
+            "response": result.get("response"),
+            "available_models": result.get("available_models", []),
+            "error": result.get("error")
+        }
+    except Exception as e:
+        logger.error("ai_status_check_failed", error=str(e))
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@api_router.get("/ai/settings")
+async def get_ai_settings():
+    """
+    Get current Gemini AI settings.
+    Returns model, API key status (masked), and config.
+    """
+    logger.info("ai_settings_requested")
+
+    try:
+        settings = ai_service.get_gemini_settings()
+        return settings
+    except Exception as e:
+        logger.error("ai_settings_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class AIConfigureRequest(BaseModel):
+    """Request to configure AI settings."""
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+
+
+@api_router.post("/ai/configure")
+async def configure_ai(request: AIConfigureRequest):
+    """
+    Configure Gemini AI settings at runtime.
+    Allows setting API key and model without server restart.
+
+    Note: Settings are stored in memory and will be lost on server restart.
+    For permanent settings, update .env file.
+    """
+    from src.services.gemini_client import set_runtime_config, get_gemini_client
+
+    logger.info("ai_configure_requested",
+               has_key=bool(request.api_key),
+               model=request.model)
+
+    try:
+        # Update runtime config
+        set_runtime_config(
+            api_key=request.api_key,
+            model=request.model
+        )
+
+        # Test the new configuration
+        client = get_gemini_client()
+        test_result = client.test_connection()
+
+        if test_result.get("status") == "online":
+            return {
+                "status": "success",
+                "message": "Configuration updated successfully",
+                "model": client.model,
+                "test_response": test_result.get("response"),
+                "available_models": test_result.get("available_models", [])[:5]
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Configuration updated but connection test failed",
+                "error": test_result.get("error"),
+                "model": client.model
+            }
+
+    except Exception as e:
+        logger.error("ai_configure_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/ai/categories")
+async def get_ai_categories():
+    """
+    Get available ТН ВЭД categories for classification.
+    """
+    return {
+        "categories": ai_service.get_available_categories()
+    }
+
+
+@api_router.post("/ai/analyze/pdf")
+async def analyze_pdf(request: AIPdfAnalyzeRequest):
+    """
+    Analyze a PDF document directly without spreadsheet.
+    Extracts INCI composition and classifies product.
+    """
+    logger.info("pdf_analysis_requested", url=request.pdf_url[:50] if request.pdf_url else None)
+
+    try:
+        result = ai_service.analyze_pdf(
+            pdf_url=request.pdf_url,
+            purpose=request.purpose,
+            application=request.application
+        )
+        return {
+            "status": "success",
+            "data": result
+        }
+    except Exception as e:
+        logger.error("pdf_analysis_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/ai/analyze/simple")
+async def analyze_simple(request: AISimpleAnalyzeRequest):
+    """
+    Simple AI analysis without PDF - just classify product by name/purpose.
+    Use this to quickly test if Gemini API is working.
+    Returns product_type and product_reason.
+    """
+    import json
+    from src.services.gemini_client import get_gemini_client
+
+    logger.info("simple_analysis_requested", 
+                product=request.product_name[:50] if request.product_name else None)
+
+    try:
+        # Build prompt for simple classification
+        inci_part = f"\nИНСИ состав: {request.inci_text}" if request.inci_text else ""
+        
+        prompt = f"""Ты эксперт по косметической продукции.
+
+Продукт: {request.product_name}
+Назначение: {request.purpose or 'не указано'}
+Применение: {request.application or 'не указано'}{inci_part}
+
+Определи:
+1. Вид продукции (например: крем для лица, сыворотка, шампунь, маска и т.д.)
+2. Обоснование почему это именно такой вид продукции
+
+Ответ ТОЛЬКО в формате JSON:
+{{"product_type": "Вид продукции", "product_reason": "Обоснование"}}"""
+
+        client = get_gemini_client()
+        response = client.call_api(prompt, json_response=True, temperature=0.1)
+        
+        # Parse JSON response
+        cleaned = response.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        if cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        
+        result = json.loads(cleaned.strip())
+        
+        logger.info("simple_analysis_success",
+                   product_type=result.get("product_type"))
+
+        return {
+            "status": "success",
+            "data": result
+        }
+    except Exception as e:
+        logger.error("simple_analysis_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/ai/analyze/row")
+async def analyze_row(request: AIAnalyzeRequest):
+    """
+    Analyze a single row in the spreadsheet.
+    Reads INCI link from column H, analyzes with Gemini,
+    and writes results to columns L-Y.
+    """
+    if not request.row_number:
+        raise HTTPException(status_code=400, detail="row_number is required")
+
     logger.info(
-        "inci_analysis_requested",
-        project=request.project,
-        row=request.row_number,
-        article=request.article,
+        "row_analysis_requested",
+        spreadsheet_id=request.spreadsheet_id[:20],
+        sheet=request.sheet_name,
+        row=request.row_number
     )
 
-    # TODO: Implement AI analysis
-    return {
-        "task_id": f"ai_{datetime.now().strftime('%Y%m%d%H%M%S')}",
-        "status": "accepted",
-    }
+    try:
+        result = ai_service.analyze_row(
+            spreadsheet_id=request.spreadsheet_id,
+            sheet_name=request.sheet_name,
+            row_number=request.row_number
+        )
+
+        if result.success:
+            logging_service.add_log(
+                request.spreadsheet_id,
+                "AI АНАЛИЗ",
+                f"Анализ строки {request.row_number}",
+                f"Категория: {result.data.get('category_code', 'N/A')}, "
+                f"Вид: {result.data.get('product_type', 'N/A')}",
+                "✅ УСПЕХ"
+            )
+            return {
+                "status": "success",
+                "row_number": result.row_number,
+                "duration": f"{result.duration:.2f}s",
+                "data": result.data
+            }
+        else:
+            logging_service.add_log(
+                request.spreadsheet_id,
+                "AI АНАЛИЗ",
+                f"Ошибка анализа строки {request.row_number}",
+                result.error or "Unknown error",
+                "❌ ОШИБКА"
+            )
+            raise HTTPException(status_code=500, detail=result.error)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("row_analysis_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @api_router.post("/ai/analyze/batch")
-async def analyze_batch(project: str, rows: List[int], parallel: int = 3):
-    """Batch AI analysis."""
+async def analyze_batch(request: AIAnalyzeBatchRequest, background_tasks: BackgroundTasks):
+    """
+    Analyze all empty rows in the spreadsheet (batch mode).
+    Finds rows with INCI link but no analysis results and processes them.
+    Runs in background.
+    """
     logger.info(
         "batch_analysis_requested",
-        project=project,
-        rows_count=len(rows),
+        spreadsheet_id=request.spreadsheet_id[:20],
+        sheet=request.sheet_name
     )
 
-    # TODO: Implement batch analysis
-    return {
-        "task_id": f"batch_{datetime.now().strftime('%Y%m%d%H%M%S')}",
-        "status": "accepted",
-        "total_rows": len(rows),
-    }
+    try:
+        # Run analysis in background
+        background_tasks.add_task(
+            _run_batch_analysis,
+            request.spreadsheet_id,
+            request.sheet_name,
+            request.delay_between
+        )
+
+        logging_service.add_log(
+            request.spreadsheet_id,
+            "AI АНАЛИЗ",
+            "Запущен пакетный анализ",
+            f"Лист: {request.sheet_name}",
+            "📥 В ОЧЕРЕДИ"
+        )
+
+        return {
+            "status": "queued",
+            "message": "Batch analysis started in background",
+            "sheet_name": request.sheet_name
+        }
+
+    except Exception as e:
+        logger.error("batch_analysis_start_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _run_batch_analysis(spreadsheet_id: str, sheet_name: str, delay: float):
+    """Background task for batch analysis."""
+    try:
+        result = ai_service.analyze_empty_rows(
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name,
+            delay_between=delay
+        )
+
+        logging_service.add_log(
+            spreadsheet_id,
+            "AI АНАЛИЗ",
+            "Пакетный анализ завершен",
+            f"Успешно: {result['success']}/{result['total']}, Ошибок: {result['failed']}",
+            "✅ ЗАВЕРШЕН" if result['failed'] == 0 else "⚠️ С ОШИБКАМИ"
+        )
+
+        logger.info("batch_analysis_completed",
+                   total=result['total'],
+                   success=result['success'],
+                   failed=result['failed'])
+
+    except Exception as e:
+        logger.error("batch_analysis_background_failed", error=str(e))
+        logging_service.add_log(
+            spreadsheet_id,
+            "AI АНАЛИЗ",
+            "Ошибка пакетного анализа",
+            str(e),
+            "❌ ОШИБКА"
+        )
 
 
 # ============== Cache Management ==============
@@ -659,9 +1046,9 @@ BASE_MENU_GROUPS: List[dict] = [
     {
         "title": "🤖 Агент",
         "items": [
-            {"label": "Проверить сервис", "function_name": "menuCheckService"},
-            {"label": "⚙️ Настройки Gemini", "function_name": "setupGeminiComplete"},
+            {"label": "🔑 Ввести API ключ", "function_name": "setupGeminiComplete"},
             {"label": "📋 Показать настройки", "function_name": "showGeminiSettings"},
+            {"label": "🟢 Проверить сервис", "function_name": "menuCheckService"},
             {"separator": True},
             {"label": "Анализировать выбранную строку", "function_name": "menuAnalyzeSelected"},
             {"label": "Анализировать пустые строки", "function_name": "menuAnalyzeEmpty"},
@@ -772,6 +1159,16 @@ def _build_menu_registry(project: str) -> List[MenuGroupModel]:
     registry.append(_server_tools_menu())
 
     return registry
+
+@api_router.post("/logs/init")
+async def init_logs(request: LogInitRequest):
+    """Initialize the 'Логи' sheet."""
+    logger.info("logs_init_requested", spreadsheet_id=request.spreadsheet_id)
+    success = logging_service.init_session_log(request.spreadsheet_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to initialize logs sheet")
+    return {"status": "success", "message": "Log sheet initialized"}
+
 
 @api_router.get("/menu/config")
 async def get_menu_config(spreadsheet_id: str) -> MenuConfigResponse:

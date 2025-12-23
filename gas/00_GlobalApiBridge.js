@@ -15,38 +15,146 @@
  * =======================================================================================
  */
 
-// ============ ТРИГГЕРЫ (SIMPLE TRIGGERS) ============
-
 /**
  * Simple Trigger: Запускается при открытии документа.
- * Инициализирует меню из Python сервера и упорядочивает листы.
+ * Ограничен в правах (не может делать UrlFetchApp).
+ * Служит только для построения меню (часто из кэша).
  */
 function onOpen(e) {
-  // 1. Инициализация меню из Python сервера
+  // 1. Попытка построить меню (если сервер недоступен, будет взят кэш)
   if (typeof createAgentMenu === 'function') {
-    createAgentMenu();
-  } else {
-    console.error("createAgentMenu не найдена!");
+    // Simple trigger: запрещаем сетевые вызовы (UrlFetchApp) чтобы избежать ошибок прав.
+    createAgentMenu({ allowNetwork: false });
+  }
+}
+
+/**
+ * Installable Trigger: Запускается при открытии документа (нужно установить вручную).
+ * Имеет полные права (UrlFetchApp разрешен).
+ * Инициализирует логи, упорядочивает листы и обновляет меню.
+ */
+function handleOnOpen(e) {
+  console.log("🚀 Running Installable handleOnOpen...");
+
+  // 0. Гарантируем, что лог-листы первыми в порядке вкладок
+  try {
+    if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
+      Lib.ensureLogSheetsFirst();
+    }
+  } catch (err) {
+    console.error("Ошибка при переносе лог-листов: " + err);
   }
 
-  // 2. Автоматическое упорядочивание листов через Python сервер
-  if (typeof reorderSheetsSilent === 'function') {
-    try {
-      reorderSheetsSilent();
-    } catch (err) {
-      console.error("Ошибка при упорядочивании листов: " + err);
+  // 1. Инициализация сессии логов на сервере (Логи)
+  try {
+    if (typeof Lib !== 'undefined' && typeof Lib.initSessionLogs === 'function') {
+      Lib.initSessionLogs();
+      if (typeof Lib.ensureLogSheetsFirst === 'function') {
+        Lib.ensureLogSheetsFirst();
+      }
+    }
+    if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
+      Lib.logStep("Startup", "Инициализация логов сессии завершена");
+    }
+  } catch (err) {
+    console.error("Ошибка при инициализации логов: " + err);
+    if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
+      Lib.logWarn("Startup: не удалось инициализировать логи", err);
     }
   }
 
-  // 3. Активация листа "Главная" после загрузки
+  // 2. Загрузка меню (требует полного доступа, поэтому делаем после логов)
+  if (typeof createAgentMenu === 'function') {
+    try {
+      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
+        Lib.logStep("Startup", "Загрузка динамического меню");
+      }
+      createAgentMenu();
+    } catch (err) {
+      console.error("Ошибка при загрузке меню: " + err);
+      if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
+        Lib.logWarn("Startup: ошибка загрузки меню", err);
+      }
+    }
+  }
+
+  // 3. Автоматическое упорядочивание листов через Python сервер
+  if (typeof reorderSheetsSilent === 'function') {
+    try {
+      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
+        Lib.logStep("Startup", "Выстраиваем листы по порядку (сервер)");
+      }
+      reorderSheetsSilent();
+      if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
+        Lib.ensureLogSheetsFirst();
+      }
+    } catch (err) {
+      console.error("Ошибка при упорядочивании листов: " + err);
+      if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
+        Lib.logWarn("Startup: ошибка упорядочивания листов", err);
+      }
+    }
+  }
+
+  // 3.5. Инициализация Gemini API из Script Properties
+  if (typeof initGeminiFromStorage === 'function') {
+    try {
+      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
+        Lib.logStep("Startup", "Инициализация Gemini API");
+      }
+      const geminiOk = initGeminiFromStorage();
+      if (geminiOk && typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
+        Lib.logStep("Startup", "Gemini API инициализирован из хранилища");
+      }
+    } catch (err) {
+      console.error("Ошибка при инициализации Gemini: " + err);
+    }
+  }
+
+  // 4. Обновляем формулы на ключевых листах
+  try {
+    if (typeof Lib !== 'undefined' && typeof Lib.recalculatePriceDynamicsFormulas === 'function') {
+      if (typeof Lib.logStep === 'function') {
+        Lib.logStep("Startup", "Обновляем формулы листа \"Динамика цены\"");
+      }
+      Lib.recalculatePriceDynamicsFormulas();
+    }
+  } catch (err) {
+    console.error("Ошибка при обновлении формул Динамика цены: " + err);
+    if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
+      Lib.logWarn('Startup: ошибка формул "Динамика цены"', err);
+    }
+  }
+
+  try {
+    if (typeof Lib !== 'undefined' && typeof Lib.updatePriceCalculationFormulas === 'function') {
+      if (typeof Lib.logStep === 'function') {
+        Lib.logStep("Startup", "Обновляем формулы листа \"Расчет цены\"");
+      }
+      Lib.updatePriceCalculationFormulas(true); // silent
+    }
+  } catch (err) {
+    console.error("Ошибка при обновлении формул Расчет цены: " + err);
+    if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
+      Lib.logWarn('Startup: ошибка формул "Расчет цены"', err);
+    }
+  }
+
+  // 5. Активация листа "Главная"
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var mainSheet = ss.getSheetByName("Главная");
     if (mainSheet) {
+      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
+        Lib.logStep("Startup", "Переходим на лист \"Главная\"");
+      }
       ss.setActiveSheet(mainSheet);
     }
   } catch (err) {
     console.error("Ошибка при активации листа Главная: " + err);
+    if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
+      Lib.logWarn("Startup: не удалось активировать лист Главная", err);
+    }
   }
 }
 

@@ -95,6 +95,64 @@ var Lib = Lib || {};
     _customLog("ERROR", message, errorObject);
   };
 
+  /**
+   * Ступенчатое логирование действий (для понятных сценариев: запуск, каскады, создание артикула).
+   * @param {string} context - Короткий маркер процесса (например, Startup, Article, Sync)
+   * @param {string} step - Описание шага
+   * @param {"DEBUG"|"INFO"|"WARN"|"ERROR"} [level="INFO"] - Уровень лога
+   */
+  Lib.logStep = function (context, step, level) {
+    const lvl = level || "INFO";
+    const prefix = context ? `[${context}] ` : "";
+    const message = prefix + step;
+    _customLog(lvl, message);
+  };
+
+  /**
+   * Переносит листы логов в начало (Журнал логов, затем Журнал синхро), сохраняя активный лист.
+   * Делает лог-запись о фактически перемещенных листах.
+   */
+  Lib.ensureLogSheetsFirst = function () {
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      if (!ss) return;
+
+      const active = ss.getActiveSheet();
+      const names = [];
+      if (Lib.CONFIG && Lib.CONFIG.SHEETS) {
+        // Strict priority: Логи first, then others
+        if (Lib.CONFIG.SHEETS.SESSION_LOG) names.push(Lib.CONFIG.SHEETS.SESSION_LOG);
+        if (Lib.CONFIG.SHEETS.LOG_DEBUG) names.push(Lib.CONFIG.SHEETS.LOG_DEBUG);
+        if (Lib.CONFIG.SHEETS.LOG) names.push(Lib.CONFIG.SHEETS.LOG);
+      }
+
+      let moveIndex = 1;
+      const moved = [];
+
+      names.forEach(function (name) {
+        if (!name) return;
+        const sheet = ss.getSheetByName(name);
+        if (!sheet || sheet.isSheetHidden()) return; // Skip if not found or hidden (unless we want to unhide?)
+        
+        // Перемещаем лист в указанную позицию
+        sheet.activate();
+        ss.moveActiveSheet(moveIndex);
+        moved.push(name);
+        moveIndex += 1;
+      });
+
+      if (active && !names.includes(active.getName())) {
+        active.activate();
+      }
+
+      if (moved.length) {
+        Lib.logStep("Startup", "Листы логов перенесены в начало: " + moved.join(", "));
+      }
+    } catch (e) {
+      Lib.logWarn("ensureLogSheetsFirst: ошибка перемещения лог-листов", e);
+    }
+  };
+
   // ----------------------------------
   // Секция 1.2: Работа с данными
   // ----------------------------------

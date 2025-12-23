@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # Gemini AI
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-2.5-flash"  # Default model, can be changed via API
     gemini_max_retries: int = 5
 
     # Redis
