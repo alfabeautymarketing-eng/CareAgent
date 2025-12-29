@@ -189,7 +189,13 @@ class PriceProcessor:
                 }
 
             # 3. Parse data based on project/mode
-            processed = self._parse_data(source_data["values"], project, mode, parser_config)
+            processed = self._parse_data(
+                source_data["values"],
+                project,
+                mode,
+                parser_config,
+                source_data.get("backgrounds")
+            )
 
             if not processed.rows:
                 return {
@@ -339,14 +345,15 @@ class PriceProcessor:
         values: List[List[Any]],
         project: str,
         mode: str,
-        parser_config: Dict
+        parser_config: Dict,
+        backgrounds: Optional[List[List[str]]] = None
     ) -> ProcessedData:
         """Parse source data based on project and mode"""
 
         if project == "mt":
             return self._parse_mt_data(values, mode, parser_config)
         elif project == "sk":
-            return self._parse_sk_data(values, mode, parser_config)
+            return self._parse_sk_data(values, mode, parser_config, backgrounds)
         elif project == "ss":
             return self._parse_ss_data(values, mode, parser_config)
         else:
@@ -439,12 +446,135 @@ class PriceProcessor:
         self,
         values: List[List[Any]],
         mode: str,
-        parser_config: Dict
+        parser_config: Dict,
+        backgrounds: Optional[List[List[str]]] = None
     ) -> ProcessedData:
-        """Parse SK project data with color-based group detection"""
-        # TODO: Implement color-based parsing for SK
-        # For now, use same logic as MT
-        return self._parse_mt_data(values, mode, parser_config)
+        """
+        Parse SK project data with color-based group detection.
+
+        SK specifics:
+        - Groups detected by yellow background color (#ffff00)
+        - Combined group format: "{line} - {group}"
+        - RRP column present
+        - Probes mode has different logic (not_starts_with_00)
+        """
+
+        rows: List[ParsedRow] = []
+        articles: List[str] = []
+        groups: List[str] = []
+        current_group = ""
+        current_line = ""
+
+        # Group detection config
+        group_detection = parser_config.get("group_detection", {})
+        group_color = group_detection.get("group_color", "#ffff00").lower()
+
+        # Find header row
+        header_row_index = self._find_header_row_sk(values)
+        if header_row_index == -1:
+            # Fallback to MT-style parsing
+            logger.warning("SK header row not found, falling back to MT parsing")
+            return self._parse_mt_data(values, mode, parser_config)
+
+        headers = values[header_row_index]
+
+        # Get column indices from headers
+        code_col = self._find_column_index(headers, "CODE", -1)
+        product_col = self._find_column_index(headers, "PRODUCT", -1)
+        units_col = self._find_column_index(headers, "UNITS", -1)
+        price_col = self._find_column_index(headers, "PRICE", -1)
+        rrp_col = self._find_column_index(headers, "RRP", -1)
+
+        if code_col == -1 or product_col == -1:
+            logger.warning("Required columns not found in SK sheet")
+            return self._parse_mt_data(values, mode, parser_config)
+
+        # Parse rows
+        for i in range(header_row_index + 1, len(values)):
+            row = values[i]
+
+            # Check background color for group detection
+            is_group_row = False
+            if backgrounds and i < len(backgrounds):
+                row_backgrounds = backgrounds[i]
+                # Check if first cell has group color
+                if row_backgrounds and len(row_backgrounds) > 0:
+                    cell_color = row_backgrounds[0].lower() if row_backgrounds[0] else ""
+                    is_group_row = self._colors_match(cell_color, group_color)
+
+            code_value = self._as_trimmed_string(self._safe_get(row, code_col))
+            product_value = self._as_trimmed_string(self._safe_get(row, product_col))
+
+            # Group detection by color
+            if is_group_row and product_value:
+                # Parse group: could be "Line - Group" or just "Group"
+                if " - " in product_value:
+                    parts = product_value.split(" - ", 1)
+                    current_line = parts[0].strip()
+                    current_group = parts[1].strip() if len(parts) > 1 else ""
+                else:
+                    current_group = product_value
+                continue
+
+            # Article detection: has code and product name
+            if code_value and product_value:
+                units_value = self._get_value(row, units_col)
+                price_value = self._parse_price(self._get_value(row, price_col))
+                rrp_value = self._get_value(row, rrp_col) if rrp_col >= 0 else ""
+
+                # Build combined group
+                combined_group = f"{current_line} - {current_group}" if current_line else current_group
+
+                parsed_row = ParsedRow(
+                    article=code_value,
+                    name_eng=product_value,
+                    volume="",  # SK doesn't have separate volume column
+                    barcode="",  # SK doesn't have barcode in price list
+                    units_per_pack=str(units_value) if units_value else "",
+                    price=price_value,
+                    group=combined_group
+                )
+
+                rows.append(parsed_row)
+                articles.append(code_value)
+                groups.append(combined_group)
+
+        return ProcessedData(
+            headers=self.OUTPUT_HEADERS.copy(),
+            rows=rows,
+            articles=articles,
+            groups=groups
+        )
+
+    def _find_header_row_sk(self, values: List[List[Any]], max_rows: int = 10) -> int:
+        """Find row index containing CODE and PRODUCT headers for SK"""
+        for i in range(min(len(values), max_rows)):
+            row = values[i]
+            has_code = any("CODE" in str(cell).upper() for cell in row)
+            has_product = any("PRODUCT" in str(cell).upper() for cell in row)
+            if has_code and has_product:
+                return i
+        return -1
+
+    def _colors_match(self, color1: str, color2: str) -> bool:
+        """Check if two colors match (handling different formats)"""
+        # Normalize colors
+        c1 = color1.lower().replace("#", "").strip()
+        c2 = color2.lower().replace("#", "").strip()
+
+        if not c1 or not c2:
+            return False
+
+        # Direct match
+        if c1 == c2:
+            return True
+
+        # Handle RGB format vs hex
+        # ffff00 = yellow
+        if c1 in ["ffff00", "yellow"] and c2 in ["ffff00", "yellow"]:
+            return True
+
+        return False
 
     def _parse_ss_data(
         self,
@@ -452,10 +582,123 @@ class PriceProcessor:
         mode: str,
         parser_config: Dict
     ) -> ProcessedData:
-        """Parse SS project data with markers (-ПРОФ, SAMPLES)"""
-        # TODO: Implement marker-based parsing for SS
-        # For now, use same logic as MT
-        return self._parse_mt_data(values, mode, parser_config)
+        """
+        Parse SS project data with markers (-ПРОФ, SAMPLES).
+
+        SS specifics:
+        - "PROFESSIONAL PRODUCTS" marker adds "-ПРОФ" suffix to group
+        - "PROMOTIONAL MATERIALS" marker stops processing
+        - SAMPLES group: extract number from "form" to "units_per_pack"
+        """
+
+        rows: List[ParsedRow] = []
+        articles: List[str] = []
+        groups: List[str] = []
+        current_group = ""
+        is_professional_mode = False
+
+        # Get column config
+        excel_cols = parser_config.get("excel_columns", {})
+        code_idx = excel_cols.get("CODE", 1)
+        name_idx = excel_cols.get("PRODUCT_NAME", 2)
+        size_idx = excel_cols.get("SIZE", 3)
+        pack_idx = excel_cols.get("PACK", 4)
+        barcode_idx = excel_cols.get("BAR_CODE_ACL", 5)
+        qty_idx = excel_cols.get("QTY_BOX", 6)
+        price_idx = excel_cols.get("EX_WORKS_CARROS", 7)
+
+        # Get markers config
+        markers = parser_config.get("markers", {})
+        prof_trigger = markers.get("professional_mode", {}).get("trigger", "PROFESSIONAL PRODUCTS")
+        prof_suffix = markers.get("professional_mode", {}).get("group_suffix", "-ПРОФ")
+        stop_trigger = markers.get("stop_processing", {}).get("trigger", "PROMOTIONAL MATERIALS")
+
+        # SAMPLES logic config
+        samples_config = parser_config.get("samples_logic", {})
+        samples_enabled = samples_config.get("enabled", False)
+        samples_group_name = samples_config.get("group_name", "SAMPLES")
+
+        # Find header row
+        header_row_index = self._find_header_row_ss(values)
+
+        # Parse rows
+        for i in range(header_row_index + 1, len(values)):
+            row = values[i]
+
+            # Get first cell value for marker detection
+            first_cell = self._as_trimmed_string(self._safe_get(row, 0)).upper()
+
+            # Check for stop marker
+            if stop_trigger.upper() in first_cell:
+                logger.info(f"SS: Stop marker found at row {i + 1}")
+                break
+
+            # Check for professional mode marker
+            if prof_trigger.upper() in first_cell:
+                is_professional_mode = True
+                logger.info(f"SS: Professional mode enabled at row {i + 1}")
+                continue
+
+            # Get values
+            code_value = self._as_trimmed_string(self._safe_get(row, code_idx))
+            name_value = self._as_trimmed_string(self._safe_get(row, name_idx))
+            size_value = self._get_value(row, size_idx)
+            pack_value = self._get_value(row, pack_idx)
+            barcode_value = self._get_value(row, barcode_idx)
+            qty_value = self._get_value(row, qty_idx)
+            price_value = self._parse_price(self._get_value(row, price_idx))
+
+            # Group detection: has name but no code (or specific pattern)
+            if name_value and not code_value:
+                current_group = name_value
+                # Add professional suffix if in professional mode
+                if is_professional_mode:
+                    current_group = f"{current_group}{prof_suffix}"
+                continue
+
+            # Article detection: has code and name
+            if code_value and name_value:
+                # Determine final group
+                group = current_group
+
+                # SAMPLES special logic: extract number from pack/form
+                units = qty_value
+                if samples_enabled and current_group.upper() == samples_group_name:
+                    # Try to extract number from pack_value
+                    extracted = re.search(r'\d+', pack_value)
+                    if extracted:
+                        units = extracted.group()
+
+                parsed_row = ParsedRow(
+                    article=code_value,
+                    name_eng=name_value,
+                    volume=size_value,
+                    barcode=str(barcode_value) if barcode_value else "",
+                    units_per_pack=str(units) if units else "",
+                    price=price_value,
+                    group=group
+                )
+
+                rows.append(parsed_row)
+                articles.append(code_value)
+                groups.append(group)
+
+        return ProcessedData(
+            headers=self.OUTPUT_HEADERS.copy(),
+            rows=rows,
+            articles=articles,
+            groups=groups
+        )
+
+    def _find_header_row_ss(self, values: List[List[Any]], max_rows: int = 10) -> int:
+        """Find row index containing CODE or PRODUCT headers for SS"""
+        for i in range(min(len(values), max_rows)):
+            row = values[i]
+            # Look for typical SS headers
+            row_text = " ".join(str(cell).upper() for cell in row)
+            if "CODE" in row_text or "PRODUCT" in row_text or "SIZE" in row_text:
+                return i
+        return 0  # Default to first row
 
     def _find_header_row(self, values: List[List[Any]], max_rows: int = 5) -> int:
         """Find row index containing CODE and DESCRIPTION headers"""

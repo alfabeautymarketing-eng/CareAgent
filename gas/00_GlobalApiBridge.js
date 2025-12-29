@@ -686,3 +686,92 @@ function reorderAuxiliarySheets() {
   }
   throw new Error('reorderSheets не определена');
 }
+
+// ============ СЕРВЕРНАЯ ОБРАБОТКА ПРАЙСОВ (PYTHON SERVER) ============
+// Эти функции перенаправляют обработку прайс-листов на Python сервер
+
+/**
+ * Обработка основного прайса MT через сервер
+ */
+function serverProcessMtMain() {
+  return _loggedCall_("serverProcessMtMain", function() {
+    if (typeof callServerProcessPrice === 'function') {
+      return callServerProcessPrice('mt', 'main');
+    }
+    throw new Error('callServerProcessPrice не определена');
+  });
+}
+
+/**
+ * Обработка тестеров MT через сервер
+ */
+function serverProcessMtTester() {
+  return _loggedCall_("serverProcessMtTester", function() {
+    if (typeof callServerProcessPrice === 'function') {
+      return callServerProcessPrice('mt', 'tester');
+    }
+    throw new Error('callServerProcessPrice не определена');
+  });
+}
+
+/**
+ * Обработка пробников MT через сервер
+ */
+function serverProcessMtSamples() {
+  return _loggedCall_("serverProcessMtSamples", function() {
+    if (typeof callServerProcessPrice === 'function') {
+      return callServerProcessPrice('mt', 'samples');
+    }
+    throw new Error('callServerProcessPrice не определена');
+  });
+}
+
+/**
+ * Обработка прайса SK через сервер
+ */
+function serverProcessSkMain() {
+  return _loggedCall_("serverProcessSkMain", function() {
+    if (typeof callServerProcessPrice === 'function') {
+      return callServerProcessPrice('sk', 'main');
+    }
+    throw new Error('callServerProcessPrice не определена');
+  });
+}
+
+/**
+ * Обработка пробников SK через сервер
+ */
+function serverProcessSkProbes() {
+  return _loggedCall_("serverProcessSkProbes", function() {
+    if (typeof callServerProcessPrice === 'function') {
+      return callServerProcessPrice('sk', 'probes');
+    }
+    throw new Error('callServerProcessPrice не определена');
+  });
+}
+
+/**
+ * Обработка прайса SS через сервер
+ */
+function serverProcessSsMain() {
+  return _loggedCall_("serverProcessSsMain", function() {
+    if (typeof callServerProcessPrice === 'function') {
+      return callServerProcessPrice('ss', 'main');
+    }
+    throw new Error('callServerProcessPrice не определена');
+  });
+}
+
+/**
+ * Preview обработки прайса (dry run)
+ * @param {string} project - Код проекта (mt, sk, ss)
+ * @param {string} mode - Режим (main, tester, samples, probes)
+ */
+function serverProcessPricePreview(project, mode) {
+  return _loggedCall_("serverProcessPricePreview", function() {
+    if (typeof callServerProcessPrice === 'function') {
+      return callServerProcessPrice(project, mode, { dryRun: true });
+    }
+    throw new Error('callServerProcessPrice не определена');
+  });
+}
