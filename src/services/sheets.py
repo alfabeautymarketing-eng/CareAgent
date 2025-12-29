@@ -1,7 +1,9 @@
 import gspread
 from gspread.utils import rowcol_to_a1
 from src.utils.config import settings
+from typing import List, Dict, Any, Optional
 from src.utils.logger import logger
+from src.utils.cache import cache_service
 
 class SheetsService:
     def __init__(self):
@@ -25,6 +27,43 @@ class SheetsService:
         except Exception as e:
             logger.error("worksheet_not_found", spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, error=str(e))
             raise
+
+    def get_worksheet_headers(self, spreadsheet_id: str, sheet_name: str, force_reload: bool = False) -> list:
+        """Get worksheet headers with caching."""
+        cache_key = f"headers:{spreadsheet_id}:{sheet_name}"
+        if not force_reload:
+            cached = cache_service.get(cache_key)
+            if cached:
+                return cached
+
+        ws = self.get_worksheet(spreadsheet_id, sheet_name)
+        headers = ws.row_values(1)
+        cache_service.set(cache_key, headers, ttl=3600)  # 1 hour
+        return headers
+
+    def get_row_by_id(self, spreadsheet_id: str, sheet_name: str, row_id: str, force_reload: bool = False) -> Optional[int]:
+        """Find row index by ID in Column A with caching."""
+        cache_key = f"row_map:{spreadsheet_id}:{sheet_name}"
+        row_map = None
+        
+        if not force_reload:
+            row_map = cache_service.get(cache_key)
+        
+        if row_map and row_id in row_map:
+            return row_map[row_id]
+        
+        # If not in cache or forced reload, fetch all Col A
+        ws = self.get_worksheet(spreadsheet_id, sheet_name)
+        col_a = ws.col_values(1)
+        
+        # Build map
+        new_map = {}
+        for i, val in enumerate(col_a):
+            if val:
+                new_map[str(val).strip()] = i + 1
+        
+        cache_service.set(cache_key, new_map, ttl=600) # 10 minutes cache for row maps
+        return new_map.get(row_id)
 
     def create_worksheet(self, spreadsheet_id: str, sheet_name: str, rows=100, cols=20):
         """Create a new worksheet."""
@@ -146,14 +185,39 @@ class SheetsService:
         1. Apply calculation formulas to "Расчет цены"
         """
         results = {}
-        
+
+        if hasattr(self, "logging_service") and self.logging_service:
+            self.logging_service.add_log(
+                spreadsheet_id,
+                "СЕРВЕР",
+                "Запуск серверных функций (onOpen)",
+                "Расчет формул и служебные действия",
+                "🔄"
+            )
+
         # 1. Apply Calculation Formulas
         try:
             self.apply_calculation_formulas(spreadsheet_id)
             results["price_calculation"] = "Success"
+            if hasattr(self, "logging_service") and self.logging_service:
+                self.logging_service.add_log(
+                    spreadsheet_id,
+                    "СЕРВЕР",
+                    "Формулы применены",
+                    "Лист: Расчет цены",
+                    "✅"
+                )
         except Exception as e:
             logger.error("apply_calculation_formulas_failed", error=str(e))
             results["price_calculation"] = f"Failed: {str(e)}"
+            if hasattr(self, "logging_service") and self.logging_service:
+                self.logging_service.add_log(
+                    spreadsheet_id,
+                    "СЕРВЕР",
+                    "Ошибка при применении формул",
+                    str(e),
+                    "❌"
+                )
             
         return results
 
@@ -165,6 +229,15 @@ class SheetsService:
         SHEET_NAME = "Расчет цены"
         REF_SHEET_NAME = "Справочник"
         
+        if hasattr(self, "logging_service") and self.logging_service:
+            self.logging_service.add_log(
+                spreadsheet_id,
+                "СЕРВЕР",
+                "Применение формул",
+                f"Лист: {SHEET_NAME}",
+                "🔄"
+            )
+
         ws = self.get_worksheet(spreadsheet_id, SHEET_NAME)
         
         # Get all values to map headers
@@ -337,6 +410,23 @@ class SheetsService:
         if updates:
             ws.batch_update(updates, value_input_option='USER_ENTERED')
             logger.info("formulas_applied", sheet=SHEET_NAME, columns_updated=len(updates))
+            if hasattr(self, "logging_service") and self.logging_service:
+                self.logging_service.add_log(
+                    spreadsheet_id,
+                    "СЕРВЕР",
+                    "Формулы обновлены",
+                    f"Лист: {SHEET_NAME}, колонок: {len(updates)}",
+                    "✅"
+                )
+        else:
+            if hasattr(self, "logging_service") and self.logging_service:
+                self.logging_service.add_log(
+                    spreadsheet_id,
+                    "СЕРВЕР",
+                    "Формулы не изменялись",
+                    f"Лист: {SHEET_NAME}, данные пусты",
+                    "ℹ️"
+                )
 
     def reorder_sheets(self, spreadsheet_id: str, desired_order: list):
         """
@@ -358,14 +448,12 @@ class SheetsService:
             sheet_map = {ws.title: ws for ws in worksheets}
             current_names = [ws.title for ws in worksheets]
 
-            # Build target order: log sheets first (any known alias), then desired order, then unknown
+            # Build target order: лог-лист первым, затем желаемый порядок, затем неизвестные
             target_order = []
 
-            # Priority log sheet aliases
-            log_aliases = ["Логи", "Журнал логов", "Журнал синхро"]
-            for name in log_aliases:
-                if name in sheet_map and name not in target_order:
-                    target_order.append(name)
+            log_sheet_name = getattr(self, "log_sheet_name", "Логи")
+            if log_sheet_name in sheet_map:
+                target_order.append(log_sheet_name)
 
             # Add sheets from desired_order that exist (excluding already added aliases)
             for name in desired_order:
@@ -377,9 +465,26 @@ class SheetsService:
                 if name not in target_order:
                     target_order.append(name)
 
+            if hasattr(self, "logging_service") and self.logging_service:
+                self.logging_service.add_log(
+                    spreadsheet_id,
+                    "ЛИСТЫ",
+                    "Запуск выстраивания листов",
+                    f"Целевой порядок: {', '.join(target_order)}",
+                    "🔄"
+                )
+
             # Check if reordering is needed
             if target_order == current_names:
                 logger.info("sheets_already_ordered", spreadsheet_id=spreadsheet_id)
+                if hasattr(self, "logging_service") and self.logging_service:
+                    self.logging_service.add_log(
+                        spreadsheet_id,
+                        "ЛИСТЫ",
+                        "Порядок листов уже корректный",
+                        f"Текущий порядок: {', '.join(current_names)}",
+                        "ℹ️"
+                    )
                 return {
                     "sheets_moved": 0,
                     "final_order": target_order,
@@ -397,8 +502,8 @@ class SheetsService:
                 }
                 fields = "index"
 
-                # Force unhide for log sheets
-                if sheet_name in log_aliases:
+                # Force unhide for log sheet
+                if sheet_name == log_sheet_name:
                     props["hidden"] = False
                     fields = "index,hidden"
 
@@ -427,6 +532,15 @@ class SheetsService:
                        spreadsheet_id=spreadsheet_id,
                        sheets_moved=sheets_moved)
 
+            if hasattr(self, "logging_service") and self.logging_service:
+                self.logging_service.add_log(
+                    spreadsheet_id,
+                    "ЛИСТЫ",
+                    "Порядок листов обновлен",
+                    f"Новый порядок: {', '.join(target_order)}",
+                    "✅ ГОТОВО"
+                )
+
             return {
                 "sheets_moved": len(requests),
                 "final_order": target_order,
@@ -435,4 +549,12 @@ class SheetsService:
 
         except Exception as e:
             logger.error("reorder_sheets_failed", error=str(e))
+            if hasattr(self, "logging_service") and self.logging_service:
+                self.logging_service.add_log(
+                    spreadsheet_id,
+                    "ЛИСТЫ",
+                    "Ошибка выстраивания листов",
+                    str(e),
+                    "❌"
+                )
             raise

@@ -186,6 +186,21 @@ class AIService:
                 "application": values[self.COL_APPLICATION] if len(values) > self.COL_APPLICATION else None
             }
 
+            # If inci_link is just text but might be a hyperlink, try to get the formula
+            if row_data["inci_link"] and not row_data["inci_link"].startswith("http") and not "/" in row_data["inci_link"]:
+                try:
+                    # Fetch only the INCI cell with formula to extract URL
+                    cell_a1 = rowcol_to_a1(row_number, self.COL_INCI_LINK + 1)
+                    cell_with_formula = ws.acell(cell_a1, value_render_option='FORMULA').value
+                    if "HYPERLINK" in cell_with_formula:
+                        import re
+                        match = re.search(r'HYPERLINK\("([^"]+)"', cell_with_formula)
+                        if match:
+                            row_data["inci_link"] = match.group(1)
+                            logger.info("extracted_link_from_formula", url=row_data["inci_link"][:50])
+                except Exception as fe:
+                    logger.warning("failed_to_extract_formula_link", error=str(fe))
+
             if not row_data["inci_link"]:
                 return AnalysisResult(
                     success=False,

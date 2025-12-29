@@ -1,77 +1,75 @@
 #!/bin/bash
 set -e
 
+# ============================================================
+# deploy_all.sh — Полный деплой: сервер + GAS
+# ============================================================
+
 # Configuration
+SERVER_IP="46.226.167.153"
+SERVER_USER="root"
 GAS_DIR="./gas"
-PROJECTS_FILE="./config/projects.json"
 
-# If the expected GAS directory does not exist, try to locate GAS files
-# in the repository root (some workflows keep GAS files at repo root).
-if [ ! -d "$GAS_DIR" ]; then
-    if [ -f "appsscript.json" ] || ls *.gs *.js 1> /dev/null 2>&1; then
-        echo "⚠️  $GAS_DIR not found. Found GAS files in repository root — using '.' as GAS_DIR"
-        GAS_DIR="."
-    else
-        echo "⚠️  $GAS_DIR not found and no GAS files detected. Creating $GAS_DIR and attempting to copy known file types..."
-        mkdir -p "$GAS_DIR"
-        cp *.gs *.js appsscript.json "$GAS_DIR/" 2>/dev/null || true
-    fi
-fi
+echo "🚀 ======================================"
+echo "   AgentCare Full Deploy"
+echo "========================================"
 
-# 1. Deploy Server Side (Python/Docker)
-echo "🚀 Deploying Python Server..."
-./deploy.sh
+# ============================================================
+# 1. Deploy Python Server
+# ============================================================
+echo ""
+echo "📦 [1/3] Syncing Python code to server..."
 
-# 2. Deploy Google Apps Script
-echo "📜 Deploying Google Apps Script..."
+rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '.venv' --exclude '.env' \
+    -e "ssh -o StrictHostKeyChecking=no" \
+    ./src/ ${SERVER_USER}@${SERVER_IP}:~/AgentCare/src/
+
+echo "✅ Python code synced"
+
+# ============================================================
+# 2. Restart Docker
+# ============================================================
+echo ""
+echo "🐳 [2/3] Updating Docker containers..."
+
+ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} "cd ~/AgentCare && docker-compose up -d"
+
+echo "✅ Docker updated"
+
+# ============================================================
+# 3. Deploy Google Apps Script
+# ============================================================
+echo ""
+echo "📜 [3/3] Deploying Google Apps Script..."
 
 if ! command -v clasp &> /dev/null; then
     echo "⚠️  clasp not found. Skipping GAS deploy."
-    echo "   Please install: npm install -g @google/clasp"
-    echo "   And login: clasp login"
+    echo "   Install: npm install -g @google/clasp"
     exit 0
 fi
 
-# Check if projects.json exists
-if [ ! -f "$PROJECTS_FILE" ]; then
-    echo "⚠️  config/projects.json not found."
-    echo "   Creating template..."
-    mkdir -p config
+# Check for .clasp.json in gas folder
+if [ ! -f "$GAS_DIR/.clasp.json" ]; then
+    echo "⚠️  $GAS_DIR/.clasp.json not found. Creating..."
     echo '{
-    "SS": "SCRIPT_ID_HERE",
-    "SK": "SCRIPT_ID_HERE",
-    "MT": "SCRIPT_ID_HERE"
-}' > "$PROJECTS_FILE"
-    echo "   Please edit config/projects.json and add your Script IDs."
-    exit 0
+  "scriptId": "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g",
+  "rootDir": "."
+}' > "$GAS_DIR/.clasp.json"
 fi
 
-# Read projects and deploy
-# Uses python to parse json because jq might not be installed
 cd "$GAS_DIR"
+clasp push
 
-# Loop through keys in json
-for project in $(python3 -c "import json; print(' '.join(json.load(open('../$PROJECTS_FILE')).keys()))"); do
-    script_id=$(python3 -c "import json; print(json.load(open('../$PROJECTS_FILE'))['$project'])")
-    
-    if [ "$script_id" == "SCRIPT_ID_HERE" ]; then
-        echo "⚠️  Skipping $project (Script ID not set)"
-        continue
-    fi
+echo "✅ GAS code pushed"
 
-    echo "   Pushing to $project ($script_id)..."
-    
-    # Create temp .clasp.json
-    echo "{
-  \"scriptId\": \"$script_id\",
-  \"rootDir\": \".\"
-}" > .clasp.json
-
-    # Push
-    clasp push -f
-    
-    echo "   ✅ $project updated."
-done
-
-rm -f .clasp.json
-echo "🎉 All Done!"
+# ============================================================
+# Done
+# ============================================================
+echo ""
+echo "🎉 ======================================"
+echo "   Deploy Complete!"
+echo "========================================"
+echo ""
+echo "Server: http://${SERVER_IP}:8000"
+echo "Health: http://${SERVER_IP}:8000/health"
+echo ""

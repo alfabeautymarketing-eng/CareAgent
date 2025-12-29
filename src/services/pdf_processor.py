@@ -101,14 +101,28 @@ class PDFProcessor:
         # Escape single quotes for query
         escaped_name = clean_name.replace("'", "\\'")
 
-        # Build query - search for PDF files with matching name
-        query = f"name contains '{escaped_name}' and mimeType = 'application/pdf' and trashed = false"
-        if folder_id:
-            query += f" and '{folder_id}' in parents"
-
+        # 1. Try exact match first
+        query_exact = f"name = '{escaped_name}' and trashed = false"
+        
         try:
             results = self.drive_service.files().list(
-                q=query,
+                q=query_exact,
+                fields='files(id, name, mimeType)',
+                pageSize=5
+            ).execute()
+            
+            files = results.get('files', [])
+            if files:
+                logger.info("file_found_exact", filename=files[0]['name'], id=files[0]['id'])
+                return files[0]['id']
+
+            # 2. Try partial match without extension
+            name_no_ext = clean_name.rsplit('.', 1)[0] if '.' in clean_name else clean_name
+            escaped_partial = name_no_ext.replace("'", "\\'")
+            query_partial = f"name contains '{escaped_partial}' and mimeType = 'application/pdf' and trashed = false"
+
+            results = self.drive_service.files().list(
+                q=query_partial,
                 fields='files(id, name)',
                 pageSize=10,
                 orderBy='modifiedTime desc'
@@ -162,7 +176,19 @@ class PDFProcessor:
             if file_id:
                 return file_id
 
-        raise ValueError(f"Could not resolve file ID from: {url_or_id_or_name}")
+        # Try to get service account email for better error message
+        sa_email = "the service account email"
+        try:
+            if self.drive_service:
+                about = self.drive_service.about().get(fields='user(emailAddress)').execute()
+                sa_email = about.get('user', {}).get('emailAddress', sa_email)
+        except:
+            pass
+
+        raise ValueError(
+            f"Could not resolve file ID from: {url_or_id_or_name}. "
+            f"Please ensure the file is shared with {sa_email} as 'Viewer'."
+        )
 
     def download_pdf(self, file_id: str) -> bytes:
         """

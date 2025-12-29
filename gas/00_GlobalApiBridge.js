@@ -185,10 +185,84 @@ function handleOnChange(e) {
 
 /**
  * Installable Trigger: Обработка редактирования (более надежный чем simple onEdit).
+ * Логирует все изменения в лист "Логи".
  */
 function handleOnEdit(e) {
+  // Логируем событие редактирования
+  if (typeof Lib !== 'undefined' && typeof Lib.logEditEvent === 'function') {
+    try {
+      Lib.logEditEvent(e);
+    } catch (logErr) {
+      console.error("Ошибка логирования редактирования:", logErr);
+    }
+  }
+
+  // Выполняем основную логику синхронизации
   if (typeof Lib !== 'undefined' && typeof Lib.onEdit_internal_ === 'function') {
     Lib.onEdit_internal_(e);
+  }
+}
+
+// ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЛОГИРОВАНИЯ ============
+
+/**
+ * Универсальная функция записи в лист "Логи"
+ * @param {string} category - Категория (FUNCTION, MENU, SYSTEM и т.д.)
+ * @param {string} action - Действие
+ * @param {string} details - Детали
+ * @param {string} status - Статус (✅ OK, ❌ ОШИБКА и т.д.)
+ */
+function _writeToLogSheet_(category, action, details, status) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) return;
+
+    var logSheetName = "Логи";
+    var sh = ss.getSheetByName(logSheetName);
+
+    if (!sh) {
+      // Создаём лист если его нет
+      sh = ss.insertSheet(logSheetName);
+      var headers = ["🕒 Время", "🏷️ Категория", "💬 Действие", "📝 Детали", "🔘 Статус"];
+      sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
+      sh.setFrozenRows(1);
+      sh.getRange(1, 1, 1, headers.length).setBackground("#e8eaf6");
+    }
+
+    var timestamp = Utilities.formatDate(new Date(), "Europe/Moscow", "dd.MM.yyyy HH:mm:ss");
+    sh.appendRow([timestamp, category, action, details || "", status || "✅ OK"]);
+  } catch (e) {
+    console.error("_writeToLogSheet_ error:", e);
+  }
+}
+
+/**
+ * Универсальная обёртка для логирования вызовов функций из меню.
+ * @param {string} functionName - Имя функции
+ * @param {Function} fn - Функция для выполнения
+ * @param {string} [source="MENU"] - Источник вызова
+ * @returns {*} Результат функции
+ */
+function _loggedCall_(functionName, fn, source) {
+  source = source || "FUNCTION";
+  var startTime = Date.now();
+
+  // Логируем начало
+  _writeToLogSheet_(source, "Вызов: " + functionName, "Запуск функции", "🔄 В ПРОЦЕССЕ");
+
+  try {
+    var result = fn();
+    var duration = Date.now() - startTime;
+
+    // Логируем успешное завершение
+    _writeToLogSheet_(source, "Завершено: " + functionName, "Время: " + duration + "ms", "✅ OK");
+
+    return result;
+  } catch (e) {
+    var duration = Date.now() - startTime;
+    // Логируем ошибку
+    _writeToLogSheet_(source, "ОШИБКА: " + functionName, e.message, "❌ ОШИБКА");
+    throw e;
   }
 }
 
@@ -210,31 +284,39 @@ function clearAllToasts() {
 }
 
 function addArticleManually() {
-  if (typeof Lib !== 'undefined' && Lib.addArticleManually) {
-    return Lib.addArticleManually();
-  }
-  throw new Error('Lib.addArticleManually не определена');
+  return _loggedCall_("addArticleManually", function() {
+    if (typeof Lib !== 'undefined' && Lib.addArticleManually) {
+      return Lib.addArticleManually();
+    }
+    throw new Error('Lib.addArticleManually не определена');
+  });
 }
 
 function deleteSelectedRowsWithSync() {
-  if (typeof Lib !== 'undefined' && Lib.deleteSelectedRowsWithSync) {
-    return Lib.deleteSelectedRowsWithSync();
-  }
-  throw new Error('Lib.deleteSelectedRowsWithSync не определена');
+  return _loggedCall_("deleteSelectedRowsWithSync", function() {
+    if (typeof Lib !== 'undefined' && Lib.deleteSelectedRowsWithSync) {
+      return Lib.deleteSelectedRowsWithSync();
+    }
+    throw new Error('Lib.deleteSelectedRowsWithSync не определена');
+  });
 }
 
 function syncSelectedRow() {
-  if (typeof Lib !== 'undefined' && Lib.syncSelectedRow) {
-    return Lib.syncSelectedRow();
-  }
-  throw new Error('Lib.syncSelectedRow не определена');
+  return _loggedCall_("syncSelectedRow", function() {
+    if (typeof Lib !== 'undefined' && Lib.syncSelectedRow) {
+      return Lib.syncSelectedRow();
+    }
+    throw new Error('Lib.syncSelectedRow не определена');
+  });
 }
 
 function runFullSync() {
-  if (typeof Lib !== 'undefined' && Lib.runFullSync) {
-    return Lib.runFullSync();
-  }
-  throw new Error('Lib.runFullSync не определена');
+  return _loggedCall_("runFullSync", function() {
+    if (typeof Lib !== 'undefined' && Lib.runFullSync) {
+      return Lib.runFullSync();
+    }
+    throw new Error('Lib.runFullSync не определена');
+  });
 }
 
 function setupTriggers() {
@@ -307,63 +389,79 @@ function recreateDebugLogSheet() {
 // ============ ОБРАБОТКА ПРАЙСОВ (SK) ============
 
 function processSkPriceSheet() {
-  if (typeof Lib !== 'undefined' && Lib.processSkPriceSheet) {
-    return Lib.processSkPriceSheet();
-  }
-  throw new Error('Lib.processSkPriceSheet не определена');
+  return _loggedCall_("processSkPriceSheet", function() {
+    if (typeof Lib !== 'undefined' && Lib.processSkPriceSheet) {
+      return Lib.processSkPriceSheet();
+    }
+    throw new Error('Lib.processSkPriceSheet не определена');
+  });
 }
 
 function loadSkStockData() {
-  if (typeof Lib !== 'undefined' && Lib.loadSkStockData) {
-    return Lib.loadSkStockData();
-  }
-  throw new Error('Lib.loadSkStockData не определена');
+  return _loggedCall_("loadSkStockData", function() {
+    if (typeof Lib !== 'undefined' && Lib.loadSkStockData) {
+      return Lib.loadSkStockData();
+    }
+    throw new Error('Lib.loadSkStockData не определена');
+  });
 }
 
 // ============ ОБРАБОТКА ПРАЙСОВ (MT) ============
 
 function processMtMainPrice() {
-  if (typeof Lib !== 'undefined' && Lib.processMtMainPrice) {
-    return Lib.processMtMainPrice();
-  }
-  throw new Error('Lib.processMtMainPrice не определена');
+  return _loggedCall_("processMtMainPrice", function() {
+    if (typeof Lib !== 'undefined' && Lib.processMtMainPrice) {
+      return Lib.processMtMainPrice();
+    }
+    throw new Error('Lib.processMtMainPrice не определена');
+  });
 }
 
 function processMtTesterPrice() {
-  if (typeof Lib !== 'undefined' && Lib.processMtTesterPrice) {
-    return Lib.processMtTesterPrice();
-  }
-  throw new Error('Lib.processMtTesterPrice не определена');
+  return _loggedCall_("processMtTesterPrice", function() {
+    if (typeof Lib !== 'undefined' && Lib.processMtTesterPrice) {
+      return Lib.processMtTesterPrice();
+    }
+    throw new Error('Lib.processMtTesterPrice не определена');
+  });
 }
 
 function processMtSamplesPrice() {
-  if (typeof Lib !== 'undefined' && Lib.processMtSamplesPrice) {
-    return Lib.processMtSamplesPrice();
-  }
-  throw new Error('Lib.processMtSamplesPrice не определена');
+  return _loggedCall_("processMtSamplesPrice", function() {
+    if (typeof Lib !== 'undefined' && Lib.processMtSamplesPrice) {
+      return Lib.processMtSamplesPrice();
+    }
+    throw new Error('Lib.processMtSamplesPrice не определена');
+  });
 }
 
 function loadMtStockData() {
-  if (typeof Lib !== 'undefined' && Lib.loadMtStockData) {
-    return Lib.loadMtStockData();
-  }
-  throw new Error('Lib.loadMtStockData не определена');
+  return _loggedCall_("loadMtStockData", function() {
+    if (typeof Lib !== 'undefined' && Lib.loadMtStockData) {
+      return Lib.loadMtStockData();
+    }
+    throw new Error('Lib.loadMtStockData не определена');
+  });
 }
 
 // ============ ОБРАБОТКА ПРАЙСОВ (SS) ============
 
 function processSsPriceSheet() {
-  if (typeof Lib !== 'undefined' && Lib.processSsPriceSheet) {
-    return Lib.processSsPriceSheet();
-  }
-  throw new Error('Lib.processSsPriceSheet не определена');
+  return _loggedCall_("processSsPriceSheet", function() {
+    if (typeof Lib !== 'undefined' && Lib.processSsPriceSheet) {
+      return Lib.processSsPriceSheet();
+    }
+    throw new Error('Lib.processSsPriceSheet не определена');
+  });
 }
 
 function loadSsStockData() {
-  if (typeof Lib !== 'undefined' && Lib.loadSsStockData) {
-    return Lib.loadSsStockData();
-  }
-  throw new Error('Lib.loadSsStockData не определена');
+  return _loggedCall_("loadSsStockData", function() {
+    if (typeof Lib !== 'undefined' && Lib.loadSsStockData) {
+      return Lib.loadSsStockData();
+    }
+    throw new Error('Lib.loadSsStockData не определена');
+  });
 }
 
 // ============ ОБЩИЕ ФУНКЦИИ ЗАКАЗА ============
@@ -474,75 +572,95 @@ function exportSets() {
 // ============ ПОСТАВКА ============
 
 function formatOrderSheet() {
-  if (typeof Lib !== 'undefined' && Lib.formatOrderSheet) {
-    return Lib.formatOrderSheet();
-  }
-  throw new Error('Lib.formatOrderSheet не определена');
+  return _loggedCall_("formatOrderSheet", function() {
+    if (typeof Lib !== 'undefined' && Lib.formatOrderSheet) {
+      return Lib.formatOrderSheet();
+    }
+    throw new Error('Lib.formatOrderSheet не определена');
+  });
 }
 
 function createFullInvoice() {
-  if (typeof Lib !== 'undefined' && Lib.createFullInvoice) {
-    return Lib.createFullInvoice();
-  }
-  throw new Error('Lib.createFullInvoice не определена');
+  return _loggedCall_("createFullInvoice", function() {
+    if (typeof Lib !== 'undefined' && Lib.createFullInvoice) {
+      return Lib.createFullInvoice();
+    }
+    throw new Error('Lib.createFullInvoice не определена');
+  });
 }
 
 function collectAndCopyDocuments() {
-  if (typeof Lib !== 'undefined' && Lib.collectAndCopyDocuments) {
-    return Lib.collectAndCopyDocuments();
-  }
-  throw new Error('Lib.collectAndCopyDocuments не определена');
+  return _loggedCall_("collectAndCopyDocuments", function() {
+    if (typeof Lib !== 'undefined' && Lib.collectAndCopyDocuments) {
+      return Lib.collectAndCopyDocuments();
+    }
+    throw new Error('Lib.collectAndCopyDocuments не определена');
+  });
 }
 
 // ============ СЕРТИФИКАЦИЯ ============
 
 function createNewsSheetFromCertification() {
-  if (typeof Lib !== 'undefined' && Lib.createNewsSheetFromCertification) {
-    return Lib.createNewsSheetFromCertification();
-  }
-  throw new Error('Lib.createNewsSheetFromCertification не определена');
+  return _loggedCall_("createNewsSheetFromCertification", function() {
+    if (typeof Lib !== 'undefined' && Lib.createNewsSheetFromCertification) {
+      return Lib.createNewsSheetFromCertification();
+    }
+    throw new Error('Lib.createNewsSheetFromCertification не определена');
+  });
 }
 
 function generateProtocols_353pp() {
-  if (typeof Lib !== 'undefined' && Lib.generateProtocols_353pp) {
-    return Lib.generateProtocols_353pp();
-  }
-  throw new Error('Lib.generateProtocols_353pp не определена');
+  return _loggedCall_("generateProtocols_353pp", function() {
+    if (typeof Lib !== 'undefined' && Lib.generateProtocols_353pp) {
+      return Lib.generateProtocols_353pp();
+    }
+    throw new Error('Lib.generateProtocols_353pp не определена');
+  });
 }
 
 function generateDsLayouts_353pp() {
-  if (typeof Lib !== 'undefined' && Lib.generateDsLayouts_353pp) {
-    return Lib.generateDsLayouts_353pp();
-  }
-  throw new Error('Lib.generateDsLayouts_353pp не определена');
+  return _loggedCall_("generateDsLayouts_353pp", function() {
+    if (typeof Lib !== 'undefined' && Lib.generateDsLayouts_353pp) {
+      return Lib.generateDsLayouts_353pp();
+    }
+    throw new Error('Lib.generateDsLayouts_353pp не определена');
+  });
 }
 
 function structureDocuments_353pp() {
-  if (typeof Lib !== 'undefined' && Lib.structureDocuments_353pp) {
-    return Lib.structureDocuments_353pp();
-  }
-  throw new Error('Lib.structureDocuments_353pp не определена');
+  return _loggedCall_("structureDocuments_353pp", function() {
+    if (typeof Lib !== 'undefined' && Lib.structureDocuments_353pp) {
+      return Lib.structureDocuments_353pp();
+    }
+    throw new Error('Lib.structureDocuments_353pp не определена');
+  });
 }
 
 function calculateAndAssignSpiritNumbers() {
-  if (typeof Lib !== 'undefined' && Lib.calculateAndAssignSpiritNumbers) {
-    return Lib.calculateAndAssignSpiritNumbers();
-  }
-  throw new Error('Lib.calculateAndAssignSpiritNumbers не определена');
+  return _loggedCall_("calculateAndAssignSpiritNumbers", function() {
+    if (typeof Lib !== 'undefined' && Lib.calculateAndAssignSpiritNumbers) {
+      return Lib.calculateAndAssignSpiritNumbers();
+    }
+    throw new Error('Lib.calculateAndAssignSpiritNumbers не определена');
+  });
 }
 
 function generateSpiritProtocols() {
-  if (typeof Lib !== 'undefined' && Lib.generateSpiritProtocols) {
-    return Lib.generateSpiritProtocols();
-  }
-  throw new Error('Lib.generateSpiritProtocols не определена');
+  return _loggedCall_("generateSpiritProtocols", function() {
+    if (typeof Lib !== 'undefined' && Lib.generateSpiritProtocols) {
+      return Lib.generateSpiritProtocols();
+    }
+    throw new Error('Lib.generateSpiritProtocols не определена');
+  });
 }
 
 function runManualCascadeOnCertification() {
-  if (typeof Lib !== 'undefined' && Lib.runManualCascadeOnCertification) {
-    return Lib.runManualCascadeOnCertification();
-  }
-  throw new Error('Lib.runManualCascadeOnCertification не определена');
+  return _loggedCall_("runManualCascadeOnCertification", function() {
+    if (typeof Lib !== 'undefined' && Lib.runManualCascadeOnCertification) {
+      return Lib.runManualCascadeOnCertification();
+    }
+    throw new Error('Lib.runManualCascadeOnCertification не определена');
+  });
 }
 
 // ============ DRIVE ============

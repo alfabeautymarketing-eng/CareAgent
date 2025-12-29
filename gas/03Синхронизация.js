@@ -558,6 +558,7 @@ if (ss) {
    * @param {number} row - Номер строки, в которой произошло изменение
    * @private
    */
+/* MIGRATED TO SERVER (src/services/sync.py)
   function _autoFillDeadlineFromExpiry(sheet, row) {
     try {
       // Получаем заголовки из строки 1 (на листе "Заказ" заголовки всегда в строке 1)
@@ -679,6 +680,7 @@ if (ss) {
       throw error;
     }
   }
+*/
 
   /**
    * Форматирует дату срока годности в формат MM.YYYY
@@ -726,6 +728,7 @@ if (ss) {
    * @param {number} row - Номер строки, в которой произошло изменение
    * @private
    */
+/* MIGRATED TO SERVER (src/services/sync.py)
   function _autoFillSetDeadlineFromExpiry(sheet, row) {
     try {
       // Получаем заголовки из строки 1 (на листе "Заказ" заголовки всегда в строке 1)
@@ -847,6 +850,7 @@ if (ss) {
       throw error;
     }
   }
+*/
 
   /**
    * ═══════════════════════════════════════════════════════════════════════════

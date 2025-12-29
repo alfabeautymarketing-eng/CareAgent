@@ -1,5 +1,8 @@
 import time
-from typing import List, Dict, Optional, Any
+import os
+import yaml
+from pathlib import Path
+from typing import List, Dict, Optional, Any, Tuple
 from pydantic import BaseModel
 from src.services.sheets import SheetsService
 from src.utils.logger import logger
@@ -8,7 +11,7 @@ class SyncRule(BaseModel):
     id: str
     enabled: bool
     category: str
-    hashtags: str
+    hashtags: str = ""
     source_sheet: str
     source_header: str
     target_sheet: str
@@ -23,6 +26,87 @@ class SyncService:
         self._rules_cache: List[SyncRule] = []
         self._rules_cache_time = 0
         self._rules_cache_ttl = 300  # 5 minutes
+        self.sheet_codes = {
+            "Главная": "Г",
+            "Сертификация": "С",
+            "Этикетки": "Э",
+            "Заказ": "З",
+            "Динамика цены": "Д",
+            "Расчет цены": "Р",
+            "Прайс": "П",
+            "ABC-Анализ": "А",
+            "Журнал синхро": "J",
+            "Логи": "L",
+        }
+
+    def _make_rule_id(self, idx: int, source_sheet: str, target_sheet: str, header: str) -> str:
+        src_code = self.sheet_codes.get(source_sheet, (source_sheet[:1] or "?"))
+        tgt_code = self.sheet_codes.get(target_sheet, (target_sheet[:1] or "?"))
+        return f"{idx:03d}-{src_code}-{tgt_code}({header})"
+
+    def _save_rules_yaml(self, spreadsheet_id: str, rules: List[SyncRule]) -> None:
+        path = Path("config") / "rules" / f"{spreadsheet_id}.yaml"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = []
+        for r in rules:
+            d = r.model_dump()
+            # exclude hashtags if empty to keep файл компактным
+            if not d.get("hashtags"):
+                d.pop("hashtags", None)
+            data.append(d)
+        path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+    def list_rules(self, spreadsheet_id: str, force_reload: bool = False) -> List[Dict[str, Any]]:
+        rules = self._load_rules(spreadsheet_id, force_reload=force_reload)
+        return [r.model_dump() for r in rules]
+
+    def save_rules(self, spreadsheet_id: str, rules_payload: List[Dict[str, Any]], validate_headers: bool = True) -> List[Dict[str, Any]]:
+        headers_cache: Dict[str, List[str]] = {}
+        normalized: List[SyncRule] = []
+
+        for idx, r in enumerate(rules_payload, start=1):
+            src_sheet = str(r.get("source_sheet", "")).strip()
+            tgt_sheet = str(r.get("target_sheet", "")).strip()
+            src_header = str(r.get("source_header", "")).strip()
+            tgt_header = str(r.get("target_header", "")).strip()
+            category = str(r.get("category", "")).strip()
+            enabled = bool(r.get("enabled", True))
+            is_external = bool(r.get("is_external", False))
+            target_doc_id = str(r.get("target_doc_id", "")).strip() or None
+
+            if not src_sheet or not src_header or not tgt_sheet or not tgt_header:
+                raise ValueError(f"Неполное правило (#{idx}): нужны source_sheet, source_header, target_sheet, target_header")
+
+            if validate_headers:
+                headers = headers_cache.get(tgt_sheet)
+                if headers is None:
+                    ws = self.sheets_service.get_worksheet(spreadsheet_id, tgt_sheet)
+                    headers = [str(h or "").strip() for h in ws.row_values(1)]
+                    headers_cache[tgt_sheet] = headers
+                if tgt_header not in headers:
+                    raise ValueError(f"Столбец '{tgt_header}' не найден на листе '{tgt_sheet}'")
+
+            rule_id = self._make_rule_id(idx, src_sheet, tgt_sheet, src_header)
+            normalized.append(
+                SyncRule(
+                    id=rule_id,
+                    enabled=enabled,
+                    category=category,
+                    hashtags=str(r.get("hashtags", "")).strip(),
+                    source_sheet=src_sheet,
+                    source_header=src_header,
+                    target_sheet=tgt_sheet,
+                    target_header=tgt_header,
+                    is_external=is_external,
+                    target_doc_id=target_doc_id,
+                )
+            )
+
+        self._save_rules_yaml(spreadsheet_id, normalized)
+        self._rules_cache = normalized
+        self._rules_cache_time = time.time()
+        logger.info("sync_rules_saved", spreadsheet_id=spreadsheet_id, count=len(normalized))
+        return [r.model_dump() for r in normalized]
 
     def _get_project_prefix(self, project_key: str) -> str:
         """Get standard brand prefix for project."""
@@ -63,11 +147,49 @@ class SyncService:
     def _load_rules(self, spreadsheet_id: str, force_reload: bool = False) -> List[SyncRule]:
         """
         Load sync rules from 'Правила синхро' sheet.
+        If config/rules/<spreadsheet_id>.yaml exists, load from server to avoid лишние запросы.
         """
         if not force_reload and (time.time() - self._rules_cache_time < self._rules_cache_ttl) and self._rules_cache:
             return self._rules_cache
 
         try:
+            # 0. Попытка загрузить правила с сервера (YAML) по spreadsheet_id
+            rules_path = os.path.join("config", "rules", f"{spreadsheet_id}.yaml")
+            if os.path.exists(rules_path):
+                with open(rules_path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or []
+                rules = []
+                for row in data:
+                    try:
+                        rule = SyncRule(
+                            id=str(row.get("id", "")).strip(),
+                            enabled=bool(row.get("enabled", True)),
+                            category=str(row.get("category", "")).strip(),
+                            hashtags=str(row.get("hashtags", "")).strip(),
+                            source_sheet=str(row.get("source_sheet", "")).strip(),
+                            source_header=str(row.get("source_header", "")).strip(),
+                            target_sheet=str(row.get("target_sheet", "")).strip(),
+                            target_header=str(row.get("target_header", "")).strip(),
+                            is_external=bool(row.get("is_external", False)),
+                            target_doc_id=(str(row.get("target_doc_id", "")).strip() or None)
+                        )
+                        if not rule.source_sheet or not rule.source_header or not rule.target_sheet or not rule.target_header:
+                            continue
+                        if rule.is_external and not rule.target_doc_id:
+                            continue
+                        if not rule.enabled:
+                            continue
+                        rules.append(rule)
+                    except Exception:
+                        continue
+
+                if rules:
+                    self._rules_cache = rules
+                    self._rules_cache_time = time.time()
+                    logger.info("sync_rules_loaded_from_server", count=len(rules), source=rules_path)
+                    return rules
+                # если пустой файл — fallback к листу
+
             RULES_SHEET = "Правила синхро"
             ws = self.sheets_service.get_worksheet(spreadsheet_id, RULES_SHEET)
             
@@ -100,12 +222,12 @@ class SyncService:
                     id=row[0].strip(),
                     enabled=enabled,
                     category=row[2].strip(),
-                    hashtags=row[3].strip(),
-                    source_sheet=row[4].strip(),
-                    source_header=row[5].strip(),
-                    target_sheet=row[6].strip(),
-                    target_header=row[7].strip(),
-                    is_external=is_external,
+                            hashtags=row[3].strip() if len(row) > 3 else "",
+                            source_sheet=row[4].strip(),
+                            source_header=row[5].strip(),
+                            target_sheet=row[6].strip(),
+                            target_header=row[7].strip(),
+                            is_external=is_external,
                     target_doc_id=row[9].strip() if row[9].strip() else None
                 )
                 
@@ -257,6 +379,10 @@ class SyncService:
         new_value = event_data.get("value")
         row_key = event_data.get("row_key")
 
+        # Пропускаем события на лог-листах
+        if sheet_name in {"Логи", "Журнал синхро", "Logs"}:
+            return {"status": "skipped", "reason": "Log sheet ignored"}
+
         self._log_to_session(
             spreadsheet_id, 
             "СИНХРОНИЗАЦИЯ", 
@@ -275,7 +401,7 @@ class SyncService:
         # Fetching here is safer but slower. 
         # GAS onEdit gives us the range. 
         # Ideally, GAS sends the header name to save a roundtrip.
-        
+
         source_header = event_data.get("header_name")
         if not source_header:
             logger.warning("sync_event_no_header", sheet=sheet_name)
@@ -284,7 +410,7 @@ class SyncService:
                 ws = self.sheets_service.get_worksheet(spreadsheet_id, sheet_name)
                 # fetch specific cell or row? row 1 is better to cache?
                 # For now simple:
-                source_header = ws.cell(1, col).value
+                source_header = ws.cell(1, col_idx).value
                 logger.info("fetched_missing_header", header=source_header)
             except Exception as e:
                 logger.error("fetch_header_failed", error=str(e))
@@ -363,17 +489,36 @@ class SyncService:
                 logger.error("cascade_invocation_failed", error=str(e))
                 # Do not re-raise to avoid blocking response
         
+        # 6. Handle Deadline Autofill (Migration from GAS)
+        if source_header:
+            try:
+                self._check_and_update_deadlines(spreadsheet_id, sheet_name, row, source_header)
+            except Exception as e:
+                logger.error("deadline_autofill_failed", error=str(e))
+
         return {"status": "processed", "rules_matched": len(matching_rules), "results": results}
 
-    def _log_to_sheet(self, spreadsheet_id: str, source_info: str, target_info: str, 
+    def _log_to_sheet(self, spreadsheet_id: str, row_key: str, source_info: str, target_info: str, 
                       old_val: str, new_val: str, category: str, hashtags: str, status: str):
-        """Append log to 'Журнал синхро'."""
+        """
+        Append log to 'Журнал синхро' with columns:
+        Дата/время | ID | Источник | Цель | Старое значение | Новое значение | Категория | Хэштеги | Событие
+        """
         try:
             ws = self.sheets_service.get_worksheet(spreadsheet_id, "Журнал синхро")
             from datetime import datetime
             timestamp = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-            # Headers: Дата/Время, Источник, Цель, Было, Стало, Категория, #Tag, Статус
-            ws.append_row([timestamp, source_info, target_info, str(old_val), str(new_val), category, hashtags, status])
+            ws.append_row([
+                timestamp,
+                row_key,
+                source_info,
+                target_info,
+                str(old_val),
+                str(new_val),
+                category,
+                hashtags or "",
+                status
+            ])
         except Exception as e:
             logger.error("log_to_sheet_failed", error=str(e))
 
@@ -388,29 +533,28 @@ class SyncService:
             return {"rule_id": rule.id, "status": "failed", "error": "Target sheet not found"}
 
         # 2. Find target column index by header
-        headers = ws.row_values(1)
+        headers = self.sheets_service.get_worksheet_headers(target_ss_id, rule.target_sheet)
         try:
             target_col = headers.index(rule.target_header) + 1
         except ValueError:
              return {"rule_id": rule.id, "status": "failed", "error": f"Target header '{rule.target_header}' not found"}
 
         # 3. Find target row by Key (Col A)
-        col_a = ws.col_values(1)
-        try:
-            target_row = col_a.index(row_key) + 1
-        except ValueError:
+        target_row = self.sheets_service.get_row_by_id(target_ss_id, rule.target_sheet, row_key)
+        if not target_row:
              return {"rule_id": rule.id, "status": "skipped", "reason": "Key not found in target"}
         
         # 4. Update Value
-        old_val = ws.cell(target_row, target_col).value
-        # If value is same, skip? User wants guaranteed sync, so update.
-        # But logging is useful if change happens.
+        # Optimization: We skip fetching old_val to save one API call. 
+        # If logging specifically needs it, we could fetch, but for speed we just update.
+        old_val = "[RESTORED_FROM_LOGS]" # Placeholder or we can fetch only if log_level is DEBUG
         
         ws.update_cell(target_row, target_col, new_value)
         
         # 5. Log to sync journal (legacy)
         self._log_to_sheet(
             spreadsheet_id, 
+            row_key=row_key,
             source_info=f"Rule: {rule.category}", 
             target_info=f"{rule.target_sheet}!{rule.target_header} (Row {target_row})",
             old_val=str(old_val),
@@ -677,4 +821,46 @@ class SyncService:
 
         return {"status": "success", "total_deleted": deleted_count, "details": results}
 
+    def _format_expiry_date(self, value: Any) -> str:
+        if not value: return ""
+        s = str(value).strip()
+        if not s: return ""
+        import re
+        match = re.match(r"^(\d{1,2})[\./](\d{4})$", s)
+        if match:
+             return f"{int(match.group(1)):02d}.{match.group(2)}"
+        return s
 
+    def _check_and_update_deadlines(self, spreadsheet_id: str, sheet_name: str, row_idx: int, header_changed: str):
+        if sheet_name != "Заказ": return
+        triggers = {"сг 1", "сг 2", "сг 3"}
+        if str(header_changed).lower().strip() not in triggers: return
+
+        try:
+            ws = self.sheets_service.get_worksheet(spreadsheet_id, sheet_name)
+            headers = [str(h or "").strip() for h in ws.row_values(1)]
+            normalized_headers = {h.lower(): i + 1 for i, h in enumerate(headers)} # 1-based cols
+
+            def get_val(name):
+                col = normalized_headers.get(name.lower())
+                if not col: return ""
+                val = ws.cell(row_idx, col).value
+                return str(val).strip() if val else ""
+
+            def set_val(name, val):
+                col = normalized_headers.get(name.lower())
+                if col: ws.update_cell(row_idx, col, val)
+
+            dates = []
+            for h in ["СГ 1", "СГ 2", "СГ 3"]:
+                d = self._format_expiry_date(get_val(h))
+                if d: dates.append(d)
+            
+            res = "\n".join(dates)
+            set_val("Срок#", res)
+            set_val("Срок", res)
+            
+            if self.logging_service:
+                 self.logging_service.add_log(spreadsheet_id, "АВТОЗАПОЛНЕНИЕ", "Обновление сроков", f"Строка {row_idx}: {res}", "✅")
+        except Exception as e:
+            logger.error("deadline_update_error", error=str(e))

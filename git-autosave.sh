@@ -1,5 +1,5 @@
-#!/bin/bash
 # Autosave script
+bd sync
 git add .
 timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 git commit -m "Autosave: $timestamp"

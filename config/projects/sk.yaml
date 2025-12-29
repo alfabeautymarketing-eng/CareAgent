@@ -29,8 +29,8 @@ sheets:
   for_database: "Для базы"
   local_lookup: "Вид и код"
   rules: "Правила синхро"
-  log: "Журнал синхро"
-  log_debug: "Журнал логов"
+  log: "Логи"
+  sync_log: "Журнал синхро"
   external_docs: "Внешние документы"
 
 # Листы для автосоздания строк при новом артикуле
@@ -250,6 +250,16 @@ drive:
   templates_folder_id: "YOUR_SK_TEMPLATES_FOLDER_ID"
   invoices_folder_id: "YOUR_SK_INVOICES_FOLDER_ID"
   documents_folder_id: "YOUR_SK_DOCUMENTS_FOLDER_ID"
+
+# ============================================================
+# Source document (Б/З поставщик)
+# ============================================================
+source:
+  doc_id: "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs"
+  sheets:
+    main: "-Б/З поставщик"
+    probes: "-Пробники"
+    stocks: "-остатки"
 
 # ============================================================
 # Sync settings

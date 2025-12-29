@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Optional, List, Any
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from src.utils.logger import logger
@@ -17,12 +18,27 @@ from src.services.sync import SyncService
 from src.services.sorting import SortingService
 from src.services.logging import LoggingService
 from src.services.ai import AIService, get_ai_service
+from src.services.price_processor import PriceProcessor, get_price_processor
 
 sheets_service = SheetsService()
 logging_service = LoggingService(sheets_service)
 sync_service = SyncService(logging_service) # Pass logger to sync service
 sorting_service = SortingService()
 ai_service = get_ai_service()
+price_processor = get_price_processor(sheets_service, logging_service)
+
+class RuleItem(BaseModel):
+    enabled: bool = True
+    category: str = ""
+    source_sheet: str
+    source_header: str
+    target_sheet: str
+    target_header: str
+    is_external: bool = False
+    target_doc_id: Optional[str] = None
+
+class RulesSaveRequest(BaseModel):
+    rules: List[RuleItem]
 
 # ============== Request/Response Models ==============
 
@@ -79,10 +95,9 @@ class SyncBatchEventRequest(BaseModel):
 class PriceProcessRequest(BaseModel):
     """Request to process price file."""
 
-    project: str
-    file_url: Optional[str] = None
-    file_id: Optional[str] = None
-    start_phase: int = 1
+    spreadsheet_id: str
+    mode: str = "main"  # main, tester, samples, probes
+    source_doc_id: Optional[str] = None
     dry_run: bool = False
 
 
@@ -368,6 +383,51 @@ async def sync_batch_event(request: SyncBatchEventRequest, background_tasks: Bac
 # ... (SortRequest model remains)
 # ... (SortRequest model remains)
 
+# ============== Rules Management ==============
+
+@api_router.get("/rules/{spreadsheet_id}")
+async def get_rules(spreadsheet_id: str, force_reload: bool = False):
+    """Return sync rules (server-side YAML or sheet fallback)."""
+    try:
+        rules = sync_service.list_rules(spreadsheet_id, force_reload=force_reload)
+        return {"rules": rules}
+    except Exception as e:
+        logger.error("rules_get_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/rules/{spreadsheet_id}/reload")
+async def reload_rules(spreadsheet_id: str):
+    """Force reload rules from sheets/storage and refresh cache."""
+    try:
+        rules = sync_service.list_rules(spreadsheet_id, force_reload=True)
+        return {"status": "ok", "rules": rules, "message": "Rules reloaded and cache refreshed"}
+    except Exception as e:
+        logger.error("rules_reload_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/rules-ui")
+async def get_rules_ui():
+    """Serve the Rule Manager UI."""
+    return FileResponse("config/rule_manager.html")
+
+
+@api_router.post("/rules/{spreadsheet_id}")
+async def save_rules(spreadsheet_id: str, request: RulesSaveRequest):
+    """
+    Replace rules for a spreadsheet. IDs пересоздаются автоматически в формате 001-<SRC>-<TGT>(<Header>).
+    """
+    try:
+        payload = [r.model_dump() for r in request.rules]
+        rules = sync_service.save_rules(spreadsheet_id, payload, validate_headers=True)
+        return {"status": "ok", "rules": rules}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("rules_save_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
 class LoadFunctionsRequest(BaseModel):
     """Request to run load functions."""
     spreadsheet_id: str
@@ -384,6 +444,13 @@ async def sort_sheet(request: SortRequest):
     )
     
     try:
+        logging_service.add_log(
+            request.spreadsheet_id,
+            "СОРТИРОВКА",
+            f"Старт сортировки листа {request.sheet_name}",
+            f"Колонка: {request.column_name}, По возрастанию: {request.ascending}",
+            "🔄"
+        )
         sheets_service.sort_by_header(
             request.spreadsheet_id, 
             request.sheet_name, 
@@ -400,6 +467,13 @@ async def sort_sheet(request: SortRequest):
         return {"status": "success", "message": f"Sorted by {request.column_name}"}
     except Exception as e:
         logger.error("sort_endpoint_error", error=str(e))
+        logging_service.add_log(
+            request.spreadsheet_id,
+            "СОРТИРОВКА",
+            f"Ошибка сортировки листа {request.sheet_name}",
+            str(e),
+            "❌"
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -426,6 +500,13 @@ async def sort_structure(request: StructureSortRequest):
         raise HTTPException(status_code=400, detail="Invalid mode. Use 'byManufacturer' or 'byPrice'")
     
     try:
+        logging_service.add_log(
+            request.spreadsheet_id,
+            "СТРУКТУРА",
+            f"Старт структурной сортировки ({request.mode})",
+            "Листы: Заказ, Динамика цены, Расчет цены",
+            "🔄"
+        )
         result = sorting_service.sort_sheets(request.spreadsheet_id, request.mode)
         return {
             "status": "success",
@@ -434,6 +515,13 @@ async def sort_structure(request: StructureSortRequest):
         }
     except Exception as e:
         logger.error("structure_sort_failed", error=str(e))
+        logging_service.add_log(
+            request.spreadsheet_id,
+            "СТРУКТУРА",
+            f"Ошибка структурной сортировки ({request.mode})",
+            str(e),
+            "❌"
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/load-functions")
@@ -455,21 +543,61 @@ async def run_load_functions(request: LoadFunctionsRequest):
 
 # ============== Price Processing ==============
 
-@api_router.post("/price/process")
-async def process_price(request: PriceProcessRequest):
-    """Process price file (9 phases)."""
+@api_router.post("/price/process/{project}")
+async def process_price(
+    project: str,
+    request: PriceProcessRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Process supplier price list (Б/З поставщик).
+
+    Args:
+        project: Project code (mt, sk, ss)
+        request: Processing parameters (spreadsheet_id, mode, dry_run)
+
+    Returns:
+        Processing result or preview if dry_run=True
+    """
     logger.info(
         "price_process_requested",
-        project=request.project,
-        start_phase=request.start_phase,
+        project=project,
+        mode=request.mode,
+        spreadsheet_id=request.spreadsheet_id,
+        dry_run=request.dry_run
     )
 
-    # TODO: Implement price processing
-    return {
-        "task_id": f"price_{datetime.now().strftime('%Y%m%d%H%M%S')}",
-        "status": "accepted",
-        "estimated_duration_seconds": 120,
-    }
+    try:
+        # For dry_run, process synchronously to return preview
+        if request.dry_run:
+            result = await price_processor.process(
+                project=project,
+                mode=request.mode,
+                spreadsheet_id=request.spreadsheet_id,
+                source_doc_id=request.source_doc_id,
+                dry_run=True
+            )
+            return result
+
+        # For actual processing, run in background
+        background_tasks.add_task(
+            price_processor.process,
+            project=project,
+            mode=request.mode,
+            spreadsheet_id=request.spreadsheet_id,
+            source_doc_id=request.source_doc_id,
+            dry_run=False
+        )
+
+        return {
+            "status": "queued",
+            "message": f"Processing {project.upper()} {request.mode} started",
+            "task_id": f"price_{project}_{request.mode}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        }
+
+    except Exception as e:
+        logger.error("price_process_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @api_router.get("/price/status/{task_id}", response_model=TaskStatusResponse)
@@ -666,6 +794,13 @@ async def analyze_simple(request: AISimpleAnalyzeRequest):
             cleaned = cleaned[:-3]
         
         result = json.loads(cleaned.strip())
+        
+        # Handle case when Gemini returns a list instead of dict
+        if isinstance(result, list):
+            if len(result) > 0 and isinstance(result[0], dict):
+                result = result[0]
+            else:
+                raise ValueError(f"Unexpected list response from Gemini: {result}")
         
         logger.info("simple_analysis_success",
                    product_type=result.get("product_type"))
@@ -1031,8 +1166,6 @@ BASE_MENU_GROUPS: List[dict] = [
                     {"label": "🔄 Обновить триггеры", "function_name": "setupTriggers"},
                     {"label": "📝 Настроить правила", "function_name": "showSyncConfigDialog"},
                     {"label": "📄 Внешние документы", "function_name": "showExternalDocManagerDialog"},
-                    {"label": "📋 Создать/Пересоздать журнал синхро", "function_name": "recreateLogSheet"},
-                    {"label": "🧹 Очистить журнал", "function_name": "quickCleanLogSheet"},
                 ],
             },
             {"separator": True},
@@ -1050,10 +1183,25 @@ BASE_MENU_GROUPS: List[dict] = [
             {"label": "📋 Показать настройки", "function_name": "showGeminiSettings"},
             {"label": "🟢 Проверить сервис", "function_name": "menuCheckService"},
             {"separator": True},
-            {"label": "Анализировать выбранную строку", "function_name": "menuAnalyzeSelected"},
-            {"label": "Анализировать пустые строки", "function_name": "menuAnalyzeEmpty"},
+            {"label": "🧪 Тест AI (быстрый анализ)", "function_name": "menuSimpleAnalyze"},
+            {"label": "🤖 Анализировать выбранную строку", "function_name": "menuAnalyzeSelected"},
+            {"label": "📊 Анализировать пустые строки", "function_name": "menuAnalyzeEmpty"},
             {"separator": True},
-            {"label": "Показать категории", "function_name": "menuShowCategories"},
+            {"label": "📦 Показать категории ТН ВЭД", "function_name": "menuShowCategories"},
+        ],
+    },
+    {
+        "title": "📋 Логи",
+        "items": [
+            {"label": "📊 Статус архивирования", "function_name": "showArchiveStatus_proxy"},
+            {"separator": True},
+            {"label": "📁 Архивировать логи сейчас", "function_name": "manualArchiveLogs_proxy"},
+            {"separator": True},
+            {"label": "⏰ Установить триггер (полночь)", "function_name": "setupMidnightLogTrigger_proxy"},
+            {"label": "🗑️ Удалить триггер", "function_name": "removeMidnightLogTrigger_proxy"},
+            {"separator": True},
+            {"label": "📝 Пересоздать Журнал синхро", "function_name": "recreateLogSheet"},
+            {"label": "🧹 Очистить Журнал синхро", "function_name": "quickCleanLogSheet"},
         ],
     },
 ]
@@ -1222,9 +1370,9 @@ SHEET_ORDER = [
     # Auxiliary sheets at the end
     "Вид и код",
     "Справочник",
-    "Правила синхро",
     "Журнал синхро",
-    "Журнал логов",
+    "Правила синхро",
+    "Информация",
 ]
 
 class ReorderSheetsRequest(BaseModel):

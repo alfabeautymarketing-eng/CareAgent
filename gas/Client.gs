@@ -1091,3 +1091,133 @@ function debugShowSpreadsheetId() {
   );
   console.log('DEBUG: Spreadsheet ID:', id, 'Project:', project);
 }
+
+// =======================================================================================
+// PRICE PROCESSING
+// =======================================================================================
+
+/**
+ * Process supplier price list via Python server.
+ * Replaces heavy GAS logic with server-side processing.
+ *
+ * @param {string} project - Project code (mt, sk, ss)
+ * @param {string} mode - Processing mode (main, tester, samples, probes)
+ * @param {Object} options - Additional options
+ * @param {boolean} options.dryRun - If true, return preview without writing
+ * @param {string} options.sourceDocId - Optional source document ID
+ * @returns {Object} Processing result
+ */
+function callServerProcessPrice(project, mode, options) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheetId = ss.getId();
+  options = options || {};
+
+  const payload = {
+    spreadsheet_id: spreadsheetId,
+    mode: mode || 'main',
+    dry_run: options.dryRun || false,
+    source_doc_id: options.sourceDocId || null
+  };
+
+  const fetchOptions = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+    timeout: 300 // 5 minutes for long operations
+  };
+
+  try {
+    ss.toast('⏳ Обработка прайса...', project.toUpperCase() + ' ' + mode, 300);
+
+    const response = UrlFetchApp.fetch(
+      SERVER_URL + '/api/v1/price/process/' + project.toLowerCase(),
+      fetchOptions
+    );
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      const result = JSON.parse(text);
+
+      if (result.status === 'preview') {
+        ss.toast('📋 Превью готово', project.toUpperCase(), 5);
+        return result;
+      }
+
+      if (result.status === 'queued' || result.status === 'success') {
+        const message = result.message || 'Обработка завершена';
+        const details = result.processed_rows
+          ? 'Строк: ' + result.processed_rows + ', групп: ' + (result.groups_found || 0)
+          : '';
+        ss.toast('✅ ' + message, project.toUpperCase(), 10);
+
+        if (typeof Lib !== 'undefined' && typeof Lib.logInfo === 'function') {
+          Lib.logInfo('[' + project.toUpperCase() + '] ' + message + '. ' + details);
+        }
+
+        return result;
+      }
+
+      // Error from server
+      const errorMsg = result.message || result.error || 'Unknown error';
+      ss.toast('❌ Ошибка: ' + errorMsg, project.toUpperCase(), 10);
+      return { status: 'error', message: errorMsg };
+
+    } else {
+      const errorMsg = 'HTTP ' + code + ': ' + text.substring(0, 200);
+      ss.toast('❌ Ошибка сервера', project.toUpperCase(), 10);
+      return { status: 'error', message: errorMsg };
+    }
+
+  } catch (e) {
+    const errorMsg = e.message || String(e);
+    ss.toast('❌ Ошибка: ' + errorMsg, project.toUpperCase(), 10);
+    if (typeof Lib !== 'undefined' && typeof Lib.logError === 'function') {
+      Lib.logError('[' + project.toUpperCase() + '] callServerProcessPrice failed', e);
+    }
+    return { status: 'error', message: errorMsg };
+  }
+}
+
+/**
+ * Process MT main price (Б/З поставщик) via server.
+ */
+function callServerProcessMtMain() {
+  return callServerProcessPrice('mt', 'main');
+}
+
+/**
+ * Process MT tester price via server.
+ */
+function callServerProcessMtTester() {
+  return callServerProcessPrice('mt', 'tester');
+}
+
+/**
+ * Process MT samples price via server.
+ */
+function callServerProcessMtSamples() {
+  return callServerProcessPrice('mt', 'samples');
+}
+
+/**
+ * Process SK main price via server.
+ */
+function callServerProcessSkMain() {
+  return callServerProcessPrice('sk', 'main');
+}
+
+/**
+ * Process SK probes price via server.
+ */
+function callServerProcessSkProbes() {
+  return callServerProcessPrice('sk', 'probes');
+}
+
+/**
+ * Process SS main price via server.
+ */
+function callServerProcessSsMain() {
+  return callServerProcessPrice('ss', 'main');
+}
