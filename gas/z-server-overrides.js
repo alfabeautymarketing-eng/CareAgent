@@ -12,19 +12,20 @@ var Lib = Lib || {};
 (function (Lib) {
     
     // --- HELPER: Call Server ---
-    Lib.callServer = function(endpoint, payload) {
+    Lib.callServer = function(endpoint, payload, method) {
         const SERVER_URL = "http://46.226.167.153:8000";
+        const httpMethod = (method || "post").toUpperCase();
         
         // Log Entry
         if (Lib.logStep) {
-            Lib.logStep("Network", `>>> START: ${endpoint}`, "DEBUG");
+            Lib.logStep("Network", `>>> START: ${endpoint} [${httpMethod}]`, "DEBUG");
         }
         
         try {
             const options = {
-                method: "post",
+                method: httpMethod,
                 contentType: "application/json",
-                payload: JSON.stringify(payload),
+                payload: httpMethod === "GET" ? undefined : JSON.stringify(payload || {}),
                 headers: { "ngrok-skip-browser-warning": "true" },
                 muteHttpExceptions: true
             };
@@ -35,7 +36,17 @@ var Lib = Lib || {};
                 finalEndpoint = "/api/v1" + finalEndpoint;
             }
 
-            const url = `${SERVER_URL}${finalEndpoint}`;
+            let url = `${SERVER_URL}${finalEndpoint}`;
+
+            // GET: добавляем query-параметры вместо тела
+            if (httpMethod === "GET" && payload && typeof payload === "object") {
+                const qs = Object.entries(payload)
+                  .filter(([,v]) => v !== undefined && v !== null)
+                  .map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+                  .join("&");
+                if (qs) url += (url.includes("?") ? "&" : "?") + qs;
+            }
+
             const response = UrlFetchApp.fetch(url, options);
             const code = response.getResponseCode();
             const text = response.getContentText();

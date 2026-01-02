@@ -893,7 +893,9 @@ if (ss) {
       old_value: e.oldValue,
       user_email: userEmail,
       header_name: headerName,
-      row_key: rowKey
+      row_key: rowKey,
+      sync_origin: "user",
+      transaction_id: Utilities.getUuid(),
     };
     
     Lib.logInfo(`[Sync -> Python] Отправка R${row}C${col} лист="${sheetName}" заголовок="${headerName}"`);
@@ -912,71 +914,44 @@ if (ss) {
 
 
   /**
-   * Загрузка/кэш правил из листа «Правила синхро»
+   * Загрузка/кэш правил с сервера (YAML), без обращения к листу «Правила синхро».
    * @private
    */
   function _loadSyncRules(forceReload = false) {
     if (_cachedSyncRules && !forceReload) return _cachedSyncRules;
 
-    const rulesSheetName = Lib.CONFIG.SHEETS.RULES;
-    const sheet =
-      SpreadsheetApp.getActiveSpreadsheet().getSheetByName(rulesSheetName);
-    if (!sheet || sheet.getLastRow() <= 1) {
+    try {
+      const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+      const res = Lib.callServer(`/rules/${ssId}`, { force_reload: !!forceReload }, "GET");
+      const rules = (res && res.rules) || [];
+
+      const normalized = rules
+        .filter((r) => r && r.enabled) // сохраняем поведение: только активные правила
+        .map((r) => ({
+          id: String(r.id || "").trim(),
+          enabled: !!r.enabled,
+          category: String(r.category || "").trim(),
+          hashtags: String(r.hashtags || "").trim(),
+          sourceSheet: String(r.source_sheet || r.sourceSheet || "").trim(),
+          sourceHeader: String(r.source_header || r.sourceHeader || "").trim(),
+          targetSheet: String(r.target_sheet || r.targetSheet || "").trim(),
+          targetHeader: String(r.target_header || r.targetHeader || "").trim(),
+          isExternal: !!(r.is_external ?? r.isExternal),
+          targetDocId: String(r.target_doc_id || r.targetDocId || "").trim(),
+          mode: String(r.mode || "unidirectional"),
+          sheetA: String(r.sheet_a || r.sheetA || "").trim(),
+          sheetB: String(r.sheet_b || r.sheetB || "").trim(),
+          headerA: String(r.header_a || r.headerA || "").trim(),
+          headerB: String(r.header_b || r.headerB || "").trim(),
+        }));
+
+      _cachedSyncRules = normalized;
+      Lib.logDebug(`_loadSyncRules (server): активных правил = ${normalized.length}`);
+    } catch (e) {
       _cachedSyncRules = [];
-      return _cachedSyncRules;
+      Lib.logError("Не удалось загрузить правила синхронизации с сервера", e);
     }
 
-    // Берём ширину по факту, но минимум 10 колонок (как у тебя по структуре)
-    const width = Math.max(10, sheet.getLastColumn());
-    const data = sheet
-      .getRange(2, 1, sheet.getLastRow() - 1, width)
-      .getValues();
-
-    const result = [];
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-
-      // Булевы чекбоксы/«Да»
-      const enabled =
-        row[1] === true ||
-        String(row[1] || "")
-          .trim()
-          .toLowerCase() === "да";
-      const isExternal =
-        row[8] === true ||
-        String(row[8] || "")
-          .trim()
-          .toLowerCase() === "да";
-      if (!enabled) continue;
-
-      const rule = {
-        id: String(row[0] || "").trim(),
-        enabled,
-        category: String(row[2] || "").trim(),
-        hashtags: String(row[3] || "").trim(),
-        sourceSheet: String(row[4] || "").trim(),
-        sourceHeader: String(row[5] || "").trim(),
-        targetSheet: String(row[6] || "").trim(),
-        targetHeader: String(row[7] || "").trim(),
-        isExternal,
-        targetDocId: String(row[9] || "").trim(),
-      };
-
-      // Жёсткая валидация, иначе пропускаем строку
-      if (
-        !rule.sourceSheet ||
-        !rule.sourceHeader ||
-        !rule.targetSheet ||
-        !rule.targetHeader
-      )
-        continue;
-      if (rule.isExternal && !rule.targetDocId) continue;
-
-      result.push(rule);
-    }
-
-    _cachedSyncRules = result;
-    Lib.logDebug(`_loadSyncRules: активных правил = ${result.length}`);
     return _cachedSyncRules;
   }
 
@@ -3493,47 +3468,8 @@ if (ss) {
 
   // внутренний помощник: создать/починить лист «Правила синхро»
   function _ensureRulesSheet_() {
-    const name = Lib.CONFIG.SHEETS.RULES;
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sh = ss.getSheetByName(name);
-    if (!sh) {
-      sh = ss.insertSheet(name);
-    }
-    // Заголовки по нашей текущей схеме чтения/записи
-    const headers = [
-      "ID правила", // A: row[0]
-      "Активно", // B: row[1] (checkbox/Да)
-      "Категория", // C: row[2]
-      "Хэштеги", // D: row[3]
-      "Источник: Лист", // E: row[4]
-      "Источник: Колонка", // F: row[5]
-      "Цель: Лист", // G: row[6]
-      "Цель: Колонка", // H: row[7]
-      "Внешний документ", // I: row[8] (checkbox/Да)
-      "Target Doc ID", // J: row[9]
-    ];
-
-    const lastCol = sh.getLastColumn();
-    const have =
-      lastCol > 0
-        ? sh
-            .getRange(1, 1, 1, Math.max(lastCol, headers.length))
-            .getValues()[0]
-            .map((x) => String(x || "").trim())
-        : [];
-    let changed = false;
-    headers.forEach((h, i) => {
-      if (have[i] !== h) {
-        sh.getRange(1, i + 1)
-          .setValue(h)
-          .setFontWeight("bold");
-        changed = true;
-      }
-    });
-    if (changed) {
-      sh.setFrozenRows(1);
-    }
-    return sh;
+    // Лист «Правила синхро» больше не используется — правила хранятся на сервере
+    return null;
   }
 
   // Список внешних документов:
@@ -3669,71 +3605,20 @@ if (ss) {
     // ПУБЛИЧНО: единая автоконфигурация инфраструктуры
     Lib.ensureInfra = function () {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
-      // 1) Правила
-      if (typeof Lib.ensureRulesSheetStructure === "function") {
-        Lib.ensureRulesSheetStructure();
-      }
-      // 2) Журнал
+      // 1) Журнал
       _ensureLogSheet_();
-      // 3) Внешние документы
+      // 2) Внешние документы
       _ensureExternalDocsSheet_();
-      // 4) Лёгкая проверка «Внешних документов» (не обязательно)
+      // 3) Лёгкая проверка «Внешних документов» (не обязательно)
       try {
         Lib.updateExternalDocsStatus && Lib.updateExternalDocsStatus();
       } catch (_) {}
       ss.toast("Инфраструктура проверена/создана", "OK", 3);
     };
 
+    // Лист правил больше не используется — структура не требуется
     Lib.ensureRulesSheetStructure = function () {
-      const name =
-        (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.RULES) ||
-        "Правила синхро";
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      let sh = ss.getSheetByName(name);
-      if (!sh) sh = ss.insertSheet(name);
-
-      const HEADERS = [
-        "ID правила",
-        "Активно",
-        "Категория",
-        "Хэштеги",
-        "Источник: Лист",
-        "Источник: Колонка",
-        "Цель: Лист",
-        "Цель: Колонка",
-        "Внешний документ",
-        "Target Doc ID",
-        "Дата создания",
-        "Последнее изм.",
-      ];
-
-      // Шапка
-      if (sh.getMaxColumns() < HEADERS.length) {
-        sh.insertColumnsAfter(
-          Math.max(1, sh.getMaxColumns()),
-          HEADERS.length - sh.getMaxColumns()
-        );
-      }
-      sh.getRange(1, 1, 1, HEADERS.length)
-        .setValues([HEADERS])
-        .setFontWeight("bold");
-      sh.setFrozenRows(1);
-
-      // «Да/Нет» на B и I
-      const yn = SpreadsheetApp.newDataValidation()
-        .requireValueInList(["Да", "Нет"], true)
-        .build();
-      sh.getRange(2, 2, Math.max(1, sh.getMaxRows() - 1), 1).setDataValidation(
-        yn
-      );
-      sh.getRange(2, 9, Math.max(1, sh.getMaxRows() - 1), 1).setDataValidation(
-        yn
-      );
-
-      // Формат времени для K/L
-      sh.getRange(2, 11, Math.max(1, sh.getMaxRows() - 1), 2).setNumberFormat(
-        "dd.MM.yyyy HH:mm"
-      );
+      return null;
     };
 
     // ---------------- ЖУРНАЛ ----------------

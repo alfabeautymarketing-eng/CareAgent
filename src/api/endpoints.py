@@ -368,7 +368,9 @@ async def sync_event(request: SyncEventRequest, background_tasks: BackgroundTask
             "old_value": request.old_value,
             "user_email": request.user_email,
             "header_name": request.header_name,
-            "row_key": request.row_key
+            "row_key": request.row_key,
+            "sync_origin": request.sync_origin,
+            "transaction_id": request.transaction_id,
         }
         
         # Queue task
@@ -402,7 +404,9 @@ async def sync_batch_event(request: SyncBatchEventRequest, background_tasks: Bac
                 "old_value": event.old_value,
                 "user_email": event.user_email,
                 "header_name": event.header_name,
-                "row_key": event.row_key
+                "row_key": event.row_key,
+                "sync_origin": event.sync_origin,
+                "transaction_id": event.transaction_id,
             }
             
             background_tasks.add_task(sync_service.sync_event, request.spreadsheet_id, event_data)
@@ -439,7 +443,7 @@ async def sync_batch_event(request: SyncBatchEventRequest, background_tasks: Bac
 
 @api_router.get("/rules/{spreadsheet_id}")
 async def get_rules(spreadsheet_id: str, force_reload: bool = False):
-    """Return sync rules (server-side YAML or sheet fallback)."""
+    """Return sync rules (server-side YAML storage)."""
     try:
         rules = sync_service.list_rules(spreadsheet_id, force_reload=force_reload)
         return {"rules": rules}
@@ -456,6 +460,59 @@ async def reload_rules(spreadsheet_id: str):
         return {"status": "ok", "rules": rules, "message": "Rules reloaded and cache refreshed"}
     except Exception as e:
         logger.error("rules_reload_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/rules/{spreadsheet_id}/create")
+async def create_rule_endpoint(spreadsheet_id: str, request: RuleCreateRequest):
+    """Create a new sync rule."""
+    try:
+        rule = sync_service.create_rule(spreadsheet_id, request.model_dump())
+        return {"status": "ok", "rule": rule}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("rules_create_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/rules/{spreadsheet_id}/{rule_id}")
+async def update_rule_endpoint(spreadsheet_id: str, rule_id: str, request: RuleUpdateRequest):
+    """Update an existing sync rule."""
+    try:
+        payload = request.model_dump(exclude_none=True)
+        rule = sync_service.update_rule(spreadsheet_id, rule_id, payload)
+        return {"status": "ok", "rule": rule}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("rules_update_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.delete("/rules/{spreadsheet_id}/{rule_id}")
+async def delete_rule_endpoint(spreadsheet_id: str, rule_id: str):
+    """Delete a sync rule by ID."""
+    try:
+        sync_service.delete_rule(spreadsheet_id, rule_id)
+        return {"status": "ok", "deleted": True}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("rules_delete_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.patch("/rules/{spreadsheet_id}/{rule_id}/toggle")
+async def toggle_rule_endpoint(spreadsheet_id: str, rule_id: str, request: RuleToggleRequest):
+    """Toggle rule enabled/disabled."""
+    try:
+        rule = sync_service.toggle_rule(spreadsheet_id, rule_id, request.enabled)
+        return {"status": "ok", "rule": rule}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("rules_toggle_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2463,6 +2520,11 @@ async def get_sort_config(spreadsheet_id: str):
 
 # Standard sheet order for all projects (matches GAS Lib.reorderSheets)
 SHEET_ORDER = [
+    "-Б/З поставщик",
+    "-Тестер",
+    "-Пробники",
+    "-пробники",
+    "-остатки",
     "Главная",
     "Заказ",
     "Динамика цены",
