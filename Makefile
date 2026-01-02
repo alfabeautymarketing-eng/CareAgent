@@ -14,6 +14,7 @@ help:
 	@echo "  docker-build  Build Docker image"
 	@echo "  docker-up     Start Docker containers"
 	@echo "  docker-down   Stop Docker containers"
+	@echo "  gas-push      Push GAS to ALL projects (MT, SS, SK)"
 	@echo "  deploy        Full deploy (Server + GAS)"
 
 install:
@@ -52,6 +53,9 @@ docker-down:
 
 docker-logs:
 	docker compose logs -f app
+
+gas-push:
+	bash ./scripts/push_all_gas.sh
 
 deploy:
 	./scripts/deploy_all.sh
