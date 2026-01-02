@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap">
+  <style>
+    :root {
+      --bg: #0b1021;
+      --panel: #121733;
+      --panel-2: #161d3b;
+      --text: #e8ecff;
+      --muted: #9aa3c8;
+      --accent: #7dd3fc;
+      --accent-2: #c084fc;
+      --danger: #ef4444;
+      --success: #34d399;
+      --border: #1f2545;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 18px 18px 24px;
+      font-family: 'Manrope', 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at 10% 10%, rgba(124,58,237,0.18), transparent 25%), radial-gradient(circle at 80% 20%, rgba(34,211,238,0.18), transparent 25%), linear-gradient(135deg, #0a0f1f 0%, #0f172a 100%);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .title {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .title h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0.2px;
+    }
+    .title span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    button {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding: 9px 14px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.16s ease;
+    }
+    button:hover { border-color: var(--accent); transform: translateY(-1px); }
+    button.primary { background: linear-gradient(135deg, #22d3ee, #6366f1); border: none; }
+    button.danger { background: transparent; border-color: rgba(239,68,68,0.6); color: #fecdd3; }
+    button[disabled] { opacity: 0.6; cursor: default; transform: none; }
+
+    #categories {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .category {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .category-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      cursor: pointer;
+    }
+    .category-header h3 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0.2px;
+    }
+    .category-stats {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .pill {
+      padding: 4px 8px;
+      background: var(--panel-2);
+      border-radius: 999px;
+      border: 1px solid var(--border);
+    }
+    .rules {
+      padding: 6px 12px 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .rule {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel-2);
+      gap: 10px;
+    }
+    .rule-info {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .mode {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: rgba(125,211,252,0.12);
+      border: 1px solid rgba(125,211,252,0.4);
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .rule-text {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .rule-title { font-weight: 700; }
+    .rule-meta { color: var(--muted); font-size: 12px; }
+    .badge {
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+    }
+    .rule-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 22px;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #1f2937;
+      transition: .2s;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 2px;
+      background-color: white;
+      transition: .2s;
+      border-radius: 50%;
+    }
+    input:checked + .slider { background-color: #22d3ee; border-color: #22d3ee; }
+    input:checked + .slider:before { transform: translateX(18px); }
+
+    /* Form */
+    #formPanel {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel);
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #formPanel.active { display: flex; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: block; }
+    input[type="text"], select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+    }
+    .inline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .section-title {
+      font-weight: 700;
+      margin: 6px 0 4px;
+    }
+    #toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      display: none;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    #loading {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    #loading.active { display: inline-flex; }
+    .tag {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px 7px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <h1>Управление правилами синхронизации</h1>
+      <span>Хранение на сервере, категории и двунаправленный режим</span>
+    </div>
+    <div class="actions">
+      <div id="loading">⏳ Обновляем...</div>
+      <button onclick="loadRules(true)">Обновить</button>
+      <button class="primary" onclick="openForm()">+ Новое правило</button>
+      <button onclick="google.script.host.close()">Закрыть</button>
+    </div>
+  </header>
+
+  <div id="categories"></div>
+
+  <div id="formPanel">
+    <div class="section-title" id="formTitle">Новое правило</div>
+    <form id="ruleForm">
+      <input type="hidden" id="ruleId">
+      <div class="form-grid">
+        <div>
+          <label>Режим</label>
+          <select id="mode">
+            <option value="unidirectional">Односторонний</option>
+            <option value="bidirectional">Двунаправленный</option>
+          </select>
+        </div>
+        <div>
+          <label>Категория</label>
+          <input type="text" id="category" placeholder="Например: Заказ">
+        </div>
+        <div>
+          <label>Хэштеги</label>
+          <input type="text" id="hashtags" placeholder="#sync #status">
+        </div>
+        <div class="inline" style="margin-top:22px;">
+          <input type="checkbox" id="enabled" checked>
+          <label for="enabled" style="margin:0;">Активно</label>
+        </div>
+      </div>
+
+      <div id="uniFields">
+        <div class="section-title">Одностороннее правило</div>
+        <div class="form-grid">
+          <div>
+            <label>Источник: лист</label>
+            <select id="sourceSheet" onchange="loadHeaders('source')"></select>
+          </div>
+          <div>
+            <label>Источник: столбец</label>
+            <select id="sourceHeader"></select>
+          </div>
+          <div>
+            <label>Цель: лист</label>
+            <select id="targetSheet" onchange="loadHeaders('target')"></select>
+          </div>
+          <div>
+            <label>Цель: столбец</label>
+            <select id="targetHeader"></select>
+          </div>
+        </div>
+      </div>
+
+      <div id="biFields" style="display:none;">
+        <div class="section-title">Двунаправленное правило</div>
+        <div class="form-grid">
+          <div>
+            <label>Лист A</label>
+            <select id="sheetA" onchange="loadHeaders('a')"></select>
+          </div>
+          <div>
+            <label>Колонка A</label>
+            <select id="headerA"></select>
+          </div>
+          <div>
+            <label>Лист B</label>
+            <select id="sheetB" onchange="loadHeaders('b')"></select>
+          </div>
+          <div>
+            <label>Колонка B</label>
+            <select id="headerB"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="inline">
+          <input type="checkbox" id="isExternal">
+          <label for="isExternal" style="margin:0;">Внешний документ</label>
+        </div>
+        <div>
+          <label>Target Doc ID (опционально)</label>
+          <input type="text" id="targetDocId" placeholder="ID внешней таблицы">
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" onclick="closeForm()">Отмена</button>
+        <button type="submit" class="primary" id="saveBtn">Сохранить</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    const state = { rules: [], sheets: [], headers: {} };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('mode').addEventListener('change', onModeChange);
+      document.getElementById('ruleForm').addEventListener('submit', saveRule);
+      loadSheets();
+      loadRules();
+    });
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.style.display = 'block';
+      setTimeout(() => el.style.display = 'none', 2200);
+    }
+
+    function setLoading(on) {
+      const l = document.getElementById('loading');
+      if (on) l.classList.add('active'); else l.classList.remove('active');
+    }
+
+    function normalizeRule(r) {
+      return {
+        id: r.id,
+        enabled: !!r.enabled,
+        category: r.category || 'Без категории',
+        hashtags: r.hashtags || '',
+        mode: r.mode || 'unidirectional',
+        sourceSheet: r.source_sheet || r.sourceSheet || '',
+        sourceHeader: r.source_header || r.sourceHeader || '',
+        targetSheet: r.target_sheet || r.targetSheet || '',
+        targetHeader: r.target_header || r.targetHeader || '',
+        sheetA: r.sheet_a || r.sheetA || '',
+        headerA: r.header_a || r.headerA || '',
+        sheetB: r.sheet_b || r.sheetB || '',
+        headerB: r.header_b || r.headerB || '',
+        isExternal: !!(r.is_external ?? r.isExternal),
+        targetDocId: r.target_doc_id || r.targetDocId || '',
+      };
+    }
+
+    function loadSheets() {
+      google.script.run
+        .withSuccessHandler((list) => {
+          state.sheets = list || [];
+          ['sourceSheet','targetSheet','sheetA','sheetB'].forEach(id => fillSelect(id, state.sheets));
+        })
+        .withFailureHandler((err) => showToast(err && err.message ? err.message : 'Ошибка загрузки листов'))
+        .getSheetsList();
+    }
+
+    function loadHeaders(target) {
+      const map = { source: 'sourceSheet', target: 'targetSheet', a: 'sheetA', b: 'sheetB' };
+      const selectId = map[target];
+      const select = document.getElementById(selectId);
+      const sheetName = select ? select.value : '';
+      const headerSelectId = { source: 'sourceHeader', target: 'targetHeader', a: 'headerA', b: 'headerB' }[target];
+      const headerSelect = document.getElementById(headerSelectId);
+      if (!sheetName) { fillSelect(headerSelectId, []); return; }
+
+      if (state.headers[sheetName]) {
+        fillSelect(headerSelectId, state.headers[sheetName]);
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler((headers) => {
+          state.headers[sheetName] = headers || [];
+          fillSelect(headerSelectId, state.headers[sheetName]);
+        })
+        .withFailureHandler((err) => showToast(err && err.message ? err.message : 'Ошибка загрузки заголовков'))
+        .getSheetColumns(sheetName);
+    }
+
+    function loadRules(forceReload = false) {
+      setLoading(true);
+      google.script.run
+        .withSuccessHandler((res) => {
+          const list = res && res.rules ? res.rules : res;
+          state.rules = (list || []).map(normalizeRule);
+          renderRules();
+          setLoading(false);
+        })
+        .withFailureHandler((err) => {
+          setLoading(false);
+          showToast(err && err.message ? err.message : 'Ошибка загрузки правил');
+        })
+        .fetchServerRules(forceReload);
+    }
+
+    function renderRules() {
+      const container = document.getElementById('categories');
+      if (!state.rules.length) {
+        container.innerHTML = '<div class="category" style="padding:12px;">Пока нет правил. Создайте новое.</div>';
+        return;
+      }
+      const groups = {};
+      state.rules.forEach((r) => {
+        const cat = r.category || 'Без категории';
+        groups[cat] = groups[cat] || [];
+        groups[cat].push(r);
+      });
+
+      const catNames = Object.keys(groups).sort((a,b) => a.localeCompare(b, 'ru'));
+      container.innerHTML = '';
+
+      catNames.forEach((cat) => {
+        const rules = groups[cat];
+        const enabledCount = rules.filter(r => r.enabled).length;
+        const catEl = document.createElement('div');
+        catEl.className = 'category';
+        const rulesHtml = rules.map(renderRuleCard).join('');
+        catEl.innerHTML = `
+          <div class="category-header" onclick="toggleCategory(this)">
+            <h3>${cat}</h3>
+            <div class="category-stats">
+              <span class="pill">${enabledCount}/${rules.length} активны</span>
+            </div>
+          </div>
+          <div class="rules">${rulesHtml}</div>
+        `;
+        container.appendChild(catEl);
+      });
+    }
+
+    function renderRuleCard(rule) {
+      const direction = rule.mode === 'bidirectional'
+        ? `${rule.sheetA} ↔ ${rule.sheetB} (${rule.headerA || rule.headerB})`
+        : `${rule.sourceSheet}.${rule.sourceHeader} → ${rule.targetSheet}.${rule.targetHeader}`;
+      const badge = rule.mode === 'bidirectional' ? '↔' : '→';
+      const modeClass = rule.mode === 'bidirectional' ? 'background:rgba(192,132,252,0.14);border-color:rgba(192,132,252,0.5);color:#e9d5ff;' : '';
+      return `
+        <div class="rule">
+          <div class="rule-info">
+            <div class="mode" style="${modeClass}">${badge}</div>
+            <div class="rule-text">
+              <div class="rule-title">${direction}</div>
+              <div class="rule-meta">${rule.category} · ${rule.hashtags || 'без хэштегов'}</div>
+            </div>
+          </div>
+          <div class="rule-actions">
+            <label class="switch">
+              <input type="checkbox" ${rule.enabled ? 'checked' : ''} onchange="toggleRule('${rule.id}', this.checked)">
+              <span class="slider"></span>
+            </label>
+            <button onclick="openForm('${rule.id}')">Изменить</button>
+            <button class="danger" onclick="deleteRule('${rule.id}')">Удалить</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleCategory(headerEl) {
+      const rulesEl = headerEl.nextElementSibling;
+      if (!rulesEl) return;
+      rulesEl.style.display = rulesEl.style.display === 'none' ? 'grid' : 'none';
+    }
+
+    function openForm(ruleId) {
+      const form = document.getElementById('formPanel');
+      form.classList.add('active');
+      document.getElementById('ruleForm').reset();
+      document.getElementById('ruleId').value = '';
+      document.getElementById('mode').value = 'unidirectional';
+      onModeChange();
+      document.getElementById('formTitle').textContent = ruleId ? 'Редактирование правила' : 'Новое правило';
+
+      if (ruleId) {
+        const rule = state.rules.find((r) => r.id === ruleId);
+        if (!rule) return;
+        document.getElementById('ruleId').value = rule.id;
+        document.getElementById('mode').value = rule.mode || 'unidirectional';
+        document.getElementById('category').value = rule.category || '';
+        document.getElementById('hashtags').value = rule.hashtags || '';
+        document.getElementById('enabled').checked = !!rule.enabled;
+        document.getElementById('isExternal').checked = !!rule.isExternal;
+        document.getElementById('targetDocId').value = rule.targetDocId || '';
+        onModeChange();
+
+        if (rule.mode === 'bidirectional') {
+          setSelectValue('sheetA', rule.sheetA);
+          setSelectValue('sheetB', rule.sheetB);
+          loadHeaders('a'); loadHeaders('b');
+          setTimeout(() => {
+            setSelectValue('headerA', rule.headerA);
+            setSelectValue('headerB', rule.headerB);
+          }, 100);
+        } else {
+          setSelectValue('sourceSheet', rule.sourceSheet);
+          setSelectValue('targetSheet', rule.targetSheet);
+          loadHeaders('source'); loadHeaders('target');
+          setTimeout(() => {
+            setSelectValue('sourceHeader', rule.sourceHeader);
+            setSelectValue('targetHeader', rule.targetHeader);
+          }, 100);
+        }
+      }
+    }
+
+    function closeForm() {
+      document.getElementById('formPanel').classList.remove('active');
+    }
+
+    function onModeChange() {
+      const mode = document.getElementById('mode').value;
+      document.getElementById('uniFields').style.display = mode === 'unidirectional' ? 'block' : 'none';
+      document.getElementById('biFields').style.display = mode === 'bidirectional' ? 'block' : 'none';
+    }
+
+    function fillSelect(id, values) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '--';
+      el.appendChild(placeholder);
+      (values || []).forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        el.appendChild(opt);
+      });
+    }
+
+    function setSelectValue(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = value || '';
+    }
+
+    function buildPayloadFromForm() {
+      const mode = document.getElementById('mode').value;
+      const payload = {
+        mode,
+        category: document.getElementById('category').value.trim(),
+        hashtags: document.getElementById('hashtags').value.trim(),
+        enabled: document.getElementById('enabled').checked,
+        is_external: document.getElementById('isExternal').checked,
+        target_doc_id: document.getElementById('targetDocId').value.trim(),
+      };
+      if (mode === 'bidirectional') {
+        payload.sheet_a = document.getElementById('sheetA').value;
+        payload.header_a = document.getElementById('headerA').value;
+        payload.sheet_b = document.getElementById('sheetB').value;
+        payload.header_b = document.getElementById('headerB').value;
+      } else {
+        payload.source_sheet = document.getElementById('sourceSheet').value;
+        payload.source_header = document.getElementById('sourceHeader').value;
+        payload.target_sheet = document.getElementById('targetSheet').value;
+        payload.target_header = document.getElementById('targetHeader').value;
+      }
+      return payload;
+    }
+
+    function saveRule(e) {
+      e.preventDefault();
+      const payload = buildPayloadFromForm();
+      const ruleId = document.getElementById('ruleId').value;
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true;
+
+      const runner = google.script.run
+        .withSuccessHandler(() => {
+          btn.disabled = false;
+          showToast('Сохранено');
+          closeForm();
+          loadRules(true);
+        })
+        .withFailureHandler((err) => {
+          btn.disabled = false;
+          showToast(err && err.message ? err.message : 'Ошибка сохранения');
+        });
+
+      if (ruleId) {
+        runner.updateServerRule(ruleId, payload);
+      } else {
+        runner.createServerRule(payload);
+      }
+    }
+
+    function toggleRule(ruleId, enabled) {
+      google.script.run
+        .withSuccessHandler(() => {
+          showToast(enabled ? 'Включено' : 'Выключено');
+          loadRules();
+        })
+        .withFailureHandler((err) => showToast(err && err.message ? err.message : 'Ошибка'))
+        .toggleServerRule(ruleId, enabled);
+    }
+
+    function deleteRule(ruleId) {
+      if (!confirm('Удалить правило ' + ruleId + '?')) return;
+      google.script.run
+        .withSuccessHandler(() => {
+          showToast('Удалено');
+          loadRules(true);
+        })
+        .withFailureHandler((err) => showToast(err && err.message ? err.message : 'Ошибка удаления'))
+        .deleteServerRule(ruleId);
+    }
+  </script>
+</body>
+</html>

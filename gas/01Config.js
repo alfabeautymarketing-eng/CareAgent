@@ -481,7 +481,7 @@
     {
       title: "⚙️ Синхронизация",
       items: [
-        { label: "Настроить правила", fn: "showSyncConfigDialog" },
+        { label: "Настроить правила", fn: "showSyncRulesManagerDialog" },
         { label: "🧹 Очистить уведомления", fn: "clearAllToasts" },
         { label: "Управление внешними документами", fn: "showExternalDocManagerDialog" },
         { separator: true },

@@ -449,6 +449,102 @@ function callServerSyncEvent(payload) {
 }
 
 // =======================================================================================
+// RULES MANAGEMENT (Server CRUD)
+// =======================================================================================
+
+/**
+ * Получить правила синхронизации с сервера.
+ * @param {boolean} forceReload — обновить кэш на сервере
+ */
+function fetchServerRules(forceReload) {
+  const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+  const res = Lib.callServer(`/rules/${ssId}`, { force_reload: !!forceReload }, "GET");
+  return res && res.rules ? res.rules : [];
+}
+
+/**
+ * Перезагрузить правила на сервере (invalidate cache).
+ */
+function reloadServerRules() {
+  const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+  return Lib.callServer(`/rules/${ssId}/reload`, {}, "POST");
+}
+
+/**
+ * Создать правило на сервере.
+ */
+function createServerRule(ruleData) {
+  const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+  return Lib.callServer(`/rules/${ssId}/create`, ruleData || {}, "POST");
+}
+
+/**
+ * Обновить правило на сервере.
+ */
+function updateServerRule(ruleId, updates) {
+  const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+  return Lib.callServer(`/rules/${ssId}/${ruleId}`, updates || {}, "PATCH");
+}
+
+/**
+ * Удалить правило на сервере.
+ */
+function deleteServerRule(ruleId) {
+  const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+  return Lib.callServer(`/rules/${ssId}/${ruleId}`, {}, "DELETE");
+}
+
+/**
+ * Включить/выключить правило на сервере.
+ */
+function toggleServerRule(ruleId, enabled) {
+  const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+  return Lib.callServer(`/rules/${ssId}/${ruleId}/toggle`, { enabled: !!enabled }, "PATCH");
+}
+
+/**
+ * Открыть UI управления правилами.
+ */
+function showSyncRulesManagerDialog() {
+  if (Lib.showSyncRulesManagerDialog) {
+    return Lib.showSyncRulesManagerDialog();
+  }
+  throw new Error('Lib.showSyncRulesManagerDialog не определена');
+}
+
+function showSyncConfigDialog() {
+  return showSyncRulesManagerDialog();
+}
+
+/**
+ * Список рабочих листов (без служебных).
+ */
+function getSheetsList() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new Set();
+  if (Lib.CONFIG && Lib.CONFIG.SHEETS) {
+    ["RULES", "LOG", "LOG_DEBUG", "EXTERNAL_DOCS", "SESSION_LOG"].forEach((k) => {
+      if (Lib.CONFIG.SHEETS[k]) service.add(Lib.CONFIG.SHEETS[k]);
+    });
+  }
+  return ss
+    .getSheets()
+    .map((s) => s.getName())
+    .filter((n) => !service.has(n));
+}
+
+/**
+ * Заголовки указанного листа (первая строка).
+ */
+function getSheetColumns(sheetName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName(sheetName);
+  if (!sh) return [];
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0] || [];
+  return headers.map((h) => String(h || "").trim()).filter(Boolean);
+}
+
+// =======================================================================================
 // STRUCTURE SORTING (Multi-sheet sorting with group headers)
 // =======================================================================================
 

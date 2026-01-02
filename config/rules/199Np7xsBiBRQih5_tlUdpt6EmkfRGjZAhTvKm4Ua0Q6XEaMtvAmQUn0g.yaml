@@ -160,13 +160,14 @@
   target_header: ID-P
   is_external: false
   target_doc_id: ''
-- id: 019-Г-З(Статус)
+- id: 019-Г<->З(Статус)
   enabled: true
   category: Заказ
-  source_sheet: Главная
-  source_header: Статус
-  target_sheet: Заказ
-  target_header: Статус
+  mode: bidirectional
+  sheet_a: Главная
+  header_a: Статус
+  sheet_b: Заказ
+  header_b: Статус
   is_external: false
   target_doc_id: ''
 - id: 020-Г-З(Арт. Рус)
@@ -473,15 +474,6 @@
   source_header: Комментарий
   target_sheet: Расчет цены
   target_header: Комментарий
-  is_external: false
-  target_doc_id: ''
-- id: 054-З-Г(Статус)
-  enabled: true
-  category: Главная
-  source_sheet: Заказ
-  source_header: Статус
-  target_sheet: Главная
-  target_header: Статус
   is_external: false
   target_doc_id: ''
 - id: 055-З-С(Статус)

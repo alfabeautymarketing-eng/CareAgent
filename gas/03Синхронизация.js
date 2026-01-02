@@ -3449,24 +3449,27 @@ if (ss) {
   // - getExternalDocsList()                    — список внешних документов из служебного листа
   // - getExternalSheetsList(docId)             — список листов во внешнем документе
   // - getExternalSheetColumns(docId, sheet)    — список заголовков во внешнем листе
-  // - saveSyncRule(ruleData)                   — создать/обновить правило в «Правила синхро»
+  // - saveSyncRule(ruleData)                   — создать/обновить правило на сервере
   // =======================================================================================
 
   // ==========================
   // RULES DIALOG: SERVER SIDE
   // ==========================
   Lib.showSyncConfigDialog = function () {
-    const HTML_FILE_NAME = "RuleEditor"; // имя твоего HTML-файла
-    const html = HtmlService.createHtmlOutputFromFile(HTML_FILE_NAME)
-      .setWidth(720)
-      .setHeight(680);
+    const html = HtmlService.createHtmlOutputFromFile("SyncRulesManager")
+      .setWidth(980)
+      .setHeight(760);
     SpreadsheetApp.getUi().showModalDialog(
       html,
-      "Настройка правила синхронизации"
+      "Управление правилами синхронизации"
     );
   };
 
-  // внутренний помощник: создать/починить лист «Правила синхро»
+  Lib.showSyncRulesManagerDialog = function () {
+    return Lib.showSyncConfigDialog();
+  };
+
+  // Legacy stub: лист «Правила синхро» больше не используется
   function _ensureRulesSheet_() {
     // Лист «Правила синхро» больше не используется — правила хранятся на сервере
     return null;
@@ -3795,199 +3798,34 @@ if (ss) {
   })();
   // Публичная: сохранить/обновить правило синхронизации из RuleEditor.html
   Lib.saveSyncRule = function (ruleData) {
-    const lock = LockService.getUserLock();
-    lock.waitLock(10000); // ждём до 10 секунд именно пользовательский лок
+    const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+    const asStr = (v) => (v === undefined || v === null ? "" : String(v).trim());
 
-    try {
-      // Подстрахуемся: инфраструктура и лист с правилами должны существовать
-      if (typeof Lib.ensureInfra === "function") Lib.ensureInfra();
-      const rulesSheetName =
-        (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.RULES) ||
-        "Правила синхро";
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      const sh = ss.getSheetByName(rulesSheetName);
-      if (!sh) throw new Error(`Лист "${rulesSheetName}" не найден`);
+    const payload = {
+      mode: ruleData.mode || "unidirectional",
+      enabled: ruleData.enabled !== undefined ? !!ruleData.enabled : true,
+      category: asStr(ruleData.category),
+      hashtags: asStr(ruleData.hashtags),
+      source_sheet: asStr(ruleData.sourceSheet || ruleData.source_sheet),
+      source_header: asStr(ruleData.sourceHeader || ruleData.source_header),
+      target_sheet: asStr(ruleData.targetSheet || ruleData.target_sheet),
+      target_header: asStr(ruleData.targetHeader || ruleData.target_header),
+      sheet_a: asStr(ruleData.sheetA || ruleData.sheet_a),
+      header_a: asStr(ruleData.headerA || ruleData.header_a),
+      sheet_b: asStr(ruleData.sheetB || ruleData.sheet_b),
+      header_b: asStr(ruleData.headerB || ruleData.header_b),
+      is_external: !!(ruleData.isExternal ?? ruleData.is_external),
+      target_doc_id: asStr(ruleData.targetDocId || ruleData.target_doc_id),
+    };
 
-      // Нормализаторы
-      const toYesNo = (v) => {
-        const s = String(v).trim().toLowerCase();
-        return v === true ||
-          s === "true" ||
-          s === "1" ||
-          s === "да" ||
-          s === "yes" ||
-          s === "y"
-          ? "Да"
-          : "Нет";
-      };
-      const asStr = (v) => String(v || "").trim();
+    const hasId = !!asStr(ruleData.id);
+    const endpoint = hasId
+      ? `/rules/${ssId}/${asStr(ruleData.id)}`
+      : `/rules/${ssId}/create`;
+    const method = hasId ? "PATCH" : "POST";
 
-      // Поля из формы
-      const id = asStr(ruleData.id);
-      const enabledYN = toYesNo(ruleData.enabled);
-      const category = asStr(ruleData.category);
-      const hashtags = asStr(ruleData.hashtags);
-      const sourceSheet = asStr(ruleData.sourceSheet);
-      const sourceHeader = asStr(ruleData.sourceHeader);
-      const targetSheet = asStr(ruleData.targetSheet);
-      const targetHeader = asStr(ruleData.targetHeader);
-      const isExternalYN = toYesNo(ruleData.isExternal);
-      const targetDocId =
-        isExternalYN === "Да" ? asStr(ruleData.targetDocId) : "";
-
-      // Валидация
-      if (!sourceSheet || !sourceHeader || !targetSheet || !targetHeader) {
-        throw new Error(
-          "Заполните: Исходный лист/столбец и Целевой лист/столбец."
-        );
-      }
-      if (isExternalYN === "Да" && !targetDocId) {
-        throw new Error(
-          "Включён внешний документ, но не указан Target Doc ID."
-        );
-      }
-
-      // Эталонная шапка (A…L)
-      const HEADERS = [
-        "ID правила",
-        "Активно",
-        "Категория",
-        "Хэштеги",
-        "Источник: Лист",
-        "Источник: Колонка",
-        "Цель: Лист",
-        "Цель: Колонка",
-        "Внешний документ",
-        "Target Doc ID",
-        "Дата создания",
-        "Последнее изм.",
-      ];
-      // Добьем шапку при необходимости (в конец, порядок не ломаем)
-      if (typeof Lib.ensureHeadersPresent_ === "function")
-        Lib.ensureHeadersPresent_(sh, HEADERS);
-
-      // Проставим валидацию «Да/Нет» на B и I (мягко, каждый раз безопасно)
-      try {
-        const ynRule = SpreadsheetApp.newDataValidation()
-          .requireValueInList(["Да", "Нет"], true)
-          .build();
-        sh.getRange(
-          2,
-          2,
-          Math.max(1, sh.getMaxRows() - 1),
-          1
-        ).setDataValidation(ynRule); // B
-        sh.getRange(
-          2,
-          9,
-          Math.max(1, sh.getMaxRows() - 1),
-          1
-        ).setDataValidation(ynRule); // I
-      } catch (_) {}
-
-      const now = new Date();
-      const tz =
-        (Lib.CONFIG && Lib.CONFIG.SETTINGS && Lib.CONFIG.SETTINGS.TIMEZONE) ||
-        "UTC";
-
-      // Попытка найти строку по ID
-      let row = -1;
-      if (id) {
-        // используем быстрый поиск по колонке A
-        row =
-          typeof Lib.findRowByKey_ === "function"
-            ? Lib.findRowByKey_(sh, id, true)
-            : -1;
-      }
-
-      // Если ID нет или не найден — проверим, не существует ли уже дубль по ключевым полям
-      if (row === -1 && sh.getLastRow() > 1) {
-        const data = sh
-          .getRange(2, 1, sh.getLastRow() - 1, HEADERS.length)
-          .getValues();
-        for (let i = 0; i < data.length; i++) {
-          const r = data[i];
-          const same =
-            asStr(r[4]) === sourceSheet &&
-            asStr(r[5]) === sourceHeader &&
-            asStr(r[6]) === targetSheet &&
-            asStr(r[7]) === targetHeader &&
-            asStr(r[8]) === isExternalYN &&
-            asStr(r[9]) === targetDocId;
-          if (same) {
-            row = i + 2;
-            break;
-          }
-        }
-      }
-
-      // Если строка не найдена — создаём новую
-      if (row === -1) {
-        const newId =
-          id ||
-          "SR-" +
-            Utilities.formatDate(now, tz, "yyyyMMdd-HHmmss") +
-            "-" +
-            (100 + Math.floor(Math.random() * 900));
-        sh.appendRow([
-          newId,
-          enabledYN,
-          category,
-          hashtags,
-          sourceSheet,
-          sourceHeader,
-          targetSheet,
-          targetHeader,
-          isExternalYN,
-          targetDocId,
-          now,
-          now,
-        ]);
-        // Сброс кэша индексов по ID для этого листа
-        if (typeof Lib.deleteKeyCacheForSheet === "function")
-          Lib.deleteKeyCacheForSheet(sh.getName());
-        // Обнулить кэш правил
-        try {
-          _cachedSyncRules = null;
-        } catch (_) {
-          /* no-op */
-        }
-        return { success: true, id: newId, action: "created" };
-      }
-
-      // Обновление существующей строки (сохраняем «Дата создания» из листа)
-      const createdCell = sh.getRange(row, 11).getValue(); // K
-      const created = createdCell ? createdCell : now;
-      const keepId = sh.getRange(row, 1).getValue() || id;
-
-      sh.getRange(row, 1, 1, HEADERS.length).setValues([
-        [
-          keepId,
-          enabledYN,
-          category,
-          hashtags,
-          sourceSheet,
-          sourceHeader,
-          targetSheet,
-          targetHeader,
-          isExternalYN,
-          targetDocId,
-          created,
-          now,
-        ],
-      ]);
-
-      try {
-        _cachedSyncRules = null;
-      } catch (_) {}
-      return { success: true, id: keepId, action: "updated" };
-    } catch (e) {
-      return { success: false, error: e && e.message ? e.message : String(e) };
-    } finally {
-      try {
-        lock.releaseLock();
-      } catch (_) {}
-    }
+    const res = Lib.callServer(endpoint, payload, method);
+    return res && (res.rule || res);
   };
 })(Lib, this);
 
