@@ -502,6 +502,20 @@ function toggleServerRule(ruleId, enabled) {
   return Lib.callServer(`/rules/${ssId}/${ruleId}/toggle`, { enabled: !!enabled }, "PATCH");
 }
 
+function deleteLegacyRulesSheet() {
+  if (Lib.deleteLegacyRulesSheet) {
+    return Lib.deleteLegacyRulesSheet();
+  }
+  return "Функция Lib.deleteLegacyRulesSheet не найдена.";
+}
+
+function migrateLegacyRules() {
+  if (Lib.migrateLegacyRules) {
+    return Lib.migrateLegacyRules();
+  }
+  return "Функция Lib.migrateLegacyRules не найдена.";
+}
+
 /**
  * Открыть UI управления правилами.
  */

@@ -3465,11 +3465,89 @@ if (ss) {
     );
   };
 
-  // Legacy stub: лист «Правила синхро» больше не используется
-  function _ensureRulesSheet_() {
-    // Лист «Правила синхро» больше не используется — правила хранятся на сервере
-    return null;
-  }
+  // Удалить устаревший лист «Правила синхро» во всех проектах
+  Lib.deleteLegacyRulesSheet = function () {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("Правила синхро");
+    if (sheet) {
+      ss.deleteSheet(sheet);
+      return "✅ Лист «Правила синхро» удален.";
+    }
+    return "ℹ️ Лист «Правила синхро» не найден.";
+  };
+
+  /**
+   * Миграция правил из старого листа «Правила синхро» на сервер.
+   */
+  Lib.migrateLegacyRules = function () {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("Правила синхро");
+    if (!sheet) return "ℹ️ Лист «Правила синхро» не найден. Миграция невозможна.";
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return "ℹ️ Лист пуст или содержит только заголовки.";
+
+    const headers = data[0];
+    const map = {};
+    headers.forEach((h, i) => map[h.toString().trim().toLowerCase()] = i);
+
+    // Вспомогательная функция для получения значения по возможным именам колонки
+    const getVal = (row, possibleNames) => {
+      for (const name of possibleNames) {
+        const idx = map[name.toLowerCase()];
+        if (idx !== undefined) return row[idx];
+      }
+      return "";
+    };
+
+    let count = 0;
+    // Пропускаем заголовок
+    for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        // Пытаемся определить режим (по умолчанию unidirectional)
+        let mode = 'unidirectional';
+        const rawMode = getVal(row, ['mode', 'режим', 'тип']);
+        if (rawMode && (rawMode.toString().includes('bi') || rawMode.toString().includes('дву'))) {
+            mode = 'bidirectional';
+        }
+
+        const payload = {
+            mode: mode,
+            enabled: true, // По умолчанию включаем, или ищем колонку 'enabled'/'активно'
+            category: 'Миграция',
+            hashtags: '#legacy',
+        };
+
+        const enabledVal = getVal(row, ['enabled', 'активно', 'включено', 'status']);
+        if (enabledVal !== "" && (enabledVal === false || enabledVal.toString().toLowerCase() === 'false' || enabledVal === 0)) {
+            payload.enabled = false;
+        }
+
+        if (mode === 'bidirectional') {
+            payload.sheet_a = getVal(row, ['sheet a', 'лист а', 'лист 1', 'source sheet']);
+            payload.header_a = getVal(row, ['header a', 'колонку а', 'колонка 1', 'source header']);
+            payload.sheet_b = getVal(row, ['sheet b', 'лист б', 'лист 2', 'target sheet']);
+            payload.header_b = getVal(row, ['header b', 'колонку б', 'колонка 2', 'target header']);
+        } else {
+            payload.source_sheet = getVal(row, ['source sheet', 'источник лист', 'откуда']);
+            payload.source_header = getVal(row, ['source header', 'источник колонка', 'что']);
+            payload.target_sheet = getVal(row, ['target sheet', 'цель лист', 'куда']);
+            payload.target_header = getVal(row, ['target header', 'цель колонка', 'куда колонка']);
+        }
+
+        // Простая валидация
+        if ((payload.source_sheet && payload.target_sheet) || (payload.sheet_a && payload.sheet_b)) {
+             try {
+                createServerRule(payload);
+                count++;
+             } catch (e) {
+                 console.error("Ошибка миграции строки " + i, e);
+             }
+        }
+    }
+
+    return `✅ Миграция завершена. Перенесено правил: ${count}`;
+  };
 
   // Список внешних документов:
   // 1) из глобальной карты DOC_TO_PROJECT, если она есть;

@@ -484,6 +484,8 @@
         { label: "Настроить правила", fn: "showSyncRulesManagerDialog" },
         { label: "🧹 Очистить уведомления", fn: "clearAllToasts" },
         { label: "Управление внешними документами", fn: "showExternalDocManagerDialog" },
+        { label: "🚀 Миграция правил со старого листа", fn: "migrateLegacyRules" },
+        { label: "🗑️ Удалить лист 'Правила синхро'", fn: "deleteLegacyRulesSheet" },
         { separator: true },
         {
           submenu: "Операции с артикулами",
