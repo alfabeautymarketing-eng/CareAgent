@@ -1,6 +1,11 @@
-Use 'bd' for task tracking. EVERY session and EVERY task (no matter how small) MUST start with `bd ready` or `bd create`. If `bd` is not found, use full path `/Users/aleksandr/.local/bin/bd`.
-No work is allowed, and NO code changes are permitted without an active issue in `beads`. NO EXCEPTIONS. If `bd` is command not found, use `/Users/aleksandr/.local/bin/bd`.
-LANGUAGE: Interact ONLY in Russian language.
+Use 'bd' for task tracking. EVERY session and EVERY task (no matter how small) MUST start with `bd ready` or `bd create`.
+If `bd` is command not found, use full path: `/Users/aleksandr/.local/bin/bd`.
+
+**PATH FIX:** If `bd` is missing, run this once:
+`echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc`
+
+No work is allowed, and NO code changes are permitted without an active issue in `beads`. NO EXCEPTIONS.
+Interactions must be only in Russian language.
 
 ## Landing the Plane (Session Completion)
 

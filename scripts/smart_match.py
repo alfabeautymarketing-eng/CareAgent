@@ -22,13 +22,15 @@ from src.services.product_matcher import ProductMatcher
 SPREADSHEET_ID = "13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ" 
 SHEET_NAME = "Сертификация"
 
-def main():
-    if len(sys.argv) < 2:
-        print("Please provide a product name.")
-        print('Example: python scripts/smart_match.py "Vitamin C Cream (Tester)"')
-        return
+import argparse
 
-    new_name = sys.argv[1]
+def main():
+    parser = argparse.ArgumentParser(description="Smart Product Matcher using Gemini AI.")
+    parser.add_argument("query", help="Product name to match")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed matching process")
+    args = parser.parse_args()
+
+    new_name = args.query
     
     matcher = ProductMatcher(SPREADSHEET_ID, SHEET_NAME)
     
@@ -40,21 +42,35 @@ def main():
         return
 
     print(f"🔍 Searching match for: '{new_name}'")
+    if args.verbose:
+        print(f"📦 Comparing against {len(candidates)} base products:")
+
+    # 2. Match
     match_result = matcher.find_best_match(new_name, candidates)
     
+    # 3. Output
     if match_result:
-        print("\n" + "="*50)
-        print("RESULT:")
-        print(json.dumps(match_result, indent=2, ensure_ascii=False))
-        print("="*50)
-        
-        if match_result.get("match_found") and match_result.get("matched_product_details"):
-            matched_product = match_result["matched_product_details"]
-            print(f"\n✅ ACTION: Auto-fill new row with:")
-            print(f"   Name ENG DS: {matched_product['name_eng_ds']}")
-            print(f"   Name RUS DS: {matched_product['name_rus_ds']}")
+        if args.verbose:
+            print("\n" + "="*50)
+            print("FULL AI RESPONSE:")
+            print(json.dumps(match_result, indent=2, ensure_ascii=False))
+            print("="*50)
+            
+        if match_result.get("match_found"):
+            matched_product = match_result.get("matched_product_details")
+            if matched_product:
+                print(f"\n✅ MATCH FOUND ({match_result['confidence']}%):")
+                print(f"   Reason: {match_result['reasoning']}")
+                print(f"\n👉 SUGGESTED AUTO-FILL:")
+                print(f"   Name ENG DS: {matched_product['name_eng_ds']}")
+                print(f"   Name RUS DS: {matched_product['name_rus_ds']}")
+        else:
+            print("\n❌ No confident match found.")
+            if not args.verbose:
+                print(f"   Reason: {match_result.get('reasoning', 'No reason provided')}")
+                print("   (Try running with -v for more details)")
     else:
-        print("❌ No match found or error.")
+        print("❌ Error during AI matching process.")
 
 if __name__ == "__main__":
     main()
