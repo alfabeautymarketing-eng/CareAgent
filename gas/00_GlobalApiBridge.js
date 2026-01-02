@@ -327,10 +327,21 @@ function setupTriggers() {
 }
 
 function showSyncConfigDialog() {
-  if (typeof Lib !== 'undefined' && Lib.showSyncConfigDialog) {
-    return Lib.showSyncConfigDialog();
+  return showSyncRulesManagerDialog();
+}
+
+// Новый UI управления правилами (модалка с CRUD и категориями)
+function showSyncRulesManagerDialog() {
+  if (typeof Lib !== 'undefined') {
+    if (typeof Lib.showSyncRulesManagerDialog === 'function') {
+      return Lib.showSyncRulesManagerDialog();
+    }
+    if (typeof Lib.showSyncConfigDialog === 'function') {
+      // fallback на существующую реализацию Lib (должна открывать SyncRulesManager)
+      return Lib.showSyncConfigDialog();
+    }
   }
-  throw new Error('Lib.showSyncConfigDialog не определена');
+  throw new Error('Lib.showSyncRulesManagerDialog не определена');
 }
 
 function showExternalDocManagerDialog() {
