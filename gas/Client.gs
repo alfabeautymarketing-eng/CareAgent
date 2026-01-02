@@ -544,6 +544,36 @@ function getSheetColumns(sheetName) {
   return headers.map((h) => String(h || "").trim()).filter(Boolean);
 }
 
+/**
+ * Список внешних документов для диалога правил.
+ */
+function getExternalDocsList() {
+  if (Lib.getExternalDocsList) {
+    return Lib.getExternalDocsList();
+  }
+  return [];
+}
+
+/**
+ * Список листов во внешнем документе.
+ */
+function getExternalSheetsList(docId) {
+  if (Lib.getExternalSheetsList) {
+    return Lib.getExternalSheetsList(docId);
+  }
+  return [];
+}
+
+/**
+ * Заголовки листа во внешнем документе.
+ */
+function getExternalSheetColumns(docId, sheetName) {
+  if (Lib.getExternalSheetColumns) {
+    return Lib.getExternalSheetColumns(docId, sheetName);
+  }
+  return [];
+}
+
 // =======================================================================================
 // STRUCTURE SORTING (Multi-sheet sorting with group headers)
 // =======================================================================================

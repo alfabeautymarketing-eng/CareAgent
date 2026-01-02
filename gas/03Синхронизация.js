@@ -3456,9 +3456,24 @@ if (ss) {
   // RULES DIALOG: SERVER SIDE
   // ==========================
   Lib.showSyncConfigDialog = function () {
-    const html = HtmlService.createHtmlOutputFromFile("SyncRulesManager")
-      .setWidth(980)
-      .setHeight(760);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ssId = ss.getId();
+    const serverUrl =
+      PropertiesService.getScriptProperties().getProperty("SERVER_URL") ||
+      (typeof SERVER_URL !== "undefined" ? SERVER_URL : "http://localhost:8000");
+
+    const tpl = HtmlService.createTemplateFromFile("RulesUiBridge");
+    tpl.spreadsheetId = ssId;
+    tpl.rulesUrl =
+      serverUrl.replace(/\\/$/, "") +
+      "/api/v1/rules-ui?spreadsheet_id=" +
+      encodeURIComponent(ssId);
+
+    const html = tpl
+      .evaluate()
+      .setWidth(1180)
+      .setHeight(820);
+
     SpreadsheetApp.getUi().showModalDialog(
       html,
       "Управление правилами синхронизации"

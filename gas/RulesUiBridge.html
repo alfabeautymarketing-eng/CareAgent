@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --bg: #f6f1ea;
+        --ink: #1e2a2f;
+        --muted: #6b7280;
+        --accent: #0f766e;
+        --card: #ffffff;
+        --border: rgba(15, 118, 110, 0.18);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", "Noto Sans", Arial, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      .shell {
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+      }
+      .header h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .header span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .frame {
+        width: 100%;
+        height: 690px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        overflow: hidden;
+        background: var(--card);
+      }
+      iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+      .fallback {
+        display: none;
+        padding: 12px 14px;
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .fallback a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="header">
+        <div>
+          <h3>Управление правилами синхронизации</h3>
+          <span>Источник: серверный UI</span>
+        </div>
+        <span>ID: <?= spreadsheetId ?></span>
+      </div>
+      <div class="frame">
+        <iframe src="<?= rulesUrl ?>" allow="clipboard-read; clipboard-write"></iframe>
+      </div>
+      <div class="fallback" id="fallback">
+        Не удалось встроить интерфейс. Откройте в новой вкладке:
+        <a href="<?= rulesUrl ?>" target="_blank" rel="noopener">перейти к правилам</a>
+      </div>
+    </div>
+    <script>
+      const frame = document.querySelector("iframe");
+      const fallback = document.getElementById("fallback");
+      const timer = setTimeout(() => {
+        fallback.style.display = "block";
+      }, 3500);
+      frame.addEventListener("load", () => clearTimeout(timer));
+    </script>
+  </body>
+</html>
