@@ -2301,19 +2301,19 @@ ORDER_STAGES_MENU_ORDER = [
 
 # Action mapping for menu buttons (mirrors legacy GAS config)
 PRIMARY_DATA_MENU_ACTIONS = {
-    "MAIN": {"fn_by_project": {"SK": "processSkPriceSheet", "SS": "processSsPriceSheet", "MT": "processMtMainPrice"}},
-    "TESTER": {"fn_by_project": {"MT": "processMtTesterPrice"}},
-    "SAMPLES": {"fn_by_project": {"MT": "processMtSamplesPrice"}},
-    "PROBES": {"fn_by_project": {"SK": "processSkPriceProbes"}},
+    "MAIN": {"fn_by_project": {"SK": "serverProcessSkMain", "SS": "serverProcessSsMain", "MT": "serverProcessMtMain"}},
+    "TESTER": {"fn_by_project": {"MT": "serverProcessMtTester"}},
+    "SAMPLES": {"fn_by_project": {"MT": "serverProcessMtSamples"}},
+    "PROBES": {"fn_by_project": {"SK": "serverProcessSkProbes"}},
     "STOCKS": {"fn_by_project": {"SK": "loadSkStockData", "SS": "loadSsStockData", "MT": "loadMtStockData"}},
-    "NEW_PRICE_YEAR": {"fn": "addNewYearColumnsToPriceDynamics"},
+    "NEW_PRICE_YEAR": {"fn": "serverAddNewYearColumns"},
     "SORT_MANUFACTURER": {"fn": "sortByManufacturer"},
     "SORT_PRICE": {"fn": "sortByPrice"},
-    "STAGE_ALL": {"fn": "showAllOrderData"},
-    "STAGE_ORDER": {"fn": "showOrderStage"},
-    "STAGE_PROMOTIONS": {"fn": "showPromotionsStage"},
-    "STAGE_SET": {"fn": "showSetStage"},
-    "STAGE_PRICE": {"fn": "showPriceStage"},
+    "STAGE_ALL": {"fn": "serverShowAllOrderData"},
+    "STAGE_ORDER": {"fn": "serverShowOrderStage"},
+    "STAGE_PROMOTIONS": {"fn": "serverShowPromotionsStage"},
+    "STAGE_SET": {"fn": "serverShowSetStage"},
+    "STAGE_PRICE": {"fn": "serverShowPriceStage"},
 }
 
 # Static menu groups from legacy GAS config (without project-specific items)
@@ -2321,32 +2321,32 @@ BASE_MENU_GROUPS: List[dict] = [
     {
         "title": "📦 Выгрузка",
         "items": [
-            {"label": "Выгрузить Акции", "function_name": "exportPromotions"},
-            {"label": "Выгрузить Наборы", "function_name": "exportSets"},
+            {"label": "Выгрузить Акции", "function_name": "serverExportPromotions"},
+            {"label": "Выгрузить Наборы", "function_name": "serverExportSets"},
         ],
     },
     {
         "title": "🚚 Поставка",
         "items": [
-            {"label": "Форматировать лист 'Ордер'", "function_name": "formatOrderSheet"},
+            {"label": "Форматировать лист 'Ордер'", "function_name": "serverFormatOrderSheet"},
             {"separator": True},
-            {"label": "1. Создать лист 'Для инвойса'", "function_name": "createFullInvoice"},
+            {"label": "1. Создать лист 'Для инвойса'", "function_name": "serverCreateFullInvoice"},
             {"label": "2. Собрать документы", "function_name": "collectAndCopyDocuments"},
         ],
     },
     {
         "title": "🔬 Сертификация",
         "items": [
-            {"label": "Лист новинки", "function_name": "createNewsSheetFromCertification"},
+            {"label": "Лист новинки", "function_name": "serverCreateNewsSheet"},
             {"separator": True},
-            {"label": "Создать заявку протоколы (353пп)", "function_name": "generateProtocols_353pp"},
-            {"label": "Создать заявку ДС (353пп)", "function_name": "generateDsLayouts_353pp"},
+            {"label": "Создать заявку протоколы (353пп)", "function_name": "serverGenerateProtocols353pp"},
+            {"label": "Создать заявку ДС (353пп)", "function_name": "serverGenerateDsLayouts"},
             {"label": "Собрать документы для заявки (353пп)", "function_name": "structureDocuments_353pp"},
             {"separator": True},
-            {"label": "Посчитать спирты", "function_name": "calculateAndAssignSpiritNumbers"},
+            {"label": "Посчитать спирты", "function_name": "serverCalculateSpiritNumbers"},
             {"label": "Создать Макеты спирты", "function_name": "generateSpiritProtocols"},
             {"separator": True},
-            {"label": "Пересчитать каскады (Сертификация)", "function_name": "runManualCascadeOnCertification"},
+            {"label": "Пересчитать каскады (Сертификация)", "function_name": "serverRecalculateCascades"},
         ],
     },
     {
@@ -2356,7 +2356,7 @@ BASE_MENU_GROUPS: List[dict] = [
                 "submenu": "⚙️ Настройки",
                 "items": [
                     {"label": "🔄 Обновить триггеры", "function_name": "setupTriggers"},
-                    {"label": "📝 Настроить правила", "function_name": "showSyncConfigDialog"},
+                    {"label": "📝 Настроить правила", "function_name": "showSyncRulesManagerDialog"},
                     {"label": "📄 Внешние документы", "function_name": "showExternalDocManagerDialog"},
                 ],
             },
