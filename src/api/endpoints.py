@@ -2357,7 +2357,6 @@ BASE_MENU_GROUPS: List[dict] = [
                 "items": [
                     {"label": "🔄 Обновить триггеры", "function_name": "setupTriggers"},
                     {"label": "📝 Настроить правила", "function_name": "showSyncRulesManagerDialog"},
-                    {"label": "📄 Внешние документы", "function_name": "showExternalDocManagerDialog"},
                 ],
             },
             {"separator": True},
