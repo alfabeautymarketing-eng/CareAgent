@@ -512,9 +512,6 @@ function showSyncRulesManagerDialog() {
   throw new Error('Lib.showSyncRulesManagerDialog не определена');
 }
 
-function showSyncConfigDialog() {
-  return showSyncRulesManagerDialog();
-}
 
 /**
  * Список рабочих листов (без служебных).

@@ -3452,36 +3452,17 @@ if (ss) {
   // - saveSyncRule(ruleData)                   — создать/обновить правило на сервере
   // =======================================================================================
 
-  // ==========================
-  // RULES DIALOG: SERVER SIDE
-  // ==========================
-  Lib.showSyncConfigDialog = function () {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const ssId = ss.getId();
-    const serverUrl =
-      PropertiesService.getScriptProperties().getProperty("SERVER_URL") ||
-      (typeof SERVER_URL !== "undefined" ? SERVER_URL : "http://localhost:8000");
 
-    const tpl = HtmlService.createTemplateFromFile("RulesUiBridge");
-    tpl.spreadsheetId = ssId;
-    tpl.rulesUrl =
-      serverUrl.replace(/\\/$/, "") +
-      "/api/v1/rules-ui?spreadsheet_id=" +
-      encodeURIComponent(ssId);
-
-    const html = tpl
+  Lib.showSyncRulesManagerDialog = function () {
+    const html = HtmlService.createTemplateFromFile("SyncRulesManager")
       .evaluate()
       .setWidth(1180)
-      .setHeight(820);
+      .setHeight(850);
 
     SpreadsheetApp.getUi().showModalDialog(
       html,
-      "Управление правилами синхронизации"
+      "Управление правилами синхронизации (v2)"
     );
-  };
-
-  Lib.showSyncRulesManagerDialog = function () {
-    return Lib.showSyncConfigDialog();
   };
 
   // Legacy stub: лист «Правила синхро» больше не используется

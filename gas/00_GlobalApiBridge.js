@@ -326,20 +326,15 @@ function setupTriggers() {
   throw new Error('Lib.setupTriggers не определена');
 }
 
+/** @deprecated Используйте showSyncRulesManagerDialog */
 function showSyncConfigDialog() {
   return showSyncRulesManagerDialog();
 }
 
 // Новый UI управления правилами (модалка с CRUD и категориями)
 function showSyncRulesManagerDialog() {
-  if (typeof Lib !== 'undefined') {
-    if (typeof Lib.showSyncRulesManagerDialog === 'function') {
-      return Lib.showSyncRulesManagerDialog();
-    }
-    if (typeof Lib.showSyncConfigDialog === 'function') {
-      // fallback на существующую реализацию Lib (должна открывать SyncRulesManager)
-      return Lib.showSyncConfigDialog();
-    }
+  if (typeof Lib !== 'undefined' && typeof Lib.showSyncRulesManagerDialog === 'function') {
+    return Lib.showSyncRulesManagerDialog();
   }
   throw new Error('Lib.showSyncRulesManagerDialog не определена');
 }
