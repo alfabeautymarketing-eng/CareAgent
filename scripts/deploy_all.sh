@@ -32,7 +32,7 @@ echo "✅ Python code synced"
 echo ""
 echo "🐳 [2/3] Updating Docker containers..."
 
-ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} "cd ~/AgentCare && docker-compose up -d"
+ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} "cd ~/AgentCare && docker-compose down && docker-compose up -d"
 
 echo "✅ Docker updated"
 
