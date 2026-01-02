@@ -2158,16 +2158,23 @@ class MenuConfigResponse(BaseModel):
     items: List[MenuItemModel] = []
     menus: List[MenuGroupModel] = []
 
-# Project spreadsheet IDs mapping
+# Project spreadsheet IDs mapping (matches GAS 01Config.js DOC_TO_PROJECT)
 PROJECT_IDS = {
-    # Main spreadsheets
-    "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g": "MT",
-    "1sTgZa-n1aP7oIhyQfPeN8QDgDNnCubqMWAd-TKjKpJXWsQm_ZhXnojPD": "SS",
-    "1DJvK1vUT2OTubN0TLdZvsgYMSYByLHl8xTsus3K-KJ-VtJxgGnSw5Ih8": "SK",
-    # Auxiliary (Source) spreadsheets
-    "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0": "MT",
-    "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK",
-    "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0": "SS",
+    # MT (Montibello)
+    "13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ": "MT", # Main
+    "1fMOjUE7oZV96fCY5j5rPxnhWGJkDqg-GfwPZ8jUVgPw": "MT", # Alt Main
+    "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0": "MT", # Source
+    "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g": "MT", # Legacy?
+    
+    # SS (San)
+    "12yIL1CuESZxeUUd-oKK2brtN1FnXE9q95N7SqzNc7vk": "SS", # Main
+    "1sTgZa-n1aP7oIhyQfPeN8QDgDNnCubqMWAd-TKjKpJXWsQm_ZhXnojPD": "SS", # Source
+    "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0": "SS", # User Source
+
+    # SK (Carmado)
+    "1CpYYLvRYslsyCkuLzL9EbbjsvbNpWCEZcmhKqMoX5zw": "SK", # Main
+    "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK", # Source
+    "1DJvK1vUT2OTubN0TLdZvsgYMSYByLHl8xTsus3K-KJ-VtJxgGnSw5Ih8": "SK", # Legacy?
 }
 
 PROJECT_NAMES = {

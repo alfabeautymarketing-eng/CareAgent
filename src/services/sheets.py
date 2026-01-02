@@ -455,47 +455,47 @@ class SheetsService:
             if log_sheet_name in sheet_map:
                 target_order.append(log_sheet_name)
 
-        # 1. Первая группа: Основные приоритетные листы в строго заданном порядке
-        priority_prefixes = ["-Б/З поставщик", "-Тестер", "-Пробники", "-пробники", "-остатки"]
-        
-        # Регулярное выражение для поиска дат (например, " 01.01.24" или " 01.01.2024") в конце названия
-        import re
-        date_pattern = re.compile(r"\s\d{2}\.\d{2}\.\d{2,4}$")
-
-        processed_sheets = set(target_order)
-
-        # Сначала добавляем только основные листы (без дат)
-        for prefix in priority_prefixes:
-            if prefix in sheet_map and prefix not in processed_sheets:
-                target_order.append(prefix)
-                processed_sheets.add(prefix)
-
-        # 2. Вторая группа: Датированные копии этих же листов в том же порядке групп
-        for prefix in priority_prefixes:
-            dated_variations = []
-            for name in current_names:
-                if name.startswith(prefix) and name != prefix:
-                    if date_pattern.search(name):
-                        dated_variations.append(name)
+            # 1. Первая группа: Основные приоритетные листы в строго заданном порядке
+            priority_prefixes = ["-Б/З поставщик", "-Тестер", "-Пробники", "-пробники", "-остатки"]
             
-            # Сортируем даты (самые свежие первыми или по алфавиту)
-            dated_variations.sort(reverse=True)
-            for d_name in dated_variations:
-                if d_name not in processed_sheets:
-                    target_order.append(d_name)
-                    processed_sheets.add(d_name)
+            # Регулярное выражение для поиска дат (например, " 01.01.24" или " 01.01.2024") в конце названия
+            import re
+            date_pattern = re.compile(r"\s\d{2}\.\d{2}\.\d{2,4}$")
 
-        # 3. Третья группа: Остальные листы из SHEET_ORDER
-        for name in desired_order:
-            if name in sheet_map and name not in processed_sheets:
-                target_order.append(name)
-                processed_sheets.add(name)
+            processed_sheets = set(target_order)
 
-        # 4. Четвертая группа: Все остальные (неизвестные) листы
-        for name in current_names:
-            if name not in processed_sheets:
-                target_order.append(name)
-                processed_sheets.add(name)
+            # Сначала добавляем только основные листы (без дат)
+            for prefix in priority_prefixes:
+                if prefix in sheet_map and prefix not in processed_sheets:
+                    target_order.append(prefix)
+                    processed_sheets.add(prefix)
+
+            # 2. Вторая группа: Датированные копии этих же листов в том же порядке групп
+            for prefix in priority_prefixes:
+                dated_variations = []
+                for name in current_names:
+                    if name.startswith(prefix) and name != prefix:
+                        if date_pattern.search(name):
+                            dated_variations.append(name)
+                
+                # Сортируем даты (самые свежие первыми или по алфавиту)
+                dated_variations.sort(reverse=True)
+                for d_name in dated_variations:
+                    if d_name not in processed_sheets:
+                        target_order.append(d_name)
+                        processed_sheets.add(d_name)
+
+            # 3. Третья группа: Остальные листы из SHEET_ORDER
+            for name in desired_order:
+                if name in sheet_map and name not in processed_sheets:
+                    target_order.append(name)
+                    processed_sheets.add(name)
+
+            # 4. Четвертая группа: Все остальные (неизвестные) листы
+            for name in current_names:
+                if name not in processed_sheets:
+                    target_order.append(name)
+                    processed_sheets.add(name)
 
             if hasattr(self, "logging_service") and self.logging_service:
                 self.logging_service.add_log(
