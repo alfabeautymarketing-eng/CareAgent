@@ -111,7 +111,7 @@ class SheetsService:
             # 2) Contains "производ" fallback for manufacturer
             if "производ" in norm_target:
                 for i, h in enumerate(headers):
-                    if "производ" in _normalize(h):
+                    if "производ" in _normalize(h) or "произв" in _normalize(h):
                         return i
 
             # 3) Substring match

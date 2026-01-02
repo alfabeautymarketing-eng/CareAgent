@@ -1,5 +1,6 @@
-Use 'bd' for task tracking. EVERY session MUST start with `bd ready` or `bd create`.
-No work is allowed without an active issue in `beads`.
+Use 'bd' for task tracking. EVERY session and EVERY task (no matter how small) MUST start with `bd ready` or `bd create`.
+No work is allowed, and NO code changes are permitted without an active issue in `beads`. NO EXCEPTIONS.
+LANGUAGE: Interact ONLY in Russian language.
 
 ## Landing the Plane (Session Completion)
 

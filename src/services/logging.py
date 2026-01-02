@@ -64,15 +64,31 @@ class LoggingService:
 
     def add_log(self, spreadsheet_id: str, category: str, action: str, details: str, status: str):
         """
-        Append a row to 'Логи' sheet.
+        Append a row to 'Логи' sheet with retry logic.
         """
-        try:
-            ws = self.sheets_service.get_worksheet(spreadsheet_id, self.log_sheet_name)
-            timestamp = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-            row = [timestamp, category, action, details, status]
-            ws.append_row(row)
-        except Exception as e:
-            # Fallback to internal logger if sheet logging fails
-            logger.error("internal_log_failed", error=str(e), action=action)
+        import time
+        max_retries = 3
+        
+        timestamp = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        row = [timestamp, category, action, details, status]
+        
+        for attempt in range(max_retries):
+            try:
+                ws = self.sheets_service.get_worksheet(spreadsheet_id, self.log_sheet_name)
+                ws.append_row(row)
+                return  # Success
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(1 * (attempt + 1))  # Backoff: 1s, 2s...
+                    continue
+                
+                # Final failure: fall back to internal logger
+                logger.error("log_append_failed_final", error=str(e), action=action, spreadsheet_id=spreadsheet_id)
+                # Ensure we don't crash main thread just because log failed
+                try:
+                    # Additional fallback: print to stdout/stderr or file if really critical
+                    pass
+                except:
+                    pass
 
 logging_service = None # Dependency injection hint

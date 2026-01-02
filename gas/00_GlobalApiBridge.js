@@ -775,3 +775,1211 @@ function serverProcessPricePreview(project, mode) {
     throw new Error('callServerProcessPrice не определена');
   });
 }
+
+function serverSmartMatch(productName) {
+  return _loggedCall_("serverSmartMatch", function() {
+    if (typeof callServerSmartMatch === 'function') {
+      return callServerSmartMatch(productName);
+    }
+    throw new Error('callServerSmartMatch не определена');
+  });
+}
+
+// ============ КАСКАДНЫЕ ПРАВИЛА (PYTHON SERVER) ============
+// Эти функции перенаправляют обработку каскадов на Python сервер
+
+/**
+ * Пересчёт каскадов для всего листа Сертификация через сервер
+ * Эквивалент GAS runManualCascadeOnCertification()
+ */
+function serverRecalculateCascades() {
+  return _loggedCall_("serverRecalculateCascades", function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ui = SpreadsheetApp.getUi();
+
+    const resp = ui.alert(
+      "Пересчёт каскадов",
+      'Пересчитать все строки на листе "Сертификация"?',
+      ui.ButtonSet.YES_NO
+    );
+    if (resp !== ui.Button.YES) return { status: 'cancelled' };
+
+    ss.toast("Пересчёт каскадов...", "Выполнение", 30);
+
+    try {
+      const result = callServerCascade({
+        spreadsheet_id: ss.getId(),
+        sheet_name: 'Сертификация',
+        dry_run: false
+      });
+
+      if (result && result.status === 'success') {
+        ss.toast(
+          'Обработано: ' + (result.processed || 0) + ', изменено: ' + (result.changed || 0),
+          '✅ Готово',
+          5
+        );
+        ui.alert('Каскады пересчитаны.');
+      } else {
+        ui.alert('Ошибка: ' + (result.message || 'Неизвестная ошибка'));
+      }
+
+      return result;
+    } catch (err) {
+      ss.toast('Ошибка пересчёта', 'Ошибка', 3);
+      ui.alert('Ошибка: ' + err.message);
+      throw err;
+    }
+  });
+}
+
+/**
+ * Обработка каскада для одной строки
+ * @param {number} row - Номер строки
+ * @param {string} column - Изменённая колонка
+ * @param {string} [value] - Новое значение (опционально)
+ */
+function serverProcessCascadeRow(row, column, value) {
+  return _loggedCall_("serverProcessCascadeRow", function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    const result = callServerCascade({
+      spreadsheet_id: ss.getId(),
+      sheet_name: 'Сертификация',
+      row: row,
+      changed_column: column,
+      new_value: value,
+      dry_run: false
+    });
+
+    return result;
+  });
+}
+
+/**
+ * Вызов сервера для обработки каскадов
+ * @param {Object} params - Параметры запроса
+ */
+function callServerCascade(params) {
+  const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+  const endpoint = params.row ? '/api/v1/cascade/process' : '/api/v1/cascade/recalculate-all';
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      spreadsheet_id: params.spreadsheet_id,
+      sheet_name: params.sheet_name || 'Сертификация',
+      row: params.row || null,
+      changed_column: params.changed_column || null,
+      new_value: params.new_value || null,
+      dry_run: params.dry_run || false
+    }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(BASE_URL + endpoint, options);
+    const status = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (status >= 200 && status < 300) {
+      return JSON.parse(text);
+    } else {
+      console.error('Cascade server error: ' + status + ' - ' + text);
+      return { status: 'error', message: 'Server returned ' + status };
+    }
+  } catch (err) {
+    console.error('Cascade request failed: ' + err.message);
+    return { status: 'error', message: err.message };
+  }
+}
+
+// ============ СТАДИИ ЗАКАЗА (PYTHON SERVER) ============
+// Эти функции перенаправляют фильтрацию стадий на Python сервер
+
+/**
+ * Показать все данные на листе Заказ (снять все фильтры)
+ * Эквивалент GAS showAllOrderData()
+ */
+function serverShowAllOrderData() {
+  return _loggedCall_("serverShowAllOrderData", function() {
+    return _callServerOrderFilter('all');
+  });
+}
+
+/**
+ * Показать стадию "Заказ"
+ * Эквивалент GAS showOrderStage()
+ */
+function serverShowOrderStage() {
+  return _loggedCall_("serverShowOrderStage", function() {
+    return _callServerOrderFilter('order');
+  });
+}
+
+/**
+ * Показать стадию "Акции"
+ * Эквивалент GAS showPromotionsStage()
+ */
+function serverShowPromotionsStage() {
+  return _loggedCall_("serverShowPromotionsStage", function() {
+    return _callServerOrderFilter('promotions');
+  });
+}
+
+/**
+ * Показать стадию "Набор"
+ * Эквивалент GAS showSetStage()
+ */
+function serverShowSetStage() {
+  return _loggedCall_("serverShowSetStage", function() {
+    return _callServerOrderFilter('set');
+  });
+}
+
+/**
+ * Показать стадию "Прайс"
+ * Эквивалент GAS showPriceStage()
+ */
+function serverShowPriceStage() {
+  return _loggedCall_("serverShowPriceStage", function() {
+    return _callServerOrderFilter('price');
+  });
+}
+
+/**
+ * Вызов сервера для фильтрации стадий заказа
+ * @param {string} stage - Стадия (all, order, promotions, set, price)
+ * @private
+ */
+function _callServerOrderFilter(stage) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const menuTitle = "Стадии по заказ";
+
+  ss.toast("Применяю фильтр '" + stage + "'...", menuTitle, 30);
+
+  const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      spreadsheet_id: ss.getId(),
+      stage: stage,
+      sheet_name: 'Заказ',
+      dry_run: false
+    }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(BASE_URL + '/api/v1/order/filter', options);
+    const status = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (status >= 200 && status < 300) {
+      const result = JSON.parse(text);
+
+      if (result && result.status === 'success') {
+        const stageNames = {
+          'all': 'Все данные',
+          'order': 'Заказ',
+          'promotions': 'Акции',
+          'set': 'Набор',
+          'price': 'Прайс'
+        };
+        ss.toast(
+          'Фильтр "' + (stageNames[stage] || stage) + '" применён. Скрыто строк: ' + result.hidden_rows,
+          '✅ Готово',
+          5
+        );
+      } else {
+        ui.alert('Ошибка', result.message || 'Неизвестная ошибка', ui.ButtonSet.OK);
+      }
+
+      return result;
+    } else {
+      console.error('Order filter server error: ' + status + ' - ' + text);
+      ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+      return { status: 'error', message: 'Server returned ' + status };
+    }
+  } catch (err) {
+    console.error('Order filter request failed: ' + err.message);
+    ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+    return { status: 'error', message: err.message };
+  }
+}
+
+// ============ ВЫГРУЗКА ДАННЫХ (PYTHON SERVER) ============
+// Эти функции перенаправляют выгрузку акций и наборов на Python сервер
+
+/**
+ * Выгрузка акций через сервер
+ * Эквивалент GAS exportPromotions()
+ */
+function serverExportPromotions() {
+  return _loggedCall_("serverExportPromotions", function() {
+    return _callServerExport('promotions');
+  });
+}
+
+/**
+ * Выгрузка наборов через сервер
+ * Эквивалент GAS exportSets()
+ */
+function serverExportSets() {
+  return _loggedCall_("serverExportSets", function() {
+    return _callServerExport('sets');
+  });
+}
+
+/**
+ * Вызов сервера для выгрузки данных
+ * @param {string} exportType - Тип выгрузки (promotions, sets)
+ * @private
+ */
+function _callServerExport(exportType) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const menuTitle = "Выгрузка";
+
+  // Определяем проект
+  const projectKey = (typeof CONFIG !== 'undefined' && CONFIG.ACTIVE_PROJECT_KEY)
+    ? CONFIG.ACTIVE_PROJECT_KEY.toLowerCase()
+    : null;
+
+  if (!projectKey) {
+    ui.alert('Ошибка', 'Проект не определен.', ui.ButtonSet.OK);
+    return { status: 'error', message: 'Project not defined' };
+  }
+
+  const typeName = exportType === 'promotions' ? 'акций' : 'наборов';
+  ss.toast('Выгрузка ' + typeName + '...', menuTitle, 30);
+
+  const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+  const endpoint = '/api/v1/export/' + exportType;
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      spreadsheet_id: ss.getId(),
+      project: projectKey,
+      dry_run: false
+    }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(BASE_URL + endpoint, options);
+    const status = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (status >= 200 && status < 300) {
+      const result = JSON.parse(text);
+
+      if (result && result.status === 'success') {
+        ss.toast(
+          'Выгружено строк: ' + result.exported_rows + '\nЛист: ' + result.target_sheet_name,
+          '✅ Готово',
+          5
+        );
+        ui.alert(
+          'Успех',
+          'Выгрузка ' + typeName + ' завершена.\n' +
+          'Записано строк: ' + result.exported_rows + '\n' +
+          'Документ: ' + result.target_url,
+          ui.ButtonSet.OK
+        );
+      } else {
+        ui.alert('Ошибка', result.message || 'Неизвестная ошибка', ui.ButtonSet.OK);
+      }
+
+      return result;
+    } else {
+      console.error('Export server error: ' + status + ' - ' + text);
+      ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+      return { status: 'error', message: 'Server returned ' + status };
+    }
+  } catch (err) {
+    console.error('Export request failed: ' + err.message);
+    ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+    ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
+    return { status: 'error', message: err.message };
+  }
+}
+
+// ============ ИНВОЙСЫ (PYTHON SERVER) ============
+// Эти функции перенаправляют обработку инвойсов на Python сервер
+
+/**
+ * Форматирование листа "Ордер" через сервер
+ * Нормализует числовые колонки (кол-во, Цена ед., Сумма)
+ * Эквивалент GAS formatOrderSheet()
+ */
+function serverFormatOrderSheet() {
+  return _loggedCall_("serverFormatOrderSheet", function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ui = SpreadsheetApp.getUi();
+
+    ss.toast('Форматирование листа "Ордер"...', 'Поставка', 30);
+
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        spreadsheet_id: ss.getId(),
+        sheet_name: 'Ордер',
+        dry_run: false
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      const response = UrlFetchApp.fetch(BASE_URL + '/api/v1/invoice/format-order', options);
+      const status = response.getResponseCode();
+      const text = response.getContentText();
+
+      if (status >= 200 && status < 300) {
+        const result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          ss.toast(
+            'Отформатировано строк: ' + result.rows_processed,
+            '✅ Готово',
+            5
+          );
+          ui.alert('Форматирование завершено', 'Обработано строк: ' + result.rows_processed, ui.ButtonSet.OK);
+        } else {
+          ui.alert('Ошибка', result.message || 'Неизвестная ошибка', ui.ButtonSet.OK);
+        }
+
+        return result;
+      } else {
+        console.error('Invoice format server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Invoice format request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+/**
+ * Создание листа "Для инвойса" через сервер
+ * Объединяет данные из Ордер, Сертификация, Этикетки
+ * Эквивалент GAS createFullInvoice()
+ */
+function serverCreateFullInvoice() {
+  return _loggedCall_("serverCreateFullInvoice", function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ui = SpreadsheetApp.getUi();
+
+    ss.toast('Создание листа "Для инвойса"...', 'Поставка', 60);
+
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        spreadsheet_id: ss.getId(),
+        order_sheet: 'Ордер',
+        certification_sheet: 'Сертификация',
+        labels_sheet: 'Этикетки',
+        target_sheet: 'Для инвойса',
+        dry_run: false
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      const response = UrlFetchApp.fetch(BASE_URL + '/api/v1/invoice/create-full', options);
+      const status = response.getResponseCode();
+      const text = response.getContentText();
+
+      if (status >= 200 && status < 300) {
+        const result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          ss.toast(
+            'Создан лист "' + result.target_sheet + '" с ' + result.rows_processed + ' строками',
+            '✅ Готово',
+            5
+          );
+          ui.alert(
+            'Успех',
+            'Лист "Для инвойса" создан.\nЗаписано строк: ' + result.rows_processed,
+            ui.ButtonSet.OK
+          );
+        } else {
+          ui.alert('Ошибка', result.message || 'Неизвестная ошибка', ui.ButtonSet.OK);
+        }
+
+        return result;
+      } else {
+        console.error('Invoice create server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Invoice create request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+// ============ СЕРТИФИКАЦИЯ (PYTHON SERVER) ============
+// Эти функции перенаправляют операции сертификации на Python сервер
+
+/**
+ * Создание листа новинок из Сертификации через сервер
+ * Эквивалент GAS createNewsSheetFromCertification()
+ */
+function serverCreateNewsSheet() {
+  return _loggedCall_("serverCreateNewsSheet", function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ui = SpreadsheetApp.getUi();
+
+    ss.toast('Создание листа "New sert"...', 'Сертификация', 30);
+
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        spreadsheet_id: ss.getId(),
+        source_sheet: 'Сертификация',
+        target_sheet: 'New sert',
+        dry_run: false
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      const response = UrlFetchApp.fetch(BASE_URL + '/api/v1/certification/news-sheet', options);
+      const status = response.getResponseCode();
+      const text = response.getContentText();
+
+      if (status >= 200 && status < 300) {
+        const result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          ss.toast(
+            'Создан лист "' + result.sheet_name + '" с ' + result.rows_affected + ' новинками',
+            '✅ Готово',
+            5
+          );
+          ui.alert(
+            'Успех',
+            'Лист новинок создан.\nНайдено новинок: ' + result.rows_affected,
+            ui.ButtonSet.OK
+          );
+        } else {
+          ui.alert('Ошибка', result.message || 'Неизвестная ошибка', ui.ButtonSet.OK);
+        }
+
+        return result;
+      } else {
+        console.error('News sheet server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('News sheet request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+/**
+ * Расчёт номеров спиртов через сервер
+ * Эквивалент GAS calculateAndAssignSpiritNumbers()
+ */
+function serverCalculateSpiritNumbers() {
+  return _loggedCall_("serverCalculateSpiritNumbers", function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ui = SpreadsheetApp.getUi();
+
+    ss.toast('Расчёт номеров спиртов...', 'Сертификация', 30);
+
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        spreadsheet_id: ss.getId(),
+        sheet_name: 'Сертификация',
+        dry_run: false
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      const response = UrlFetchApp.fetch(BASE_URL + '/api/v1/certification/spirits/calculate', options);
+      const status = response.getResponseCode();
+      const text = response.getContentText();
+
+      if (status >= 200 && status < 300) {
+        const result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          ss.toast(
+            'Рассчитано строк: ' + result.rows_affected,
+            '✅ Готово',
+            5
+          );
+          ui.alert('Расчёт завершён', result.message, ui.ButtonSet.OK);
+        } else if (result && result.status === 'not_implemented') {
+          ui.alert('В разработке', result.message, ui.ButtonSet.OK);
+        } else {
+          ui.alert('Ошибка', result.message || 'Неизвестная ошибка', ui.ButtonSet.OK);
+        }
+
+        return result;
+      } else {
+        console.error('Spirit calc server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Spirit calc request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+/**
+ * Генерация протоколов 353пп через сервер
+ * Эквивалент GAS generateProtocols_353pp()
+ */
+function serverGenerateProtocols353pp() {
+  return _loggedCall_("serverGenerateProtocols353pp", function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ui = SpreadsheetApp.getUi();
+
+    ss.toast('Генерация протоколов 353пп...', 'Сертификация', 60);
+
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        spreadsheet_id: ss.getId(),
+        protocol_type: '353pp',
+        dry_run: false
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      const response = UrlFetchApp.fetch(BASE_URL + '/api/v1/certification/protocols-353pp', options);
+      const status = response.getResponseCode();
+      const text = response.getContentText();
+
+      if (status >= 200 && status < 300) {
+        const result = JSON.parse(text);
+
+        if (result && result.status === 'not_implemented') {
+          ui.alert(
+            'В разработке',
+            result.message + '\n\n' + (result.hint || ''),
+            ui.ButtonSet.OK
+          );
+        } else if (result && result.status === 'success') {
+          ss.toast('Протоколы сгенерированы', '✅ Готово', 5);
+          ui.alert('Успех', result.message, ui.ButtonSet.OK);
+        } else {
+          ui.alert('Ошибка', result.message || 'Неизвестная ошибка', ui.ButtonSet.OK);
+        }
+
+        return result;
+      } else {
+        console.error('Protocols server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Protocols request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+/**
+ * Генерация макетов ДС через сервер
+ * Эквивалент GAS generateDsLayouts_353pp()
+ */
+function serverGenerateDsLayouts() {
+  return _loggedCall_("serverGenerateDsLayouts", function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ui = SpreadsheetApp.getUi();
+
+    ss.toast('Генерация макетов ДС...', 'Сертификация', 60);
+
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        spreadsheet_id: ss.getId(),
+        dry_run: false
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      const response = UrlFetchApp.fetch(BASE_URL + '/api/v1/certification/ds-layouts', options);
+      const status = response.getResponseCode();
+      const text = response.getContentText();
+
+      if (status >= 200 && status < 300) {
+        const result = JSON.parse(text);
+
+        if (result && result.status === 'not_implemented') {
+          ui.alert(
+            'В разработке',
+            result.message + '\n\n' + (result.hint || ''),
+            ui.ButtonSet.OK
+          );
+        } else if (result && result.status === 'success') {
+          ss.toast('Макеты ДС сгенерированы', '✅ Готово', 5);
+          ui.alert('Успех', result.message, ui.ButtonSet.OK);
+        } else {
+          ui.alert('Ошибка', result.message || 'Неизвестная ошибка', ui.ButtonSet.OK);
+        }
+
+        return result;
+      } else {
+        console.error('DS layouts server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('DS layouts request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+
+// =======================================================================================
+// FORMULA OPERATIONS (Python Server)
+// =======================================================================================
+
+/**
+ * Recalculate price dynamics formulas via Python server.
+ * Calculates EXW ALFASPA, Purchase price, DDP, and Growth for all year blocks.
+ *
+ * Equivalent to local Lib.recalculatePriceDynamicsFormulas().
+ *
+ * @param {string} sheetName - Optional sheet name (default: "Динамика цены")
+ * @param {boolean} dryRun - If true, only preview changes
+ * @returns {Object} Result with blocks_processed, rows_updated, message
+ */
+function serverRecalculatePriceDynamicsFormulas(sheetName, dryRun) {
+  return _withLock('formulaPriceDynamics', function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ui = SpreadsheetApp.getUi();
+    var spreadsheetId = ss.getId();
+
+    ss.toast('Пересчитываю формулы Динамика цены...', 'Python сервер', -1);
+
+    try {
+      var url = SERVER_URL + '/formulas/price-dynamics';
+      var payload = {
+        spreadsheet_id: spreadsheetId,
+        sheet_name: sheetName || 'Динамика цены',
+        dry_run: !!dryRun
+      };
+
+      var options = {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true,
+        headers: _getAuthHeaders()
+      };
+
+      var response = UrlFetchApp.fetch(url, options);
+      var status = response.getResponseCode();
+      var text = response.getContentText();
+
+      if (status === 200) {
+        var result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          ss.toast(
+            'Обработано ' + (result.blocks_processed || 0) + ' блоков, ' +
+            (result.rows_updated || 0) + ' строк',
+            '✅ Готово', 5
+          );
+        } else {
+          ss.toast(result.message || 'Ошибка', 'Ошибка', 3);
+        }
+
+        return result;
+      } else {
+        console.error('Price dynamics formulas server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Price dynamics formulas request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+
+/**
+ * Update price calculation formulas via Python server.
+ * Pulls data from Price Dynamics sheet using INDEX/MATCH logic.
+ *
+ * Equivalent to local Lib.updatePriceCalculationFormulas().
+ *
+ * @param {boolean} silent - If true, suppress notifications
+ * @param {boolean} dryRun - If true, only preview changes
+ * @returns {Object} Result with rows_updated, message
+ */
+function serverUpdatePriceCalculationFormulas(silent, dryRun) {
+  return _withLock('formulaPriceCalc', function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ui = SpreadsheetApp.getUi();
+    var spreadsheetId = ss.getId();
+
+    if (!silent) {
+      ss.toast('Обновляю формулы Расчет цены...', 'Python сервер', -1);
+    }
+
+    try {
+      var url = SERVER_URL + '/formulas/price-calculation';
+      var payload = {
+        spreadsheet_id: spreadsheetId,
+        price_calc_sheet: 'Расчет цены',
+        price_dynamics_sheet: 'Динамика цены',
+        silent: !!silent,
+        dry_run: !!dryRun
+      };
+
+      var options = {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true,
+        headers: _getAuthHeaders()
+      };
+
+      var response = UrlFetchApp.fetch(url, options);
+      var status = response.getResponseCode();
+      var text = response.getContentText();
+
+      if (status === 200) {
+        var result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          if (!silent) {
+            ss.toast(
+              'Обновлено ' + (result.rows_updated || 0) + ' строк',
+              '✅ Готово', 5
+            );
+          }
+        } else if (!silent) {
+          ss.toast(result.message || 'Ошибка', 'Ошибка', 3);
+        }
+
+        return result;
+      } else {
+        console.error('Price calc formulas server error: ' + status + ' - ' + text);
+        if (!silent) {
+          ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        }
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Price calc formulas request failed: ' + err.message);
+      if (!silent) {
+        ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      }
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+
+/**
+ * Add new year columns to price dynamics sheet via Python server.
+ * Inserts 7 columns after "Комментарий" with proper headers and formatting.
+ *
+ * Equivalent to local Lib.addNewYearColumnsToPriceDynamics().
+ *
+ * @param {number} year - Optional year (default: current year)
+ * @param {boolean} dryRun - If true, only preview changes
+ * @returns {Object} Result with columns_added, year, message
+ */
+function serverAddNewYearColumns(year, dryRun) {
+  return _withLock('formulaAddYear', function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ui = SpreadsheetApp.getUi();
+    var spreadsheetId = ss.getId();
+
+    var targetYear = year || new Date().getFullYear();
+    ss.toast('Добавляю столбцы за ' + targetYear + ' год...', 'Python сервер', -1);
+
+    try {
+      var url = SERVER_URL + '/formulas/add-year-columns';
+      var payload = {
+        spreadsheet_id: spreadsheetId,
+        sheet_name: 'Динамика цены',
+        year: targetYear,
+        dry_run: !!dryRun
+      };
+
+      var options = {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true,
+        headers: _getAuthHeaders()
+      };
+
+      var response = UrlFetchApp.fetch(url, options);
+      var status = response.getResponseCode();
+      var text = response.getContentText();
+
+      if (status === 200) {
+        var result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          ss.toast(
+            'Добавлено ' + (result.columns_added || 0) + ' столбцов за ' +
+            (result.year || targetYear) + ' год',
+            '✅ Готово', 5
+          );
+          ui.alert(
+            'Успех',
+            'Добавлены столбцы за ' + (result.year || targetYear) + ' год.\n' +
+            result.message,
+            ui.ButtonSet.OK
+          );
+        } else if (result && result.status === 'exists') {
+          ss.toast('Блок за ' + targetYear + ' год уже существует', 'Инфо', 3);
+          ui.alert('Информация', result.message, ui.ButtonSet.OK);
+        } else {
+          ss.toast(result.message || 'Ошибка', 'Ошибка', 3);
+          ui.alert('Ошибка', result.message || 'Неизвестная ошибка', ui.ButtonSet.OK);
+        }
+
+        return result;
+      } else {
+        console.error('Add year columns server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Add year columns request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+
+// =======================================================================================
+// LOG ARCHIVING (Python Server)
+// =======================================================================================
+
+/**
+ * Archive logs to monthly spreadsheet via Python server.
+ * Copies data from log sheets to Drive archive folder.
+ *
+ * Equivalent to local Lib.archiveLogsDaily().
+ *
+ * @param {string} archiveFolderId - ID of Drive folder for archives
+ * @param {string} projectCode - Project code (mt, sk, ss)
+ * @param {boolean} dryRun - If true, only preview changes
+ * @returns {Object} Result with total_rows, sheets_archived, archive_name
+ */
+function serverArchiveLogsDaily(archiveFolderId, projectCode, dryRun) {
+  return _withLock('logArchive', function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ui = SpreadsheetApp.getUi();
+    var spreadsheetId = ss.getId();
+
+    ss.toast('Архивирую логи...', 'Python сервер', -1);
+
+    try {
+      var url = SERVER_URL + '/logs/archive';
+      var payload = {
+        spreadsheet_id: spreadsheetId,
+        archive_folder_id: archiveFolderId || '',
+        project_code: projectCode || 'project',
+        dry_run: !!dryRun
+      };
+
+      var options = {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true,
+        headers: _getAuthHeaders()
+      };
+
+      var response = UrlFetchApp.fetch(url, options);
+      var status = response.getResponseCode();
+      var text = response.getContentText();
+
+      if (status === 200) {
+        var result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          ss.toast(
+            'Архивировано ' + (result.total_rows || 0) + ' строк',
+            '✅ Готово', 5
+          );
+          ui.alert(
+            'Архивирование завершено',
+            'Архивировано ' + (result.total_rows || 0) + ' строк.\n\n' +
+            'Архив: ' + (result.archive_name || 'unknown'),
+            ui.ButtonSet.OK
+          );
+        } else {
+          ss.toast(result.message || 'Ошибка', 'Ошибка', 3);
+        }
+
+        return result;
+      } else {
+        console.error('Log archive server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Log archive request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+
+/**
+ * Reset log sheet via Python server.
+ * Clears all data rows, preserving headers.
+ *
+ * Equivalent to local Lib.resetDailyLogSheet().
+ *
+ * @param {string} sheetName - Name of log sheet to reset (default: Логи)
+ * @param {boolean} dryRun - If true, only preview changes
+ * @returns {Object} Result with rows cleared
+ */
+function serverResetLogSheet(sheetName, dryRun) {
+  return _withLock('logReset', function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var spreadsheetId = ss.getId();
+
+    ss.toast('Очищаю лист логов...', 'Python сервер', -1);
+
+    try {
+      var url = SERVER_URL + '/logs/reset';
+      var payload = {
+        spreadsheet_id: spreadsheetId,
+        sheet_name: sheetName || 'Логи',
+        dry_run: !!dryRun
+      };
+
+      var options = {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true,
+        headers: _getAuthHeaders()
+      };
+
+      var response = UrlFetchApp.fetch(url, options);
+      var status = response.getResponseCode();
+      var text = response.getContentText();
+
+      if (status === 200) {
+        var result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          ss.toast(
+            'Очищено ' + (result.total_rows || 0) + ' строк',
+            '✅ Готово', 5
+          );
+        } else {
+          ss.toast(result.message || 'Ошибка', 'Ошибка', 3);
+        }
+
+        return result;
+      } else {
+        console.error('Log reset server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Log reset request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+
+/**
+ * Perform midnight log rotation via Python server.
+ * Archives logs and resets all log sheets.
+ *
+ * Equivalent to local Lib.midnightLogRotation().
+ *
+ * @param {string} archiveFolderId - ID of Drive folder for archives
+ * @param {string} projectCode - Project code (mt, sk, ss)
+ * @param {boolean} force - Force rotation even if already done today
+ * @param {boolean} dryRun - If true, only preview changes
+ * @returns {Object} Result with rotation details
+ */
+function serverMidnightLogRotation(archiveFolderId, projectCode, force, dryRun) {
+  return _withLock('logRotation', function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ui = SpreadsheetApp.getUi();
+    var spreadsheetId = ss.getId();
+
+    ss.toast('Выполняю ротацию логов...', 'Python сервер', -1);
+
+    try {
+      var url = SERVER_URL + '/logs/rotation';
+      var payload = {
+        spreadsheet_id: spreadsheetId,
+        archive_folder_id: archiveFolderId || '',
+        project_code: projectCode || 'project',
+        force: !!force,
+        dry_run: !!dryRun
+      };
+
+      var options = {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true,
+        headers: _getAuthHeaders()
+      };
+
+      var response = UrlFetchApp.fetch(url, options);
+      var status = response.getResponseCode();
+      var text = response.getContentText();
+
+      if (status === 200) {
+        var result = JSON.parse(text);
+
+        if (result && result.status === 'success') {
+          ss.toast(
+            'Ротация завершена: ' + (result.total_rows || 0) + ' строк',
+            '✅ Готово', 5
+          );
+          ui.alert(
+            'Ротация логов завершена',
+            result.message || 'Логи архивированы и листы очищены',
+            ui.ButtonSet.OK
+          );
+        } else if (result && result.status === 'skipped') {
+          ss.toast('Ротация пропущена: уже выполнена сегодня', 'Инфо', 3);
+        } else {
+          ss.toast(result.message || 'Ошибка', 'Ошибка', 3);
+        }
+
+        return result;
+      } else {
+        console.error('Log rotation server error: ' + status + ' - ' + text);
+        ss.toast('Ошибка сервера: ' + status, 'Ошибка', 3);
+        return { status: 'error', message: 'Server returned ' + status };
+      }
+    } catch (err) {
+      console.error('Log rotation request failed: ' + err.message);
+      ss.toast('Ошибка: ' + err.message, 'Ошибка', 3);
+      return { status: 'error', message: err.message };
+    }
+  });
+}
+
+
+/**
+ * Get log archive status via Python server.
+ *
+ * Equivalent to local Lib.showArchiveStatus().
+ *
+ * @param {string} projectCode - Project code (mt, sk, ss)
+ * @returns {Object} Status information
+ */
+function serverGetLogStatus(projectCode) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ui = SpreadsheetApp.getUi();
+  var spreadsheetId = ss.getId();
+
+  try {
+    var url = SERVER_URL + '/logs/status?spreadsheet_id=' +
+              encodeURIComponent(spreadsheetId) +
+              '&project_code=' + encodeURIComponent(projectCode || 'project');
+
+    var options = {
+      method: 'get',
+      muteHttpExceptions: true,
+      headers: _getAuthHeaders()
+    };
+
+    var response = UrlFetchApp.fetch(url, options);
+    var status = response.getResponseCode();
+    var text = response.getContentText();
+
+    if (status === 200) {
+      var result = JSON.parse(text);
+
+      var msg = '📊 СТАТУС АРХИВИРОВАНИЯ ЛОГОВ\n\n';
+      msg += '📅 Последнее архивирование: ' + (result.last_archive_date || 'Никогда') + '\n';
+      msg += '📁 Текущий архив: ' + (result.current_archive_name || '-') + '\n';
+      msg += '📝 Ожидает архивации: ' + (result.total_pending_rows || 0) + ' строк\n\n';
+
+      if (result.current_row_counts) {
+        msg += 'По листам:\n';
+        for (var sheet in result.current_row_counts) {
+          msg += '  • ' + sheet + ': ' + result.current_row_counts[sheet] + ' строк\n';
+        }
+      }
+
+      ui.alert('Статус архивирования', msg, ui.ButtonSet.OK);
+
+      return result;
+    } else {
+      console.error('Log status server error: ' + status + ' - ' + text);
+      ui.alert('Ошибка', 'Ошибка сервера: ' + status, ui.ButtonSet.OK);
+      return { status: 'error', message: 'Server returned ' + status };
+    }
+  } catch (err) {
+    console.error('Log status request failed: ' + err.message);
+    ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
+    return { status: 'error', message: err.message };
+  }
+}

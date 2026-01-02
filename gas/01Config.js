@@ -534,6 +534,7 @@
         { label: "⚙️ Настройки Gemini", fn: "setupGeminiComplete" },
         { label: "📋 Показать настройки", fn: "showGeminiSettings" },
         { separator: true },
+        { label: "🎯 Smart Match для строки", fn: "menuSmartMatch" },
         { label: "Анализировать выбранную строку", fn: "menuAnalyzeSelected" },
         { label: "Анализировать пустые строки", fn: "menuAnalyzeEmpty" },
         { separator: true },

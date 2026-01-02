@@ -783,6 +783,125 @@ function menuSimpleAnalyze() {
 }
 
 /**
+ * Call the Smart Match API on the Python server.
+ * Returns the match result or null.
+ * @param {string} productName - Name of the product to match
+ * @returns {Object|null} Match result
+ */
+function callServerSmartMatch(productName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheetId = ss.getId();
+    
+  // Default to "Сертификация" sheet, or we could pass it as an argument?
+  // For now, let's hardcode "Сертификация" as per the API default, but explicit is better.
+  const sheetName = "Сертификация"; 
+
+  const payload = {
+    product_name: productName,
+    spreadsheet_id: spreadsheetId,
+    sheet_name: sheetName
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/products/match', options);
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      return JSON.parse(text);
+    } else {
+      console.error('SmartMatch error (' + code + '): ' + text);
+      return null;
+    }
+  } catch (e) {
+    console.error('SmartMatch network error:', e);
+    return null;
+  }
+}
+
+/**
+ * Menu function: Smart Match for selected row.
+ * Reads product name from the selected row and finds matching base product.
+ * Найдёт базовый продукт для выбранной строки и предложит заполнение.
+ */
+function menuSmartMatch() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet();
+  const row = sheet.getActiveCell().getRow();
+
+  if (row < 2) {
+    ui.alert('⚠️ Внимание', 'Выберите строку данных (не заголовок)', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Получаем название продукта из колонки "Наименования англ по ДС" (обычно колонка C или D)
+  // Используем колонку E как основное название (или можно сделать динамически)
+  const productName = sheet.getRange(row, 5).getValue(); // Column E - Наименование
+
+  if (!productName) {
+    ui.alert('⚠️ Внимание', 'Название продукта (колонка E) пустое', ui.ButtonSet.OK);
+    return;
+  }
+
+  try {
+    ss.toast('⏳ Поиск базового продукта для: ' + productName.substring(0, 40) + '...', 'Smart Match', 30);
+
+    const result = callServerSmartMatch(productName);
+
+    if (!result) {
+      ui.alert('❌ Ошибка', 'Не удалось выполнить Smart Match. Проверьте логи.', ui.ButtonSet.OK);
+      return;
+    }
+
+    if (result.match_found) {
+      const matched = result.matched_product_details || {};
+      let msg = '✅ Найден базовый продукт!\\n\\n';
+      msg += '🎯 Matched ID: ' + result.matched_base_id + '\\n';
+      msg += '📊 Confidence: ' + (result.confidence_score || 'N/A') + '\\n\\n';
+      
+      if (matched.name_eng_ds) {
+        msg += '🇬🇧 Англ: ' + matched.name_eng_ds + '\\n';
+      }
+      if (matched.name_rus_ds) {
+        msg += '🇷🇺 Рус: ' + matched.name_rus_ds + '\\n';
+      }
+      
+      msg += '\\n📝 Причина: ' + (result.reasoning || 'N/A');
+
+      const confirm = ui.alert(
+        'Smart Match - Результат',
+        msg + '\\n\\nЗаполнить данные из базового продукта?',
+        ui.ButtonSet.YES_NO
+      );
+
+      if (confirm === ui.Button.YES) {
+        // TODO: Автозаполнение данных из matched_product_details
+        ss.toast('🚧 Автозаполнение пока не реализовано', 'Smart Match', 5);
+      }
+    } else {
+      ui.alert(
+        'Smart Match - Результат',
+        '❌ Совпадение не найдено\\n\\n' +
+        '📝 Причина: ' + (result.reasoning || 'Не указана') + '\\n\\n' +
+        'Продукт "' + productName + '" не соответствует ни одному базовому продукту.',
+        ui.ButtonSet.OK
+      );
+    }
+  } catch (e) {
+    ss.toast('❌ Ошибка', 'Smart Match', 3);
+    ui.alert('❌ Ошибка', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
  * Analyze all empty rows (rows with INCI link but no results).
  * Runs in background on the server.
  */

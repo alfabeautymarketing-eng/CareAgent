@@ -3,7 +3,7 @@ API endpoints for sync, price processing, AI analysis.
 """
 
 from datetime import datetime
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
@@ -181,7 +181,9 @@ async def sync_row(request: SyncRowRequest):
         raise HTTPException(status_code=400, detail=f"Could not resolve spreadsheet_id for project {request.project}")
 
     try:
+        logging_service.add_log(spreadsheet_id, "API", "Запрос синхронизации строки", f"Артикул: {request.article}, Проект: {request.project}", "🚀 START")
         result = sync_service.sync_row(spreadsheet_id, request.project, request.article, request.source_sheet)
+        logging_service.add_log(spreadsheet_id, "API", "Синхронизация строки завершена", f"Артикул: {request.article}", "✅ OK")
         return {
             "task_id": f"row_{datetime.now().strftime('%Y%m%d%H%M%S')}",
             "status": "success",
@@ -190,6 +192,7 @@ async def sync_row(request: SyncRowRequest):
         }
     except Exception as e:
         logger.error("sync_row_endpoint_failed", error=str(e))
+        logging_service.add_log(spreadsheet_id, "API", "Ошибка синхронизации строки", str(e), "❌ ERR")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -256,6 +259,7 @@ async def add_article(request: AddArticleRequest):
         raise HTTPException(status_code=400, detail=f"Could not resolve spreadsheet_id")
 
     try:
+        logging_service.add_log(spreadsheet_id, "API", "Запрос на добавление артикула", f"Артикул: {request.article}", "🚀 START")
         details = await sync_service.add_article(spreadsheet_id, request.article, project_key)
         return {
             "status": "success",
@@ -281,6 +285,7 @@ async def delete_articles(request: DeleteArticlesRequest):
         raise HTTPException(status_code=400, detail=f"Could not resolve spreadsheet_id for project {request.project}")
 
     try:
+        logging_service.add_log(spreadsheet_id, "API", "Запрос на удаление артикулов", f"Количество: {len(request.articles)}", "🚀 START")
         result = sync_service.delete_articles(spreadsheet_id, request.articles)
         return {
             "status": "success",
@@ -620,6 +625,1063 @@ async def cancel_price_processing(task_id: str):
 
     # TODO: Cancel task
     return {"task_id": task_id, "status": "cancelled"}
+
+
+# ============== Cascade Processing ==============
+
+class CascadeProcessRequest(BaseModel):
+    """Request for cascade processing."""
+    spreadsheet_id: str
+    sheet_name: str = "Сертификация"
+    row: Optional[int] = None
+    changed_column: Optional[str] = None
+    new_value: Optional[str] = None
+    dry_run: bool = False
+
+
+class CascadeProcessResponse(BaseModel):
+    """Response from cascade processing."""
+    status: str
+    row: int = 0
+    changes: List[Dict[str, Any]] = []
+    applied: bool = False
+    message: str = ""
+
+
+@api_router.post("/cascade/process", response_model=CascadeProcessResponse)
+async def process_cascade(request: CascadeProcessRequest):
+    """
+    Process cascade rules for certification sheet.
+
+    When trigger columns change (Наименования рус по ДС, Наименования англ по ДС,
+    Объём, Код ТН ВЭД), recalculates derived fields:
+    - Объём англ. (volume in English)
+    - Наименование ДС (combined name)
+    - Наименование для инвойса (Russian invoice name)
+    - Наименование для инвойса Англ (English invoice name)
+
+    Args:
+        request: Cascade processing parameters
+
+    Returns:
+        List of changes made or preview if dry_run=True
+    """
+    from src.services.cascade_processor import get_cascade_processor
+
+    logger.info(
+        "cascade_process_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        sheet_name=request.sheet_name,
+        row=request.row,
+        column=request.changed_column,
+        dry_run=request.dry_run
+    )
+
+    try:
+        processor = get_cascade_processor(sheets_service)
+
+        if request.row and request.changed_column:
+            # Process single row
+            result = await processor.process_single_row(
+                spreadsheet_id=request.spreadsheet_id,
+                sheet_name=request.sheet_name,
+                row=request.row,
+                changed_column=request.changed_column,
+                new_value=request.new_value,
+                dry_run=request.dry_run
+            )
+
+            return CascadeProcessResponse(
+                status="success" if result.applied else "no_changes",
+                row=result.row,
+                changes=[
+                    {
+                        "column": c.column,
+                        "old_value": c.old_value,
+                        "new_value": c.new_value
+                    }
+                    for c in result.changes
+                ],
+                applied=result.applied,
+                message=result.message
+            )
+        else:
+            # Process all rows
+            summary = await processor.process_all_rows(
+                spreadsheet_id=request.spreadsheet_id,
+                sheet_name=request.sheet_name,
+                dry_run=request.dry_run
+            )
+
+            return CascadeProcessResponse(
+                status=summary.get("status", "error"),
+                changes=[],
+                applied=summary.get("changed", 0) > 0,
+                message=f"Processed {summary.get('processed', 0)} rows, {summary.get('changed', 0)} changed"
+            )
+
+    except Exception as e:
+        logger.error("cascade_process_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/cascade/recalculate-all")
+async def recalculate_all_cascades(request: CascadeProcessRequest):
+    """
+    Recalculate cascades for all rows in certification sheet.
+    Equivalent to GAS runManualCascadeOnCertification().
+    """
+    from src.services.cascade_processor import get_cascade_processor
+
+    logger.info(
+        "cascade_recalculate_all_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        dry_run=request.dry_run
+    )
+
+    try:
+        processor = get_cascade_processor(sheets_service)
+
+        result = await processor.process_all_rows(
+            spreadsheet_id=request.spreadsheet_id,
+            sheet_name=request.sheet_name,
+            dry_run=request.dry_run
+        )
+
+        return {
+            "status": result.get("status", "error"),
+            "total_rows": result.get("total_rows", 0),
+            "processed": result.get("processed", 0),
+            "changed": result.get("changed", 0),
+            "dry_run": result.get("dry_run", False),
+            "errors": result.get("errors", [])
+        }
+
+    except Exception as e:
+        logger.error("cascade_recalculate_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Order Stages ==============
+
+class OrderFilterRequest(BaseModel):
+    """Request for order stage filtering."""
+    spreadsheet_id: str
+    stage: str = "all"  # all, order, promotions, set, price
+    sheet_name: str = "Заказ"
+    dry_run: bool = False
+
+
+class OrderFilterResponse(BaseModel):
+    """Response from order stage filtering."""
+    status: str
+    stage: str
+    visible_rows: int = 0
+    hidden_rows: int = 0
+    hidden_columns: int = 0
+    message: str = ""
+
+
+@api_router.post("/order/filter", response_model=OrderFilterResponse)
+async def filter_order_stage(request: OrderFilterRequest):
+    """
+    Filter order sheet by stage.
+
+    Stages:
+    - all: Show all data (remove all filters)
+    - order: Show order-related columns
+    - promotions: Show promotion-related columns
+    - set: Show set-related columns
+    - price: Show price-related columns
+
+    Each stage hides specific columns and filters rows by status.
+    """
+    from src.services.order_service import get_order_service, OrderStageType
+
+    logger.info(
+        "order_filter_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        stage=request.stage,
+        dry_run=request.dry_run
+    )
+
+    try:
+        # Validate stage
+        try:
+            stage = OrderStageType(request.stage)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid stage: {request.stage}. Valid values: all, order, promotions, set, price"
+            )
+
+        service = get_order_service(sheets_service)
+
+        result = await service.apply_stage_filter(
+            spreadsheet_id=request.spreadsheet_id,
+            stage=stage,
+            sheet_name=request.sheet_name,
+            dry_run=request.dry_run
+        )
+
+        return OrderFilterResponse(
+            status="success",
+            stage=result.stage,
+            visible_rows=result.visible_rows,
+            hidden_rows=result.hidden_rows,
+            hidden_columns=result.hidden_columns,
+            message=result.message
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("order_filter_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/order/show-all")
+async def show_all_order_data(request: OrderFilterRequest):
+    """
+    Show all data on order sheet (remove all filters).
+    Equivalent to GAS showAllOrderData().
+    """
+    request.stage = "all"
+    return await filter_order_stage(request)
+
+
+# ============== Data Export ==============
+
+class ExportRequest(BaseModel):
+    """Request for data export."""
+    spreadsheet_id: str
+    project: str  # mt, sk, ss
+    target_doc_id: Optional[str] = None  # Override default target
+    dry_run: bool = False
+
+
+class ExportResponse(BaseModel):
+    """Response from data export."""
+    status: str
+    export_type: str
+    exported_rows: int = 0
+    target_doc_id: str = ""
+    target_sheet_name: str = ""
+    target_url: str = ""
+    message: str = ""
+
+
+@api_router.post("/export/promotions", response_model=ExportResponse)
+async def export_promotions(request: ExportRequest):
+    """
+    Export promotions data to target document.
+
+    Reads rows from "Заказ" sheet where "АКЦИИ" column has value,
+    enriches with data from "Главная" and "Сертификация",
+    then writes to target document.
+
+    Target documents by project:
+    - SK: 1YkGP-1Ipn7qLMKJyxLtm3ATrOhCxO2OuFLMt5WK8tsg
+    - SS: 1Q20jk9Cy8gIEJyKQ2-Ph34qqX3Y_oEdKAOK-o_oaFHQ
+    - MT: 140vuIAJ1dcuAoc10T5EnIFjx1lUq7e7oroBJlBs1TDA
+    """
+    from src.services.export_service import get_export_service, ExportType
+
+    logger.info(
+        "export_promotions_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        project=request.project,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_export_service(sheets_service)
+
+        result = await service.export(
+            spreadsheet_id=request.spreadsheet_id,
+            project=request.project,
+            export_type=ExportType.PROMOTIONS,
+            target_doc_id=request.target_doc_id,
+            dry_run=request.dry_run
+        )
+
+        return ExportResponse(
+            status="success",
+            export_type=result.export_type,
+            exported_rows=result.exported_rows,
+            target_doc_id=result.target_doc_id,
+            target_sheet_name=result.target_sheet_name,
+            target_url=result.target_url,
+            message=result.message
+        )
+
+    except Exception as e:
+        logger.error("export_promotions_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/export/sets", response_model=ExportResponse)
+async def export_sets(request: ExportRequest):
+    """
+    Export sets data to target document.
+
+    Reads rows from "Заказ" sheet where "Набор" column has value,
+    enriches with data from "Главная" and "Сертификация",
+    then writes to target document.
+    """
+    from src.services.export_service import get_export_service, ExportType
+
+    logger.info(
+        "export_sets_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        project=request.project,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_export_service(sheets_service)
+
+        result = await service.export(
+            spreadsheet_id=request.spreadsheet_id,
+            project=request.project,
+            export_type=ExportType.SETS,
+            target_doc_id=request.target_doc_id,
+            dry_run=request.dry_run
+        )
+
+        return ExportResponse(
+            status="success",
+            export_type=result.export_type,
+            exported_rows=result.exported_rows,
+            target_doc_id=result.target_doc_id,
+            target_sheet_name=result.target_sheet_name,
+            target_url=result.target_url,
+            message=result.message
+        )
+
+    except Exception as e:
+        logger.error("export_sets_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Certification ==============
+
+class CertificationNewsRequest(BaseModel):
+    """Request for creating news sheet."""
+    spreadsheet_id: str
+    source_sheet: str = "Сертификация"
+    target_sheet: str = "New sert"
+    dry_run: bool = False
+
+
+class CertificationSpiritsRequest(BaseModel):
+    """Request for spirit calculations."""
+    spreadsheet_id: str
+    sheet_name: str = "Сертификация"
+    dry_run: bool = False
+
+
+class CertificationProtocolsRequest(BaseModel):
+    """Request for protocol generation."""
+    spreadsheet_id: str
+    protocol_type: str = "353pp"
+    dry_run: bool = False
+
+
+class CertificationResponse(BaseModel):
+    """Response from certification operations."""
+    status: str
+    rows_affected: int = 0
+    sheet_name: str = ""
+    message: str = ""
+
+
+@api_router.post("/certification/news-sheet", response_model=CertificationResponse)
+async def create_news_sheet(request: CertificationNewsRequest):
+    """
+    Create "New sert" sheet from Certification sheet.
+
+    Filters rows where status indicates new products pending certification.
+    Creates a new sheet with summary of products needing attention.
+
+    Equivalent to GAS createNewsSheetFromCertification().
+    """
+    from src.services.certification_service import get_certification_service
+
+    logger.info(
+        "certification_news_sheet_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_certification_service(sheets_service)
+
+        result = await service.create_news_sheet(
+            spreadsheet_id=request.spreadsheet_id,
+            source_sheet=request.source_sheet,
+            target_sheet=request.target_sheet,
+            dry_run=request.dry_run
+        )
+
+        return CertificationResponse(
+            status=result.get("status", "error"),
+            rows_affected=result.get("rows_created", 0),
+            sheet_name=result.get("sheet_name", request.target_sheet),
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("certification_news_sheet_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/certification/spirits/calculate", response_model=CertificationResponse)
+async def calculate_spirits(request: CertificationSpiritsRequest):
+    """
+    Calculate and assign spirit numbers to certification rows.
+
+    Spirit numbers are required for products containing alcohol.
+
+    Equivalent to GAS calculateAndAssignSpiritNumbers().
+    """
+    from src.services.certification_service import get_certification_service
+
+    logger.info(
+        "certification_spirits_calculate_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_certification_service(sheets_service)
+
+        result = await service.calculate_spirit_numbers(
+            spreadsheet_id=request.spreadsheet_id,
+            sheet_name=request.sheet_name,
+            dry_run=request.dry_run
+        )
+
+        return CertificationResponse(
+            status=result.get("status", "error"),
+            rows_affected=result.get("calculated", 0),
+            sheet_name=request.sheet_name,
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("certification_spirits_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/certification/protocols-353pp", response_model=CertificationResponse)
+async def generate_protocols_353pp(request: CertificationProtocolsRequest):
+    """
+    Generate certification protocols for 353пп.
+
+    NOTE: This endpoint is a placeholder. Full implementation requires
+    Google Drive/Docs integration for document generation.
+
+    Equivalent to GAS generateProtocols_353pp().
+    """
+    from src.services.certification_service import get_certification_service
+
+    logger.info(
+        "certification_protocols_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        protocol_type=request.protocol_type
+    )
+
+    try:
+        service = get_certification_service(sheets_service)
+
+        result = await service.generate_protocols(
+            spreadsheet_id=request.spreadsheet_id,
+            protocol_type=request.protocol_type,
+            dry_run=request.dry_run
+        )
+
+        return CertificationResponse(
+            status=result.get("status", "error"),
+            rows_affected=0,
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("certification_protocols_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/certification/ds-layouts", response_model=CertificationResponse)
+async def generate_ds_layouts(request: CertificationProtocolsRequest):
+    """
+    Generate DS (Declaration of Safety) layouts.
+
+    NOTE: This endpoint is a placeholder. Full implementation requires
+    Google Drive/Docs integration for layout generation.
+
+    Equivalent to GAS generateDsLayouts_353pp().
+    """
+    from src.services.certification_service import get_certification_service
+
+    logger.info(
+        "certification_ds_layouts_requested",
+        spreadsheet_id=request.spreadsheet_id
+    )
+
+    try:
+        service = get_certification_service(sheets_service)
+
+        result = await service.generate_ds_layouts(
+            spreadsheet_id=request.spreadsheet_id,
+            dry_run=request.dry_run
+        )
+
+        return CertificationResponse(
+            status=result.get("status", "error"),
+            rows_affected=0,
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("certification_ds_layouts_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Invoice Processing ==============
+
+class InvoiceFormatRequest(BaseModel):
+    """Request for invoice formatting."""
+    spreadsheet_id: str
+    sheet_name: str = "Ордер"
+    dry_run: bool = False
+
+
+class InvoiceCreateRequest(BaseModel):
+    """Request for creating full invoice."""
+    spreadsheet_id: str
+    order_sheet: str = "Ордер"
+    certification_sheet: str = "Сертификация"
+    labels_sheet: str = "Этикетки"
+    target_sheet: str = "Для инвойса"
+    dry_run: bool = False
+
+
+class InvoiceResponse(BaseModel):
+    """Response from invoice operations."""
+    status: str
+    rows_processed: int = 0
+    target_sheet: str = ""
+    message: str = ""
+
+
+@api_router.post("/invoice/format-order", response_model=InvoiceResponse)
+async def format_order_sheet(request: InvoiceFormatRequest):
+    """
+    Format order sheet - normalize numeric columns.
+
+    Converts text numbers to actual numbers:
+    - Removes spaces, replaces comma with dot
+    - Columns: кол-во, Цена ед., Сумма
+
+    Equivalent to GAS formatOrderSheet().
+    """
+    from src.services.invoice_service import get_invoice_service
+
+    logger.info(
+        "invoice_format_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        sheet_name=request.sheet_name,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_invoice_service(sheets_service)
+
+        result = await service.format_order_sheet(
+            spreadsheet_id=request.spreadsheet_id,
+            sheet_name=request.sheet_name,
+            dry_run=request.dry_run
+        )
+
+        return InvoiceResponse(
+            status="success" if result.get("status") == "success" else "error",
+            rows_processed=result.get("rows_formatted", 0),
+            target_sheet=request.sheet_name,
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("invoice_format_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/invoice/create-full", response_model=InvoiceResponse)
+async def create_full_invoice(request: InvoiceCreateRequest):
+    """
+    Create full invoice sheet by joining data from multiple sheets.
+
+    Joins data from:
+    - Ордер: base order data (ID, article, quantity, prices)
+    - Сертификация: DS names, declarations, spirit info
+    - Этикетки: label descriptions
+
+    Creates "Для инвойса" sheet with combined data.
+
+    Equivalent to GAS createFullInvoice().
+    """
+    from src.services.invoice_service import get_invoice_service
+
+    logger.info(
+        "invoice_create_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_invoice_service(sheets_service)
+
+        result = await service.create_full_invoice(
+            spreadsheet_id=request.spreadsheet_id,
+            order_sheet=request.order_sheet,
+            certification_sheet=request.certification_sheet,
+            labels_sheet=request.labels_sheet,
+            target_sheet=request.target_sheet,
+            dry_run=request.dry_run
+        )
+
+        return InvoiceResponse(
+            status="success" if result.get("status") == "success" else "error",
+            rows_processed=result.get("rows_written", 0),
+            target_sheet=result.get("target_sheet", request.target_sheet),
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("invoice_create_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Formula Operations ==============
+
+class FormulaPriceDynamicsRequest(BaseModel):
+    """Request for price dynamics formula recalculation."""
+    spreadsheet_id: str
+    sheet_name: str = "Динамика цены"
+    dry_run: bool = False
+
+
+class FormulaPriceCalcRequest(BaseModel):
+    """Request for price calculation formula update."""
+    spreadsheet_id: str
+    price_calc_sheet: str = "Расчет цены"
+    price_dynamics_sheet: str = "Динамика цены"
+    silent: bool = False
+    dry_run: bool = False
+
+
+class FormulaAddYearRequest(BaseModel):
+    """Request for adding new year columns."""
+    spreadsheet_id: str
+    sheet_name: str = "Динамика цены"
+    year: Optional[int] = None
+    dry_run: bool = False
+
+
+class FormulaResponse(BaseModel):
+    """Response from formula operations."""
+    status: str
+    blocks_processed: int = 0
+    rows_updated: int = 0
+    columns_added: int = 0
+    year: Optional[int] = None
+    message: str = ""
+
+
+@api_router.post("/formulas/price-dynamics", response_model=FormulaResponse)
+async def recalculate_price_dynamics_formulas(request: FormulaPriceDynamicsRequest):
+    """
+    Recalculate price dynamics formulas.
+
+    Calculates for all year blocks:
+    - EXW ALFASPA = EXW * (1 - discount/100)
+    - Purchase price = EXW ALFASPA * currency_rate
+    - DDP = Purchase * DDP coefficient
+    - Growth EXW = current_year / prev_year - 1
+    - Growth DDP = current_year_ddp / prev_year_ddp - 1
+
+    Equivalent to GAS recalculatePriceDynamicsFormulas().
+    """
+    from src.services.formula_service import get_formula_service
+
+    logger.info(
+        "formula_price_dynamics_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        sheet_name=request.sheet_name,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_formula_service(sheets_service)
+
+        result = await service.recalculate_price_dynamics_formulas(
+            spreadsheet_id=request.spreadsheet_id,
+            sheet_name=request.sheet_name,
+            dry_run=request.dry_run
+        )
+
+        return FormulaResponse(
+            status=result.get("status", "error"),
+            blocks_processed=result.get("blocks_processed", 0),
+            rows_updated=result.get("rows_updated", 0),
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("formula_price_dynamics_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/formulas/price-calculation", response_model=FormulaResponse)
+async def update_price_calculation_formulas(request: FormulaPriceCalcRequest):
+    """
+    Update price calculation formulas (INDEX/MATCH lookups).
+
+    Pulls data from Price Dynamics sheet based on ID matching:
+    - EXW previous year
+    - EXW current year
+    - EXW ALFASPA current year
+    - Purchase price
+    - DDP
+
+    Equivalent to GAS updatePriceCalculationFormulas().
+    """
+    from src.services.formula_service import get_formula_service
+
+    logger.info(
+        "formula_price_calc_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        price_calc_sheet=request.price_calc_sheet,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_formula_service(sheets_service)
+
+        result = await service.update_price_calculation_formulas(
+            spreadsheet_id=request.spreadsheet_id,
+            price_calc_sheet=request.price_calc_sheet,
+            price_dynamics_sheet=request.price_dynamics_sheet,
+            silent=request.silent,
+            dry_run=request.dry_run
+        )
+
+        return FormulaResponse(
+            status=result.get("status", "error"),
+            rows_updated=result.get("rows_updated", 0),
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("formula_price_calc_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/formulas/add-year-columns", response_model=FormulaResponse)
+async def add_new_year_columns(request: FormulaAddYearRequest):
+    """
+    Add new year columns to price dynamics sheet.
+
+    Inserts 7 columns after "Комментарий":
+    - EXW {year}, €
+    - СКИДКА ОТ EXW {year}, %
+    - EXW ALFASPA {year}, €
+    - Закупочная цена {year}, ₽
+    - DDP-МОСКВА {year}, ₽
+    - Прирост EXW, %
+    - Прирост DDP-МОСКВА, %
+
+    Equivalent to GAS addNewYearColumnsToPriceDynamics().
+    """
+    from src.services.formula_service import get_formula_service
+
+    logger.info(
+        "formula_add_year_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        sheet_name=request.sheet_name,
+        year=request.year,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_formula_service(sheets_service)
+
+        result = await service.add_new_year_columns(
+            spreadsheet_id=request.spreadsheet_id,
+            sheet_name=request.sheet_name,
+            year=request.year,
+            dry_run=request.dry_run
+        )
+
+        return FormulaResponse(
+            status=result.get("status", "error"),
+            columns_added=result.get("columns_added", 0),
+            year=result.get("year"),
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("formula_add_year_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Log Archiving ==============
+
+class LogArchiveRequest(BaseModel):
+    """Request for log archiving."""
+    spreadsheet_id: str
+    archive_folder_id: str
+    project_code: str = "project"
+    dry_run: bool = False
+
+
+class LogResetRequest(BaseModel):
+    """Request for log reset."""
+    spreadsheet_id: str
+    sheet_name: str = "Логи"
+    dry_run: bool = False
+
+
+class LogRotationRequest(BaseModel):
+    """Request for midnight log rotation."""
+    spreadsheet_id: str
+    archive_folder_id: str
+    project_code: str = "project"
+    force: bool = False
+    dry_run: bool = False
+
+
+class LogEntryRequest(BaseModel):
+    """Request for writing log entry."""
+    spreadsheet_id: str
+    sheet_name: str = "Логи"
+    category: str = "SYSTEM"
+    action: str
+    details: str = ""
+    level: str = "INFO"
+
+
+class LogArchiveResponse(BaseModel):
+    """Response from log archiving operations."""
+    status: str
+    total_rows: int = 0
+    sheets_archived: Optional[Dict[str, int]] = None
+    archive_name: Optional[str] = None
+    message: str = ""
+
+
+class LogStatusResponse(BaseModel):
+    """Response from log status check."""
+    status: str
+    last_archive_date: str = "Never"
+    current_archive_name: str = ""
+    project_code: str = ""
+    sheets_to_archive: List[str] = []
+    current_row_counts: Optional[Dict[str, int]] = None
+    total_pending_rows: int = 0
+
+
+@api_router.post("/logs/archive", response_model=LogArchiveResponse)
+async def archive_logs_daily(request: LogArchiveRequest):
+    """
+    Archive all log sheets to monthly archive spreadsheet.
+
+    Copies data from log sheets (Логи, Журнал синхро, Журнал логов)
+    to a monthly archive spreadsheet in the specified Drive folder.
+
+    Equivalent to GAS archiveLogsDaily().
+    """
+    from src.services.logging_service import get_logging_service
+
+    logger.info(
+        "log_archive_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        project_code=request.project_code,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_logging_service(sheets_service)
+
+        result = await service.archive_logs_daily(
+            spreadsheet_id=request.spreadsheet_id,
+            archive_folder_id=request.archive_folder_id,
+            project_code=request.project_code,
+            dry_run=request.dry_run
+        )
+
+        return LogArchiveResponse(
+            status=result.get("status", "error"),
+            total_rows=result.get("total_rows", 0),
+            sheets_archived=result.get("sheets_archived"),
+            archive_name=result.get("archive_name"),
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("log_archive_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/logs/reset", response_model=LogArchiveResponse)
+async def reset_log_sheet(request: LogResetRequest):
+    """
+    Reset (clear) a log sheet after archiving.
+
+    Clears all data rows, preserving headers.
+
+    Equivalent to GAS resetDailyLogSheet().
+    """
+    from src.services.logging_service import get_logging_service
+
+    logger.info(
+        "log_reset_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        sheet_name=request.sheet_name,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_logging_service(sheets_service)
+
+        result = await service.reset_daily_log_sheet(
+            spreadsheet_id=request.spreadsheet_id,
+            sheet_name=request.sheet_name,
+            dry_run=request.dry_run
+        )
+
+        return LogArchiveResponse(
+            status=result.get("status", "error"),
+            total_rows=result.get("rows_cleared", 0),
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("log_reset_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/logs/rotation", response_model=LogArchiveResponse)
+async def midnight_log_rotation(request: LogRotationRequest):
+    """
+    Perform complete midnight log rotation.
+
+    1. Archives logs to monthly spreadsheet
+    2. Resets all log sheets
+
+    Equivalent to GAS midnightLogRotation().
+    """
+    from src.services.logging_service import get_logging_service
+
+    logger.info(
+        "log_rotation_requested",
+        spreadsheet_id=request.spreadsheet_id,
+        project_code=request.project_code,
+        force=request.force,
+        dry_run=request.dry_run
+    )
+
+    try:
+        service = get_logging_service(sheets_service)
+
+        result = await service.midnight_log_rotation(
+            spreadsheet_id=request.spreadsheet_id,
+            archive_folder_id=request.archive_folder_id,
+            project_code=request.project_code,
+            force=request.force,
+            dry_run=request.dry_run
+        )
+
+        archive_result = result.get("archive_result", {})
+        return LogArchiveResponse(
+            status=result.get("status", "error"),
+            total_rows=archive_result.get("total_rows", 0),
+            sheets_archived=archive_result.get("sheets_archived"),
+            archive_name=archive_result.get("archive_name"),
+            message=result.get("message", "")
+        )
+
+    except Exception as e:
+        logger.error("log_rotation_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/logs/status", response_model=LogStatusResponse)
+async def get_log_status(spreadsheet_id: str, project_code: str = "project"):
+    """
+    Get current log archive status.
+
+    Returns last archive date, pending row counts, and configuration.
+
+    Equivalent to GAS showArchiveStatus().
+    """
+    from src.services.logging_service import get_logging_service
+
+    logger.info(
+        "log_status_requested",
+        spreadsheet_id=spreadsheet_id,
+        project_code=project_code
+    )
+
+    try:
+        service = get_logging_service(sheets_service)
+
+        result = await service.get_archive_status(
+            spreadsheet_id=spreadsheet_id,
+            project_code=project_code
+        )
+
+        return LogStatusResponse(
+            status=result.get("status", "error"),
+            last_archive_date=result.get("last_archive_date", "Never"),
+            current_archive_name=result.get("current_archive_name", ""),
+            project_code=result.get("project_code", project_code),
+            sheets_to_archive=result.get("sheets_to_archive", []),
+            current_row_counts=result.get("current_row_counts"),
+            total_pending_rows=result.get("total_pending_rows", 0)
+        )
+
+    except Exception as e:
+        logger.error("log_status_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/logs/write")
+async def write_log_entry(request: LogEntryRequest):
+    """
+    Write a log entry to the log sheet.
+
+    Equivalent to GAS _logToSheet_().
+    """
+    from src.services.logging_service import get_logging_service
+
+    try:
+        service = get_logging_service(sheets_service)
+
+        result = await service.write_log_entry(
+            spreadsheet_id=request.spreadsheet_id,
+            sheet_name=request.sheet_name,
+            category=request.category,
+            action=request.action,
+            details=request.details,
+            level=request.level
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error("log_write_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============== AI Analysis ==============

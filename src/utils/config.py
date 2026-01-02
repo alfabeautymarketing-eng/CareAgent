@@ -2,7 +2,7 @@
 Configuration management using pydantic-settings.
 """
 
-from typing import List
+from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,11 +31,11 @@ class Settings(BaseSettings):
 
     # Google
     google_credentials_file: str = "config/credentials.json"
-    google_credentials_base64: str | None = None
+    google_credentials_base64: Optional[str] = None
 
     # Gemini AI
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"  # Return to stable Gemini 2.0 Flash
+    gemini_model: str = "gemini-2.0-flash"
     gemini_max_retries: int = 5
 
     # Redis
@@ -46,8 +46,9 @@ class Settings(BaseSettings):
     webhook_secret: str = ""
 
     # Notifications
-    telegram_bot_token: str | None = None
-    telegram_chat_id: str | None = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
 
 
 settings = Settings()
+
