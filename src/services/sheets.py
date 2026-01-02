@@ -455,41 +455,47 @@ class SheetsService:
             if log_sheet_name in sheet_map:
                 target_order.append(log_sheet_name)
 
-            # 1. Сначала добавляем основные листы из desired_order и их датированные копии
-            priority_prefixes = ["-Б/З поставщик", "-Тестер", "-Пробники", "-пробники", "-остатки"]
-            
-            # Регулярное выражение для поиска дат (например, " 01.01.24" или " 01.01.2024") в конце названия
-            import re
-            date_pattern = re.compile(r"\s\d{2}\.\d{2}\.\d{2,4}$")
+        # 1. Первая группа: Основные приоритетные листы в строго заданном порядке
+        priority_prefixes = ["-Б/З поставщик", "-Тестер", "-Пробники", "-пробники", "-остатки"]
+        
+        # Регулярное выражение для поиска дат (например, " 01.01.24" или " 01.01.2024") в конце названия
+        import re
+        date_pattern = re.compile(r"\s\d{2}\.\d{2}\.\d{2,4}$")
 
-            def find_dated_variations(base_name):
-                variations = []
-                for name in current_names:
-                    if name.startswith(base_name) and name != base_name:
-                        if date_pattern.search(name):
-                            variations.append(name)
-                return sorted(variations, reverse=True) # Самые свежие даты первыми? Или просто по порядку? Пользователь просил "в таком же порядке", обычно это по возрастанию даты или по алфавиту.
+        processed_sheets = set(target_order)
 
-            processed_sheets = set(target_order)
+        # Сначала добавляем только основные листы (без дат)
+        for prefix in priority_prefixes:
+            if prefix in sheet_map and prefix not in processed_sheets:
+                target_order.append(prefix)
+                processed_sheets.add(prefix)
 
-            for name in desired_order:
-                if name in sheet_map and name not in processed_sheets:
-                    target_order.append(name)
-                    processed_sheets.add(name)
-                    
-                    # Если это приоритетный лист, ищем его архивные копии
-                    if any(name.startswith(p) for p in priority_prefixes):
-                        dated = find_dated_variations(name)
-                        for d_name in dated:
-                            if d_name not in processed_sheets:
-                                target_order.append(d_name)
-                                processed_sheets.add(d_name)
-
-            # 2. Добавляем остальные листы, которые еще не были добавлены
+        # 2. Вторая группа: Датированные копии этих же листов в том же порядке групп
+        for prefix in priority_prefixes:
+            dated_variations = []
             for name in current_names:
-                if name not in processed_sheets:
-                    target_order.append(name)
-                    processed_sheets.add(name)
+                if name.startswith(prefix) and name != prefix:
+                    if date_pattern.search(name):
+                        dated_variations.append(name)
+            
+            # Сортируем даты (самые свежие первыми или по алфавиту)
+            dated_variations.sort(reverse=True)
+            for d_name in dated_variations:
+                if d_name not in processed_sheets:
+                    target_order.append(d_name)
+                    processed_sheets.add(d_name)
+
+        # 3. Третья группа: Остальные листы из SHEET_ORDER
+        for name in desired_order:
+            if name in sheet_map and name not in processed_sheets:
+                target_order.append(name)
+                processed_sheets.add(name)
+
+        # 4. Четвертая группа: Все остальные (неизвестные) листы
+        for name in current_names:
+            if name not in processed_sheets:
+                target_order.append(name)
+                processed_sheets.add(name)
 
             if hasattr(self, "logging_service") and self.logging_service:
                 self.logging_service.add_log(

@@ -2160,9 +2160,14 @@ class MenuConfigResponse(BaseModel):
 
 # Project spreadsheet IDs mapping
 PROJECT_IDS = {
+    # Main spreadsheets
     "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g": "MT",
     "1sTgZa-n1aP7oIhyQfPeN8QDgDNnCubqMWAd-TKjKpJXWsQm_ZhXnojPD": "SS",
     "1DJvK1vUT2OTubN0TLdZvsgYMSYByLHl8xTsus3K-KJ-VtJxgGnSw5Ih8": "SK",
+    # Auxiliary (Source) spreadsheets
+    "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0": "MT",
+    "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK",
+    "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0": "SS",
 }
 
 PROJECT_NAMES = {
