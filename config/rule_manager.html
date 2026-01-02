@@ -7,7 +7,9 @@
     <title>AgentCare • Управление правилами синхронизации</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg: #f6f1ea;
@@ -239,32 +241,57 @@
             gap: 20px;
         }
 
-        .group {
+        .rules-grid {
             display: grid;
-            gap: 14px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            transition: max-height 0.3s ease-out, opacity 0.3s ease, padding 0.3s ease;
+            overflow: hidden;
+        }
+
+        .group.collapsed .rules-grid {
+            max-height: 0;
+            opacity: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            pointer-events: none;
         }
 
         .group-title {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-weight: 600;
-            color: var(--ink);
-        }
-
-        .group-title span {
-            padding: 4px 10px;
+            gap: 12px;
+            padding: 10px 18px;
+            background: rgba(15, 118, 110, 0.08);
+            border: 1px solid rgba(15, 118, 110, 0.1);
             border-radius: 999px;
-            background: rgba(15, 118, 110, 0.12);
-            color: var(--accent);
-            font-size: 12px;
-            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+            width: fit-content;
         }
 
-        .rules-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
+        .group-title:hover {
+            background: rgba(15, 118, 110, 0.12);
+            transform: translateY(-1px);
+        }
+
+        .group-title .chevron {
+            font-size: 18px;
+            color: var(--accent);
+            transition: transform 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .group.collapsed .chevron {
+            transform: rotate(-90deg);
         }
 
         .rule-card {
@@ -393,11 +420,11 @@
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
         }
 
-        .switch input:checked + .slider {
+        .switch input:checked+.slider {
             background: var(--accent);
         }
 
-        .switch input:checked + .slider::before {
+        .switch input:checked+.slider::before {
             transform: translateX(20px);
         }
 
@@ -500,16 +527,31 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         @keyframes cardIn {
-            from { opacity: 0; transform: translateY(12px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         @media (max-width: 900px) {
+
             .controls-grid,
             .filters-grid {
                 grid-template-columns: 1fr;
@@ -537,7 +579,8 @@
                 <div class="brand">
                     <div class="eyebrow">AgentCare • Sync Rules</div>
                     <h1>Управление правилами синхронизации</h1>
-                    <p class="hero-subtitle">Единый контроль правил на сервере: редактируйте, группируйте и включайте двустороннюю синхронизацию без обращения к листу «Правила синхро».</p>
+                    <p class="hero-subtitle">Единый контроль правил на сервере: редактируйте, группируйте и включайте
+                        двустороннюю синхронизацию без обращения к листу «Правила синхро».</p>
                 </div>
                 <div class="hero-actions">
                     <button class="btn ghost" onclick="reloadRules()">🔄 Перечитать</button>
@@ -564,7 +607,8 @@
             <div class="filters-grid">
                 <div class="field">
                     <label for="search">Поиск</label>
-                    <input class="input" id="search" placeholder="ID, лист, заголовок, категория" oninput="updateFilters()" />
+                    <input class="input" id="search" placeholder="ID, лист, заголовок, категория"
+                        oninput="updateFilters()" />
                 </div>
                 <div class="field">
                     <label for="groupBy">Группировка</label>
@@ -579,7 +623,8 @@
                 </div>
                 <div class="field">
                     <label>Отображение</label>
-                    <label class="toggle"><input type="checkbox" id="showDisabled" checked onchange="updateFilters()">Показывать отключённые</label>
+                    <label class="toggle"><input type="checkbox" id="showDisabled" checked
+                            onchange="updateFilters()">Показывать отключённые</label>
                 </div>
             </div>
         </section>
@@ -638,7 +683,8 @@
                     <div class="field" style="grid-column: span 2;">
                         <label>Список столбцов (для пакетного создания)</label>
                         <input class="input" id="bulkHeaders" placeholder="Статус, Код в 1С, Категория" />
-                        <div class="help">Если заполнено, создаст правило на каждый заголовок с одинаковыми именами в источнике и цели.</div>
+                        <div class="help">Если заполнено, создаст правило на каждый заголовок с одинаковыми именами в
+                            источнике и цели.</div>
                     </div>
                 </div>
 
@@ -666,7 +712,8 @@
                         <label class="toggle"><input type="checkbox" id="ruleEnabled" checked>Правило активно</label>
                     </div>
                     <div class="field">
-                        <label class="toggle"><input type="checkbox" id="isExternal" onchange="toggleExternal()">Внешний документ</label>
+                        <label class="toggle"><input type="checkbox" id="isExternal" onchange="toggleExternal()">Внешний
+                            документ</label>
                     </div>
                     <div class="field" id="externalDocField" style="display:none;">
                         <label>ID внешнего документа</label>
@@ -860,18 +907,31 @@
 
             const groupBlocks = Array.from(groups.entries())
                 .sort((a, b) => a[0].localeCompare(b[0], "ru"))
-                .map(([title, rules]) => {
+                .map(([title, rules], groupIndex) => {
                     rules.sort((a, b) => String(a.id || "").localeCompare(String(b.id || ""), "ru"));
                     const cards = rules.map((rule, index) => renderRuleCard(rule, index)).join("");
-                return `
-                    <div class="group">
-                        <div class="group-title">${escapeHtml(title)} <span>${rules.length}</span></div>
+                    const groupClass = rules.length > 0 ? "group collapsed" : "group";
+                    const groupId = `group-${groupIndex}`;
+                    return `
+                    <div class="${groupClass}" id="${groupId}">
+                        <div class="group-title" onclick="toggleGroup('${groupId}')">
+                            <div class="chevron">▾</div>
+                            <span>${escapeHtml(title)}</span>
+                            <span class="pill">${rules.length}</span>
+                        </div>
                         <div class="rules-grid">${cards}</div>
                     </div>
                 `;
-            }).join("");
+                }).join("");
 
             container.innerHTML = groupBlocks;
+        }
+
+        function toggleGroup(groupId) {
+            const el = $(groupId);
+            if (el) {
+                el.classList.toggle("collapsed");
+            }
         }
 
         function renderRuleCard(rule, index) {
