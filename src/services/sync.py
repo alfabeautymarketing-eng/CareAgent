@@ -6,17 +6,32 @@ from typing import List, Dict, Optional, Any, Tuple
 from pydantic import BaseModel
 from src.services.sheets import SheetsService
 from src.utils.logger import logger
+import gspread
+from gspread.utils import rowcol_to_a1
 
 class SyncRule(BaseModel):
+    """Модель правила синхронизации с поддержкой bidirectional режима."""
     id: str
     enabled: bool
     category: str
     hashtags: str = ""
-    source_sheet: str
-    source_header: str
-    target_sheet: str
-    target_header: str
-    is_external: bool
+
+    # Режим работы: "unidirectional" (одностороннее) или "bidirectional" (двустороннее)
+    mode: str = "unidirectional"
+
+    # Для unidirectional (обратная совместимость)
+    source_sheet: str = ""
+    source_header: str = ""
+    target_sheet: str = ""
+    target_header: str = ""
+
+    # Для bidirectional: оба листа равноправны
+    sheet_a: Optional[str] = None
+    header_a: Optional[str] = None
+    sheet_b: Optional[str] = None
+    header_b: Optional[str] = None
+
+    is_external: bool = False
     target_doc_id: Optional[str] = None
 
 class SyncService:
@@ -26,6 +41,11 @@ class SyncService:
         self._rules_cache: List[SyncRule] = []
         self._rules_cache_time = 0
         self._rules_cache_ttl = 300  # 5 minutes
+
+        # Защита от циклов: блокировки ячеек с TTL
+        self._sync_locks: Dict[str, float] = {}
+        self._sync_lock_ttl = 3.0  # секунд
+
         self.sheet_codes = {
             "Главная": "Г",
             "Сертификация": "С",
@@ -38,6 +58,55 @@ class SyncService:
             "Журнал синхро": "J",
             "Логи": "L",
         }
+
+    # === Защита от циклов ===
+
+    def _is_cell_locked(self, spreadsheet_id: str, row_key: str, header: str) -> bool:
+        """Проверяет, заблокирована ли ячейка от повторной синхронизации."""
+        key = f"{spreadsheet_id}:{row_key}:{header}"
+        now = time.time()
+
+        # Очистка устаревших блокировок
+        self._sync_locks = {
+            k: v for k, v in self._sync_locks.items()
+            if now - v < self._sync_lock_ttl
+        }
+
+        return key in self._sync_locks
+
+    def _lock_cell(self, spreadsheet_id: str, row_key: str, header: str):
+        """Блокирует ячейку на время TTL для предотвращения циклов."""
+        key = f"{spreadsheet_id}:{row_key}:{header}"
+        self._sync_locks[key] = time.time()
+
+    def _get_matching_rules(self, rules: List[SyncRule], sheet_name: str, header: str) -> List[SyncRule]:
+        """Находит правила для указанного листа и заголовка (с учетом bidirectional)."""
+        matching = []
+        for rule in rules:
+            if not rule.enabled:
+                continue
+
+            if rule.mode == "bidirectional":
+                # Bidirectional: срабатывает при изменении на любом из двух листов
+                if (rule.sheet_a == sheet_name and rule.header_a == header) or \
+                   (rule.sheet_b == sheet_name and rule.header_b == header):
+                    matching.append(rule)
+            else:
+                # Unidirectional: только source -> target
+                if rule.source_sheet == sheet_name and rule.source_header == header:
+                    matching.append(rule)
+
+        return matching
+
+    def _get_target_for_rule(self, rule: SyncRule, source_sheet: str) -> Tuple[str, str]:
+        """Определяет целевой лист и заголовок для правила."""
+        if rule.mode == "bidirectional":
+            if source_sheet == rule.sheet_a:
+                return rule.sheet_b or "", rule.header_b or ""
+            else:
+                return rule.sheet_a or "", rule.header_a or ""
+        else:
+            return rule.target_sheet, rule.target_header
 
     def _make_rule_id(self, idx: int, source_sheet: str, target_sheet: str, header: str) -> str:
         src_code = self.sheet_codes.get(source_sheet, (source_sheet[:1] or "?"))
@@ -146,107 +215,71 @@ class SyncService:
 
     def _load_rules(self, spreadsheet_id: str, force_reload: bool = False) -> List[SyncRule]:
         """
-        Load sync rules from 'Правила синхро' sheet.
-        If config/rules/<spreadsheet_id>.yaml exists, load from server to avoid лишние запросы.
+        Load sync rules from YAML file on server.
+        NOTE: Fallback to Google Sheet "Правила синхро" has been removed.
+        All rules must be stored in config/rules/<spreadsheet_id>.yaml
         """
         if not force_reload and (time.time() - self._rules_cache_time < self._rules_cache_ttl) and self._rules_cache:
             return self._rules_cache
 
         try:
-            # 0. Попытка загрузить правила с сервера (YAML) по spreadsheet_id
             rules_path = os.path.join("config", "rules", f"{spreadsheet_id}.yaml")
-            if os.path.exists(rules_path):
-                with open(rules_path, "r", encoding="utf-8") as f:
-                    data = yaml.safe_load(f) or []
-                rules = []
-                for row in data:
-                    try:
-                        rule = SyncRule(
-                            id=str(row.get("id", "")).strip(),
-                            enabled=bool(row.get("enabled", True)),
-                            category=str(row.get("category", "")).strip(),
-                            hashtags=str(row.get("hashtags", "")).strip(),
-                            source_sheet=str(row.get("source_sheet", "")).strip(),
-                            source_header=str(row.get("source_header", "")).strip(),
-                            target_sheet=str(row.get("target_sheet", "")).strip(),
-                            target_header=str(row.get("target_header", "")).strip(),
-                            is_external=bool(row.get("is_external", False)),
-                            target_doc_id=(str(row.get("target_doc_id", "")).strip() or None)
-                        )
-                        if not rule.source_sheet or not rule.source_header or not rule.target_sheet or not rule.target_header:
-                            continue
-                        if rule.is_external and not rule.target_doc_id:
-                            continue
-                        if not rule.enabled:
-                            continue
-                        rules.append(rule)
-                    except Exception:
-                        continue
-
-                if rules:
-                    self._rules_cache = rules
-                    self._rules_cache_time = time.time()
-                    logger.info("sync_rules_loaded_from_server", count=len(rules), source=rules_path)
-                    return rules
-                # если пустой файл — fallback к листу
-
-            RULES_SHEET = "Правила синхро"
-            ws = self.sheets_service.get_worksheet(spreadsheet_id, RULES_SHEET)
-            
-            # Assuming structure matches GAS: 
-            # A=ID, B=Enabled, C=Category, D=Hashtags, E=SourceSheet, F=SourceHeader, 
-            # G=TargetSheet, H=TargetHeader, I=External, J=TargetDocId
-            
-            values = ws.get_all_values()
-            if not values or len(values) < 2:
+            if not os.path.exists(rules_path):
+                logger.warning("rules_file_not_found", path=rules_path)
                 return []
 
+            with open(rules_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or []
+
             rules = []
-            # Skip header row (index 0)
-            for row in values[1:]:
-                # Pad row if too short
-                if len(row) < 10:
-                    row += [""] * (10 - len(row))
-                
-                # Check enabled (Column B / index 1)
-                enabled_val = row[1].strip().lower()
-                enabled = (enabled_val == 'true' or enabled_val == 'да')
-                
-                if not enabled:
-                    continue
+            for row in data:
+                try:
+                    mode = str(row.get("mode", "unidirectional")).strip()
 
-                is_external_val = row[8].strip().lower()
-                is_external = (is_external_val == 'true' or is_external_val == 'да')
+                    rule = SyncRule(
+                        id=str(row.get("id", "")).strip(),
+                        enabled=bool(row.get("enabled", True)),
+                        category=str(row.get("category", "")).strip(),
+                        hashtags=str(row.get("hashtags", "")).strip(),
+                        mode=mode,
+                        # Unidirectional fields
+                        source_sheet=str(row.get("source_sheet", "")).strip(),
+                        source_header=str(row.get("source_header", "")).strip(),
+                        target_sheet=str(row.get("target_sheet", "")).strip(),
+                        target_header=str(row.get("target_header", "")).strip(),
+                        # Bidirectional fields
+                        sheet_a=str(row.get("sheet_a", "")).strip() or None,
+                        header_a=str(row.get("header_a", "")).strip() or None,
+                        sheet_b=str(row.get("sheet_b", "")).strip() or None,
+                        header_b=str(row.get("header_b", "")).strip() or None,
+                        is_external=bool(row.get("is_external", False)),
+                        target_doc_id=(str(row.get("target_doc_id", "")).strip() or None)
+                    )
 
-                rule = SyncRule(
-                    id=row[0].strip(),
-                    enabled=enabled,
-                    category=row[2].strip(),
-                            hashtags=row[3].strip() if len(row) > 3 else "",
-                            source_sheet=row[4].strip(),
-                            source_header=row[5].strip(),
-                            target_sheet=row[6].strip(),
-                            target_header=row[7].strip(),
-                            is_external=is_external,
-                    target_doc_id=row[9].strip() if row[9].strip() else None
-                )
-                
-                # Validation matches GAS
-                if not rule.source_sheet or not rule.source_header or not rule.target_sheet or not rule.target_header:
-                    continue
-                if rule.is_external and not rule.target_doc_id:
-                    continue
+                    # Validation
+                    if mode == "bidirectional":
+                        if not rule.sheet_a or not rule.header_a or not rule.sheet_b or not rule.header_b:
+                            continue
+                    else:
+                        if not rule.source_sheet or not rule.source_header or not rule.target_sheet or not rule.target_header:
+                            continue
 
-                rules.append(rule)
+                    if rule.is_external and not rule.target_doc_id:
+                        continue
+                    if not rule.enabled:
+                        continue
+
+                    rules.append(rule)
+                except Exception:
+                    continue
 
             self._rules_cache = rules
             self._rules_cache_time = time.time()
-            logger.info("sync_rules_loaded", count=len(rules))
+            logger.info("sync_rules_loaded_from_yaml", count=len(rules), source=rules_path)
             return rules
 
         except Exception as e:
             logger.error("load_rules_failed", error=str(e))
-            # Return cached if available even if expired, else empty
             return self._rules_cache
 
     def sync_row(self, spreadsheet_id: str, sheet_name: str, row_number: int, row_key: str, project: str) -> Dict[str, Any]:
@@ -370,7 +403,7 @@ class SyncService:
 
     async def sync_event(self, spreadsheet_id: str, event_data: Dict[str, Any]):
         """
-        Process a single onEdit event.
+        Process a single onEdit event with cycle protection.
         """
         sheet_name = event_data.get("sheet_name")
         row_idx = event_data.get("row")
@@ -378,6 +411,19 @@ class SyncService:
         source_header = event_data.get("header_name")
         new_value = event_data.get("value")
         row_key = event_data.get("row_key")
+
+        # === ЗАЩИТА ОТ ЦИКЛОВ: Проверка sync_origin ===
+        sync_origin = event_data.get("sync_origin", "user")
+        if sync_origin == "sync":
+            logger.info("skipping_sync_originated_event",
+                       sheet=sheet_name, row_key=row_key, header=source_header)
+            return {"status": "skipped", "reason": "Sync-originated change ignored"}
+
+        # === ЗАЩИТА ОТ ЦИКЛОВ: Проверка блокировки ячейки ===
+        if row_key and source_header and self._is_cell_locked(spreadsheet_id, row_key, source_header):
+            logger.info("skipping_locked_cell",
+                       sheet=sheet_name, row_key=row_key, header=source_header)
+            return {"status": "skipped", "reason": "Cell locked (anti-cycle protection)"}
 
         # Пропускаем события на лог-листах
         if sheet_name in {"Логи", "Журнал синхро", "Logs"}:
@@ -416,11 +462,8 @@ class SyncService:
                 logger.error("fetch_header_failed", error=str(e))
                 return {"status": "failed", "reason": "Could not determine header"}
 
-        # 3. Find Matching Rules
-        matching_rules = [
-            r for r in rules 
-            if r.source_sheet == sheet_name and r.source_header == source_header
-        ]
+        # 3. Find Matching Rules (с поддержкой bidirectional)
+        matching_rules = self._get_matching_rules(rules, sheet_name, source_header)
         
         if not matching_rules:
             # logger.info("no_matching_sync_rules", sheet=sheet_name, header=source_header)
@@ -458,15 +501,26 @@ class SyncService:
         results = []
         for rule in matching_rules:
             try:
-                res = self._apply_rule(spreadsheet_id, rule, row_key, new_value)
+                # Определяем целевой лист/заголовок (с учетом bidirectional)
+                target_sheet, target_header = self._get_target_for_rule(rule, sheet_name)
+
+                # Блокируем целевую ячейку для защиты от циклов
+                self._lock_cell(spreadsheet_id, row_key, target_header)
+
+                res = self._apply_rule_extended(spreadsheet_id, rule, row_key, new_value, sheet_name)
                 results.append(res)
-                
+
                 # Log success for each rule
+                if rule.mode == "bidirectional":
+                    log_msg = f"{rule.sheet_a}#{rule.header_a} <-> {rule.sheet_b}#{rule.header_b} (ID={row_key})"
+                else:
+                    log_msg = f"{rule.source_sheet}#{rule.source_header} -> {rule.target_sheet}#{rule.target_header} (ID={row_key})"
+
                 self._log_to_session(
                     spreadsheet_id,
                     "СИНХРОНИЗАЦИЯ",
                     "Синхронизация выполнена",
-                    f"{rule.source_sheet}#{rule.source_header} -> {rule.target_sheet}#{rule.target_header} (ID={row_key})",
+                    log_msg,
                     "✅ OK"
                 )
             except Exception as e:
@@ -573,6 +627,62 @@ class SyncService:
             "✅ УСПЕХ"
         )
         
+        return {"rule_id": rule.id, "status": "success"}
+
+    def _apply_rule_extended(self, spreadsheet_id: str, rule: SyncRule, row_key: str, new_value: Any, source_sheet: str) -> Dict[str, Any]:
+        """Apply a sync rule with bidirectional support."""
+        # Определяем целевой лист и заголовок
+        target_sheet, target_header = self._get_target_for_rule(rule, source_sheet)
+
+        if not target_sheet or not target_header:
+            return {"rule_id": rule.id, "status": "failed", "error": "Invalid target configuration"}
+
+        target_ss_id = rule.target_doc_id if rule.is_external else spreadsheet_id
+
+        # 1. Connect to target sheet
+        try:
+            ws = self.sheets_service.get_worksheet(target_ss_id, target_sheet)
+        except Exception:
+            return {"rule_id": rule.id, "status": "failed", "error": f"Target sheet '{target_sheet}' not found"}
+
+        # 2. Find target column index by header
+        headers = self.sheets_service.get_worksheet_headers(target_ss_id, target_sheet)
+        try:
+            target_col = headers.index(target_header) + 1
+        except ValueError:
+            return {"rule_id": rule.id, "status": "failed", "error": f"Target header '{target_header}' not found"}
+
+        # 3. Find target row by Key (Col A)
+        target_row = self.sheets_service.get_row_by_id(target_ss_id, target_sheet, row_key)
+        if not target_row:
+            return {"rule_id": rule.id, "status": "skipped", "reason": "Key not found in target"}
+
+        # 4. Update Value
+        old_val = "[OPTIMIZED]"
+        ws.update_cell(target_row, target_col, new_value)
+
+        # 5. Log to sync journal
+        self._log_to_sheet(
+            spreadsheet_id,
+            row_key=row_key,
+            source_info=f"Rule: {rule.category} ({rule.mode})",
+            target_info=f"{target_sheet}!{target_header} (Row {target_row})",
+            old_val=str(old_val),
+            new_val=str(new_value),
+            category=rule.category,
+            hashtags=rule.hashtags,
+            status="SUCCESS"
+        )
+
+        # 6. Log to session log
+        self._log_to_session(
+            spreadsheet_id,
+            "АВТОМАТИКА",
+            f"Правило выполнено: {rule.category}",
+            f"Передано: {target_sheet}!{target_header} (Row {target_row}) | {old_val} -> {new_value}",
+            "✅ УСПЕХ"
+        )
+
         return {"rule_id": rule.id, "status": "success"}
 
     def _log_to_session(self, spreadsheet_id: str, category: str, action: str, details: str, status: str):
@@ -864,3 +974,242 @@ class SyncService:
                  self.logging_service.add_log(spreadsheet_id, "АВТОЗАПОЛНЕНИЕ", "Обновление сроков", f"Строка {row_idx}: {res}", "✅")
         except Exception as e:
             logger.error("deadline_update_error", error=str(e))
+
+    # === CRUD методы для управления правилами ===
+
+    def _load_rules_raw(self, spreadsheet_id: str) -> List[SyncRule]:
+        """Load all rules (including disabled) without caching."""
+        rules_path = os.path.join("config", "rules", f"{spreadsheet_id}.yaml")
+        if not os.path.exists(rules_path):
+            return []
+
+        with open(rules_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or []
+
+        rules = []
+        for row in data:
+            try:
+                mode = str(row.get("mode", "unidirectional")).strip()
+                rule = SyncRule(
+                    id=str(row.get("id", "")).strip(),
+                    enabled=bool(row.get("enabled", True)),
+                    category=str(row.get("category", "")).strip(),
+                    hashtags=str(row.get("hashtags", "")).strip(),
+                    mode=mode,
+                    source_sheet=str(row.get("source_sheet", "")).strip(),
+                    source_header=str(row.get("source_header", "")).strip(),
+                    target_sheet=str(row.get("target_sheet", "")).strip(),
+                    target_header=str(row.get("target_header", "")).strip(),
+                    sheet_a=str(row.get("sheet_a", "")).strip() or None,
+                    header_a=str(row.get("header_a", "")).strip() or None,
+                    sheet_b=str(row.get("sheet_b", "")).strip() or None,
+                    header_b=str(row.get("header_b", "")).strip() or None,
+                    is_external=bool(row.get("is_external", False)),
+                    target_doc_id=(str(row.get("target_doc_id", "")).strip() or None)
+                )
+                rules.append(rule)
+            except Exception:
+                continue
+        return rules
+
+    def _make_bidirectional_id(self, idx: int, sheet_a: str, sheet_b: str, header: str) -> str:
+        """Generate ID for bidirectional rule."""
+        code_a = self.sheet_codes.get(sheet_a, (sheet_a[:1] or "?"))
+        code_b = self.sheet_codes.get(sheet_b, (sheet_b[:1] or "?"))
+        return f"{idx:03d}-{code_a}<->{code_b}({header})"
+
+    def create_rule(self, spreadsheet_id: str, rule_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new sync rule."""
+        rules = self._load_rules_raw(spreadsheet_id)
+        idx = len(rules) + 1
+        mode = rule_data.get("mode", "unidirectional")
+
+        # Generate ID
+        if mode == "bidirectional":
+            sheet_a = str(rule_data.get("sheet_a", "")).strip()
+            sheet_b = str(rule_data.get("sheet_b", "")).strip()
+            header = str(rule_data.get("header_a", "")).strip()
+            rule_id = self._make_bidirectional_id(idx, sheet_a, sheet_b, header)
+        else:
+            src = str(rule_data.get("source_sheet", "")).strip()
+            tgt = str(rule_data.get("target_sheet", "")).strip()
+            header = str(rule_data.get("source_header", "")).strip()
+            rule_id = self._make_rule_id(idx, src, tgt, header)
+
+        new_rule = SyncRule(
+            id=rule_id,
+            enabled=bool(rule_data.get("enabled", True)),
+            category=str(rule_data.get("category", "")).strip(),
+            hashtags=str(rule_data.get("hashtags", "")).strip(),
+            mode=mode,
+            source_sheet=str(rule_data.get("source_sheet", "")).strip(),
+            source_header=str(rule_data.get("source_header", "")).strip(),
+            target_sheet=str(rule_data.get("target_sheet", "")).strip(),
+            target_header=str(rule_data.get("target_header", "")).strip(),
+            sheet_a=str(rule_data.get("sheet_a", "")).strip() or None,
+            header_a=str(rule_data.get("header_a", "")).strip() or None,
+            sheet_b=str(rule_data.get("sheet_b", "")).strip() or None,
+            header_b=str(rule_data.get("header_b", "")).strip() or None,
+            is_external=bool(rule_data.get("is_external", False)),
+            target_doc_id=str(rule_data.get("target_doc_id", "")).strip() or None
+        )
+
+        rules.append(new_rule)
+        self._save_rules_yaml(spreadsheet_id, rules)
+
+        # Invalidate cache
+        self._rules_cache = []
+        self._rules_cache_time = 0
+
+        logger.info("rule_created", rule_id=rule_id, spreadsheet_id=spreadsheet_id)
+        return new_rule.model_dump()
+
+    def update_rule(self, spreadsheet_id: str, rule_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing rule (partial update)."""
+        rules = self._load_rules_raw(spreadsheet_id)
+
+        for i, rule in enumerate(rules):
+            if rule.id == rule_id:
+                rule_dict = rule.model_dump()
+                rule_dict.update(updates)
+                rules[i] = SyncRule(**rule_dict)
+                self._save_rules_yaml(spreadsheet_id, rules)
+
+                # Invalidate cache
+                self._rules_cache = []
+                self._rules_cache_time = 0
+
+                logger.info("rule_updated", rule_id=rule_id, spreadsheet_id=spreadsheet_id)
+                return rules[i].model_dump()
+
+        raise ValueError(f"Rule not found: {rule_id}")
+
+    def delete_rule(self, spreadsheet_id: str, rule_id: str) -> bool:
+        """Delete a rule by ID."""
+        rules = self._load_rules_raw(spreadsheet_id)
+        original_count = len(rules)
+        rules = [r for r in rules if r.id != rule_id]
+
+        if len(rules) == original_count:
+            raise ValueError(f"Rule not found: {rule_id}")
+
+        self._save_rules_yaml(spreadsheet_id, rules)
+
+        # Invalidate cache
+        self._rules_cache = []
+        self._rules_cache_time = 0
+
+        logger.info("rule_deleted", rule_id=rule_id, spreadsheet_id=spreadsheet_id)
+        return True
+
+    def toggle_rule(self, spreadsheet_id: str, rule_id: str, enabled: bool) -> Dict[str, Any]:
+        """Toggle rule enabled/disabled status."""
+        return self.update_rule(spreadsheet_id, rule_id, {"enabled": enabled})
+
+    async def replicate_new_articles(self, spreadsheet_id: str, new_articles: List[Dict[str, Any]]):
+        """
+        Replicate new articles across all sheets and apply smart match data.
+        """
+        if not new_articles:
+            return
+
+        logger.info(f"replicating_{len(new_articles)}_articles", spreadsheet_id=spreadsheet_id)
+
+        TARGET_SHEETS = [
+            "Заказ", 
+            "Этикетки", 
+            "Сертификация", 
+            "Динамика цены", 
+            "Расчет цены",
+            "ABC-Анализ",
+            "New sert"
+        ]
+
+        for sheet_name in TARGET_SHEETS:
+            try:
+                ws = self.sheets_service.get_worksheet(spreadsheet_id, sheet_name)
+                
+                # Fetch Col A to avoid duplicates
+                col_a = ws.col_values(1)
+                existing_ids = {str(val).strip() for val in col_a if val}
+                
+                rows_to_append = []
+                for art_data in new_articles:
+                    article_id = art_data["id"]
+                    if article_id not in existing_ids:
+                        rows_to_append.append([article_id])
+                
+                if rows_to_append:
+                    ws.append_rows(rows_to_append)
+                    logger.info("replicated_articles", sheet=sheet_name, count=len(rows_to_append))
+                    if self.logging_service:
+                        self.logging_service.add_log(spreadsheet_id, "АРТИКУЛ", f"Лист {sheet_name}", f"Добавлено строк: {len(rows_to_append)}", "✅")
+                
+                # Special handling for Сертификация: Apply Smart Match
+                if sheet_name == "Сертификация":
+                    # Refresh Col A to get correct row indices
+                    updated_col_a = ws.col_values(1)
+                    idx_map = {str(val).strip(): i + 1 for i, val in enumerate(updated_col_a) if val}
+                    
+                    headers = ws.row_values(1)
+                    header_map = {h.strip().lower(): i + 1 for i, h in enumerate(headers) if h}
+                    
+                    # Fields to fill from match_info
+                    fields_to_fill = {
+                        "категория": "категория",
+                        "вид продукции": "Вид продукции",
+                        "код тн вэд": "Код ТН ВЭД",
+                        "наименования англ по дс": "Наименования англ по ДС",
+                        "наименования рус по дс": "Наименования рус по ДС",
+                        "объём": "Объём",
+                        "дс": "ДС",
+                        "номер дс": "номер ДС",
+                        "дс до": "ДС до",
+                        "протокол дс": "Протокол ДС",
+                        "протокол доп": "Протокол доп",
+                        "inci": "INCI",
+                        "coa": "COA"
+                    }
+                    
+                    updates = []
+                    for art_data in new_articles:
+                        article_id = art_data["id"]
+                        match_info = art_data.get("match_info")
+                        if not match_info or not match_info.get("match_found"):
+                            continue
+                            
+                        details = match_info.get("matched_product_details", {})
+                        row_idx = idx_map.get(article_id)
+                        if not row_idx:
+                            continue
+                            
+                        for header_low, detail_key in fields_to_fill.items():
+                            col_idx = header_map.get(header_low)
+                            val = details.get(detail_key)
+                            if col_idx and val:
+                                updates.append({
+                                    'range': rowcol_to_a1(row_idx, col_idx),
+                                    'values': [[val]]
+                                })
+                        
+                    if updates:
+                        # Split updates into chunks to avoid too large requests
+                        chunk_size = 50
+                        for i in range(0, len(updates), chunk_size):
+                            ws.batch_update(updates[i:i+chunk_size], value_input_option='USER_ENTERED')
+                        
+                        logger.info("smart_match_data_applied", count=len(new_articles))
+                        if self.logging_service:
+                             self.logging_service.add_log(spreadsheet_id, "Smart Match", "Данные сертификации заполнены", f"Записей: {len(new_articles)}", "✅")
+                        
+                        # Trigger cascades for each updated row
+                        for art_data in new_articles:
+                            if art_data.get("match_info"):
+                                r_idx = idx_map.get(art_data["id"])
+                                if r_idx:
+                                    self._handle_cascades(spreadsheet_id, sheet_name, r_idx, "Наименования рус по ДС")
+
+            except Exception as e:
+                logger.error("replication_failed", sheet=sheet_name, error=str(e), exc_info=True)
+                if self.logging_service:
+                     self.logging_service.add_log(spreadsheet_id, "АРТИКУЛ", f"Ошибка репликации: {sheet_name}", str(e), "❌")

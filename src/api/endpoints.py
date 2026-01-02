@@ -25,7 +25,7 @@ logging_service = LoggingService(sheets_service)
 sync_service = SyncService(logging_service) # Pass logger to sync service
 sorting_service = SortingService()
 ai_service = get_ai_service()
-price_processor = get_price_processor(sheets_service, logging_service)
+price_processor = get_price_processor(sheets_service, sync_service, logging_service)
 
 class RuleItem(BaseModel):
     enabled: bool = True
@@ -39,6 +39,51 @@ class RuleItem(BaseModel):
 
 class RulesSaveRequest(BaseModel):
     rules: List[RuleItem]
+
+
+# CRUD Models for Sync Rules
+class RuleCreateRequest(BaseModel):
+    """Request to create a new sync rule."""
+    mode: str = "unidirectional"  # "unidirectional" | "bidirectional"
+    enabled: bool = True
+    category: str = ""
+    hashtags: str = ""
+    # For unidirectional
+    source_sheet: Optional[str] = None
+    source_header: Optional[str] = None
+    target_sheet: Optional[str] = None
+    target_header: Optional[str] = None
+    # For bidirectional
+    sheet_a: Optional[str] = None
+    header_a: Optional[str] = None
+    sheet_b: Optional[str] = None
+    header_b: Optional[str] = None
+    # External sync
+    is_external: bool = False
+    target_doc_id: Optional[str] = None
+
+
+class RuleUpdateRequest(BaseModel):
+    """Request to update an existing sync rule."""
+    enabled: Optional[bool] = None
+    category: Optional[str] = None
+    hashtags: Optional[str] = None
+    mode: Optional[str] = None
+    source_sheet: Optional[str] = None
+    source_header: Optional[str] = None
+    target_sheet: Optional[str] = None
+    target_header: Optional[str] = None
+    sheet_a: Optional[str] = None
+    header_a: Optional[str] = None
+    sheet_b: Optional[str] = None
+    header_b: Optional[str] = None
+    is_external: Optional[bool] = None
+    target_doc_id: Optional[str] = None
+
+
+class RuleToggleRequest(BaseModel):
+    """Request to toggle rule enabled status."""
+    enabled: bool
 
 # ============== Request/Response Models ==============
 
@@ -80,7 +125,9 @@ class SyncEventRequest(BaseModel):
     user_email: Optional[str] = None
     header_name: Optional[str] = None
     row_key: Optional[str] = None
-    row_key: Optional[str] = None
+    # Защита от циклов
+    sync_origin: str = "user"  # "user" | "sync"
+    transaction_id: Optional[str] = None
 
 class LogInitRequest(BaseModel):
     """Request to initialize logs."""

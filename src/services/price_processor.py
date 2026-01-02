@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from src.utils.logger import logger
 from src.services.sheets import SheetsService
+from src.services.product_matcher import ProductMatcher
 
 
 @dataclass
@@ -62,6 +63,7 @@ class SyncResult:
     updated_rows: List[int] = field(default_factory=list)
     group_changes: List[Dict[str, Any]] = field(default_factory=list)
     barcode_mismatches: List[Dict[str, Any]] = field(default_factory=list)
+    new_articles: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class PriceProcessor:
@@ -101,8 +103,9 @@ class PriceProcessor:
         "EAN": 6
     }
 
-    def __init__(self, sheets_service: SheetsService, logging_service=None):
+    def __init__(self, sheets_service: SheetsService, sync_service: Any, logging_service=None):
         self.sheets = sheets_service
+        self.sync_service = sync_service
         self.logging = logging_service
         self._config_cache: Dict[str, Dict] = {}
 
@@ -229,8 +232,19 @@ class PriceProcessor:
                 await self._clear_idp_columns(spreadsheet_id, config)
                 await self._clear_price_exw_columns(spreadsheet_id, config)
 
-            # 6. Sync with main sheet
-            sync_result = await self._sync_with_main(spreadsheet_id, processed, config, project)
+            # 5. Sync with main sheet
+            sync_result = await self._sync_with_main(
+                spreadsheet_id,
+                processed,
+                config,
+                project,
+                product_matcher=ProductMatcher(spreadsheet_id)
+            )
+            
+            # 6. Replicate new articles across all sheets
+            if sync_result.new_articles:
+                self._log(spreadsheet_id, "АРТИКУЛ", "Синхронизация новых артикулов со всеми листами", f"Количество: {len(sync_result.new_articles)}", "🔄")
+                await self.sync_service.replicate_new_articles(spreadsheet_id, sync_result.new_articles)
 
             # 7. Apply assigned ID-P to processed data
             self._apply_assigned_idp(processed, sync_result)
@@ -805,7 +819,8 @@ class PriceProcessor:
         spreadsheet_id: str,
         processed: ProcessedData,
         config: Dict,
-        project: str
+        project: str,
+        product_matcher: Optional[ProductMatcher] = None
     ) -> SyncResult:
         """Sync processed data with main sheet (Главная)"""
 
@@ -840,14 +855,25 @@ class PriceProcessor:
                 if art:
                     article_map[art] = i
 
-            # Find max ID-P number
+            # Find max numbers for IDs
             max_idp = 0
+            max_id = 0
             for row in all_values[1:]:
+                # ID-P
                 idp_val = self._as_trimmed_string(self._safe_get(row, idp_col))
                 if idp_val and idp_val.startswith(prefix):
                     try:
                         num = int(idp_val[len(prefix):])
                         max_idp = max(max_idp, num)
+                    except ValueError:
+                        pass
+                
+                # ID
+                id_val = self._as_trimmed_string(self._safe_get(row, id_col))
+                if id_val and id_val.startswith(prefix):
+                    try:
+                        num = int(id_val[len(prefix):])
+                        max_id = max(max_id, num)
                     except ValueError:
                         pass
 
@@ -897,12 +923,29 @@ class PriceProcessor:
                     # Create new row
                     max_idp += 1
                     new_idp = f"{prefix}{max_idp}"
+                    
+                    max_id += 1
+                    new_id = f"{prefix}{max_id:03d}"  # Format as MT-001
+                    
                     result.assigned_idp[article] = new_idp
+
+                    # 🎯 SMART MATCH for new article
+                    match_info = None
+                    if product_matcher and parsed_row.name_eng:
+                        self._log(spreadsheet_id, "Smart Match", f"Поиск для нового товара: {parsed_row.name_eng}", "", "🔍")
+                        match_res = product_matcher.find_best_match(parsed_row.name_eng)
+                        if match_res and match_res.get("match_found") and match_res.get("confidence", 0) >= 80:
+                            match_info = match_res
+                            self._log(spreadsheet_id, "Smart Match", f"Найдено соответствие ({match_res['confidence']}%): {match_res.get('best_match_id')}", f"Цель: {parsed_row.name_eng}", "✅")
+                        else:
+                            self._log(spreadsheet_id, "Smart Match", "Соответствие не найдено или низкая уверенность", f"Цель: {parsed_row.name_eng}", "ℹ️")
 
                     # Build new row data
                     new_row = [""] * len(headers)
-                    new_row[id_col] = ""  # ID will be auto-generated
-                    new_row[idp_col] = new_idp
+                    if id_col >= 0:
+                        new_row[id_col] = new_id
+                    if idp_col >= 0:
+                        new_row[idp_col] = new_idp
                     if article_col >= 0:
                         new_row[article_col] = article
                     if name_col >= 0:
@@ -920,6 +963,15 @@ class PriceProcessor:
 
                     new_rows.append(new_row)
                     result.created_rows.append(len(all_values) + len(new_rows))
+                    
+                    # Add to new_articles for further sheet replication
+                    result.new_articles.append({
+                        "id": new_id,
+                        "idp": new_idp,
+                        "article": article,
+                        "name_eng": parsed_row.name_eng,
+                        "match_info": match_info
+                    })
 
             # Apply updates
             if updates:
@@ -1202,9 +1254,9 @@ class PriceProcessor:
 _price_processor: Optional[PriceProcessor] = None
 
 
-def get_price_processor(sheets_service: SheetsService, logging_service=None) -> PriceProcessor:
+def get_price_processor(sheets_service: SheetsService, sync_service: Any, logging_service=None) -> PriceProcessor:
     """Get or create PriceProcessor instance"""
     global _price_processor
     if _price_processor is None:
-        _price_processor = PriceProcessor(sheets_service, logging_service)
+        _price_processor = PriceProcessor(sheets_service, sync_service, logging_service)
     return _price_processor
