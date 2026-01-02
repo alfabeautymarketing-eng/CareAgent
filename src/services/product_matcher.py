@@ -45,34 +45,59 @@ class ProductMatcher:
             idx_base = headers.index("Базовый")
             idx_name_en = headers.index("Наименования англ по ДС")
             idx_name_ru = headers.index("Наименования рус по ДС")
+            
+            # Additional fields for certification matching
+            optional_fields = [
+                "категория", 
+                "Вид продукции", 
+                "Код ТН ВЭД", 
+                "ДС", 
+                "номер ДС", 
+                "ДС до", 
+                "Протокол ДС", 
+                "Протокол доп", 
+                "INCI", 
+                "COA"
+            ]
+            field_indices = {}
+            for field in optional_fields:
+                if field in headers:
+                    field_indices[field] = headers.index(field)
+                    
         except ValueError as e:
-            logger.error(f"Missing required headers: {e}")
+            logger.error(f"Missing required headers (Базовый, etc): {e}")
             return []
 
         base_products = []
 
         for i, row in enumerate(data_rows):
             # Pad row if short
-            if len(row) <= max(idx_base, idx_name_en, idx_name_ru):
+            if len(row) < len(headers):
                 row = row + [""] * (len(headers) - len(row))
 
             is_base = str(row[idx_base]).lower() in ('true', 'yes', 'да', '1')
 
             if is_base:
-                name_en = row[idx_name_en].strip()
-                name_ru = row[idx_name_ru].strip()
+                name_en = str(row[idx_name_en]).strip()
+                name_ru = str(row[idx_name_ru]).strip()
 
                 if not name_en and not name_ru:
                     continue
 
-                base_products.append({
+                product_info = {
                     "id": f"ROW-{i + 2}",
                     "name_eng_ds": name_en,
                     "name_rus_ds": name_ru,
-                    # "keywords": f"{name_en} {name_ru}" # Not strictly needed for JSON passed to AI
-                })
+                }
+                
+                # Add optional fields if they exist
+                for field, idx in field_indices.items():
+                    if idx < len(row):
+                        product_info[field] = str(row[idx]).strip()
 
-        logger.info(f"Loaded {len(base_products)} Base Products.")
+                base_products.append(product_info)
+
+        logger.info(f"Loaded {len(base_products)} Base Products with extra fields.")
         return base_products
 
     def find_best_match(self, new_product_name: str, candidates: Optional[List[Dict]] = None) -> Optional[Dict[str, Any]]:

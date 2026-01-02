@@ -1367,6 +1367,8 @@ if (ss) {
    */
   function _runCertificationCascade(sheet, row, updatedHeader) {
     if (!updatedHeader) return;
+    Lib._runCertificationCascade = _runCertificationCascade; // Export for overrides
+
 
     // --- ХЕЛПЕРЫ НОРМАЛИЗАЦИИ ---
     // Приводим к нижнему регистру и заменяем ё -> е для надежного сравнения
