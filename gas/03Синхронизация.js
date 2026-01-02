@@ -95,6 +95,64 @@ var Lib = Lib || {};
     _customLog("ERROR", message, errorObject);
   };
 
+  /**
+   * Ступенчатое логирование действий (для понятных сценариев: запуск, каскады, создание артикула).
+   * @param {string} context - Короткий маркер процесса (например, Startup, Article, Sync)
+   * @param {string} step - Описание шага
+   * @param {"DEBUG"|"INFO"|"WARN"|"ERROR"} [level="INFO"] - Уровень лога
+   */
+  Lib.logStep = function (context, step, level) {
+    const lvl = level || "INFO";
+    const prefix = context ? `[${context}] ` : "";
+    const message = prefix + step;
+    _customLog(lvl, message);
+  };
+
+  /**
+   * Переносит листы логов в начало (Журнал логов, затем Журнал синхро), сохраняя активный лист.
+   * Делает лог-запись о фактически перемещенных листах.
+   */
+  Lib.ensureLogSheetsFirst = function () {
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      if (!ss) return;
+
+      const active = ss.getActiveSheet();
+      const names = [];
+      if (Lib.CONFIG && Lib.CONFIG.SHEETS) {
+        // Strict priority: Логи first, then others
+        if (Lib.CONFIG.SHEETS.SESSION_LOG) names.push(Lib.CONFIG.SHEETS.SESSION_LOG);
+        if (Lib.CONFIG.SHEETS.LOG_DEBUG) names.push(Lib.CONFIG.SHEETS.LOG_DEBUG);
+        if (Lib.CONFIG.SHEETS.LOG) names.push(Lib.CONFIG.SHEETS.LOG);
+      }
+
+      let moveIndex = 1;
+      const moved = [];
+
+      names.forEach(function (name) {
+        if (!name) return;
+        const sheet = ss.getSheetByName(name);
+        if (!sheet || sheet.isSheetHidden()) return; // Skip if not found or hidden (unless we want to unhide?)
+        
+        // Перемещаем лист в указанную позицию
+        sheet.activate();
+        ss.moveActiveSheet(moveIndex);
+        moved.push(name);
+        moveIndex += 1;
+      });
+
+      if (active && !names.includes(active.getName())) {
+        active.activate();
+      }
+
+      if (moved.length) {
+        Lib.logStep("Startup", "Листы логов перенесены в начало: " + moved.join(", "));
+      }
+    } catch (e) {
+      Lib.logWarn("ensureLogSheetsFirst: ошибка перемещения лог-листов", e);
+    }
+  };
+
   // ----------------------------------
   // Секция 1.2: Работа с данными
   // ----------------------------------
@@ -500,6 +558,7 @@ if (ss) {
    * @param {number} row - Номер строки, в которой произошло изменение
    * @private
    */
+/* MIGRATED TO SERVER (src/services/sync.py)
   function _autoFillDeadlineFromExpiry(sheet, row) {
     try {
       // Получаем заголовки из строки 1 (на листе "Заказ" заголовки всегда в строке 1)
@@ -621,6 +680,7 @@ if (ss) {
       throw error;
     }
   }
+*/
 
   /**
    * Форматирует дату срока годности в формат MM.YYYY
@@ -668,6 +728,7 @@ if (ss) {
    * @param {number} row - Номер строки, в которой произошло изменение
    * @private
    */
+/* MIGRATED TO SERVER (src/services/sync.py)
   function _autoFillSetDeadlineFromExpiry(sheet, row) {
     try {
       // Получаем заголовки из строки 1 (на листе "Заказ" заголовки всегда в строке 1)
@@ -789,560 +850,108 @@ if (ss) {
       throw error;
     }
   }
+*/
 
   /**
-   * Разбор изменённого диапазона: применение правил + автосоздание строк при новом ID
+   * ═══════════════════════════════════════════════════════════════════════════
+   * 🐍 MIGRATED TO PYTHON: Локальная логика синхронизации перенесена в
+   *    Python сервер (src/services/sync.py). Эта функция теперь только
+   *    собирает данные и отправляет их на сервер через callServerSyncEvent.
+   * ═══════════════════════════════════════════════════════════════════════════
+   * Разбор изменённого диапазона и отправка события на сервер Python.
    * @private
    */
   function _processEditEvent(e) {
     const range = e.range;
     const sheet = range.getSheet();
     const sheetName = sheet.getName();
-    const isOrderForm = sheetName === Lib.CONFIG.SHEETS.ORDER_FORM;
-    const isPriceSheet = sheetName === Lib.CONFIG.SHEETS.PRICE;
+    
+    // Получаем значение заголовка для контекста (упрощенная, но надежная логика для передачи на сервер)
+    // Сервер может перепроверить, но лучше дать ему подсказку.
+    const col = range.getColumn();
+    const row = range.getRow();
+    
+    let headerName = "";
+    try {
+        // Пробуем взять из первой строки (стандарт)
+        headerName = String(sheet.getRange(1, col).getValue() || "").trim();
+        // TODO: Если нужна сложная логика merged ranges/Order form, сервер может это уточнить,
+        // но пока шлем основной заголовок.
+    } catch(err) {
+        // ignore
+    }
+    
+    const rowKey = String(sheet.getRange(row, 1).getValue() || "").trim();
+    const userEmail = (e.user && e.user.getEmail()) ? e.user.getEmail() : "";
 
-    // читаем новые значения "оптом"
-    const values = range.getValues();
-    const richTextValues = range.getRichTextValues();
-    const headerRowIndex = 1; // единственная строка заголовков
-
-    for (let r = 0; r < range.getNumRows(); r++) {
-      const row = range.getRow() + r;
-      if (row <= headerRowIndex && !isOrderForm) continue; // шапку не трогаем
-
-      if (isOrderForm && row <= headerRowIndex) {
-        Lib.logDebug(
-          "[Order:onEdit] анализ строки заголовков " +
-            row +
-            " (colStart=" +
-            range.getColumn() +
-            ")"
-        );
-      }
-
-      // Новая строка по ID (колонка A была пустой → стала непустой)
-      if (range.getColumn() === 1 && String(e.oldValue || "").trim() === "") {
-        const newKey = String(e.value || "").trim();
-        if (newKey) _ensureRowExistsOnBaseSheets(newKey);
-      }
-
-      // Основная синхронизация по правилам для каждой затронутой колонки
-      for (let c = 0; c < range.getNumColumns(); c++) {
-        const col = range.getColumn() + c;
-        // Чтение верхней подписи: сначала value, если пусто — displayValue, учесть merged ranges
-        var header = String(sheet.getRange(1, col).getValue() || "").trim();
-        if (!header) {
-          try {
-            header = String(
-              sheet.getRange(1, col).getDisplayValue() || ""
-            ).trim();
-          } catch (e) {
-            /* ignore */
-          }
+    const payload = {
+      spreadsheet_id: SpreadsheetApp.getActiveSpreadsheet().getId(),
+      sheet_name: sheetName,
+      row: row,
+      col: col,
+      value: e.value, // Может быть undefined при range edit
+      old_value: e.oldValue,
+      user_email: userEmail,
+      header_name: headerName,
+      row_key: rowKey,
+      sync_origin: "user",
+      transaction_id: Utilities.getUuid(),
+    };
+    
+    Lib.logInfo(`[Sync -> Python] Отправка R${row}C${col} лист="${sheetName}" заголовок="${headerName}"`);
+    
+    if (typeof callServerSyncEvent === 'function') {
+        try {
+            callServerSyncEvent(payload);
+            Lib.logDebug('[Sync -> Python] Запрос отправлен успешно');
+        } catch (err) {
+            Lib.logError('[Sync -> Python] Ошибка отправки: ' + err.message, err);
         }
-        var dataHeader = header;
-        if (isOrderForm && row > headerRowIndex) {
-          try {
-            dataHeader = String(
-              sheet.getRange(headerRowIndex, col).getValue() || ""
-            ).trim();
-            if (!dataHeader) {
-              // fallback to displayValue
-              try {
-                dataHeader = String(
-                  sheet.getRange(headerRowIndex, col).getDisplayValue() || ""
-                ).trim();
-              } catch (e) {
-                /* ignore */
-              }
-            }
-          } catch (e) {
-            dataHeader = header;
-          }
-        }
-        const headerForRules = header || dataHeader;
-
-        if (isOrderForm && row <= headerRowIndex) {
-          Lib.logDebug(
-            "[Order:onEdit] R" + row + "C" + col + ' header="' + header + '"'
-          );
-        } else if (isOrderForm && row > headerRowIndex) {
-          Lib.logDebug(
-            "[Order:onEdit] R" +
-              row +
-              "C" +
-              col +
-              ' header1="' +
-              header +
-              '" dataHeader="' +
-              dataHeader +
-              '"'
-          );
-        }
-        // Если всё ещё нет заголовка — попробуем узнать, может ячейка в merged range
-        if (!headerForRules) {
-          try {
-            var mrList = sheet.getMergedRanges();
-            for (var mi = 0; mi < mrList.length; mi++) {
-              var mr = mrList[mi];
-              var r1 = mr.getRow();
-              var r2 = mr.getLastRow();
-              var c1 = mr.getColumn();
-              var c2 = mr.getLastColumn();
-              if (1 >= r1 && 1 <= r2 && col >= c1 && col <= c2) {
-                // верхняя строка 1 в merged range
-                try {
-                  headerForRules = String(mr.getValues()[0][0] || "").trim();
-                } catch (e) {
-                  headerForRules = header;
-                }
-                break;
-              }
-              if (
-                headerRowIndex >= r1 &&
-                headerRowIndex <= r2 &&
-                col >= c1 &&
-                col <= c2
-              ) {
-                try {
-                  headerForRules = String(mr.getValues()[0][0] || "").trim();
-                } catch (e) {
-                  headerForRules = header;
-                }
-                break;
-              }
-            }
-          } catch (e) {
-            /* ignore */
-          }
-        }
-        if (!headerForRules) continue;
-
-        const normalizedHeaderForPrice = String(headerForRules || "")
-          .trim()
-          .replace(/\s+/g, " ")
-          .toLowerCase();
-
-        // ============================================================================
-        // СПЕЦИАЛЬНАЯ ОБРАБОТКА: Автозаполнение "Срок#" из "СГ 1-3" при выборе "АКЦИИ"
-        // ============================================================================
-        if (
-          isOrderForm &&
-          row > headerRowIndex &&
-          (headerForRules === "АКЦИИ" || dataHeader === "АКЦИИ")
-        ) {
-          try {
-            var promotionValue = values[r][c];
-            if (promotionValue && String(promotionValue).trim() !== "") {
-              Lib.logInfo(
-                '[Order:onEdit] Обнаружено изменение в столбце "АКЦИИ" (строка ' +
-                  row +
-                  '), запускаем автозаполнение "Срок#"'
-              );
-              _autoFillDeadlineFromExpiry(sheet, row);
-            }
-          } catch (autoFillError) {
-            Lib.logError(
-              '[Order:onEdit] Ошибка автозаполнения "Срок#" из "СГ 1-3"',
-              autoFillError
-            );
-          }
-        }
-        // ============================================================================
-
-        // ============================================================================
-        // СПЕЦИАЛЬНАЯ ОБРАБОТКА: Автозаполнение "Срок" из "СГ 1-3" при выборе "Набор"
-        // ============================================================================
-        if (
-          isOrderForm &&
-          row > headerRowIndex &&
-          (headerForRules === "Набор" || dataHeader === "Набор")
-        ) {
-          try {
-            var setValue = values[r][c];
-            if (setValue && String(setValue).trim() !== "") {
-              Lib.logInfo(
-                '[Order:onEdit] Обнаружено изменение в столбце "Набор" (строка ' +
-                  row +
-                  '), запускаем автозаполнение "Срок"'
-              );
-              _autoFillSetDeadlineFromExpiry(sheet, row);
-            }
-          } catch (autoFillError2) {
-            Lib.logError(
-              '[Order:onEdit] Ошибка автозаполнения "Срок" из "СГ 1-3"',
-              autoFillError2
-            );
-          }
-        }
-        // ============================================================================
-
-        // В новой модели строка 1 - единственная строка заголовков,
-        // строки 2-3 больше не имеют специального значения
-        // определяем, нужно ли напрямую вызывать override для Order
-        let shouldInvokeOrderOverrideDirectly = false;
-        if (isOrderForm) {
-          if (row === 1) {
-            // Правка заголовка в строке 1
-            var topHeader = String(headerForRules || header || "").trim();
-            var normalizedTopHeader = topHeader.toLowerCase();
-            if (
-              normalizedTopHeader === "кол-во месяцев" ||
-              /^\s*потребность\s+на\s*\d+\s*месяц/i.test(topHeader)
-            ) {
-              shouldInvokeOrderOverrideDirectly = true;
-            }
-          }
-          // В новой модели строки 2 и 3 больше не имеют специального значения,
-          // их обработка проходит через обычные правила синхронизации
-        }
-
-        const allRules = _loadSyncRules();
-        const applicable = allRules.filter(
-          (rule) =>
-            rule &&
-            typeof rule === "object" &&
-            rule.sourceSheet === sheetName &&
-            rule.sourceHeader === headerForRules &&
-            rule.targetSheet &&
-            rule.targetHeader
-        );
-
-        // Диагностическое логирование для всех листов
-        if (isOrderForm || applicable.length > 0 || allRules.length > 0) {
-          Lib.logDebug(
-            '[Sync:onEdit] sheet="' +
-              sheetName +
-              '", row=' +
-              row +
-              ', col=' +
-              col +
-              ', header="' +
-              header +
-              '", dataHeader="' +
-              dataHeader +
-              '", headerForRules="' +
-              headerForRules +
-              '", totalRules=' +
-              allRules.length +
-              ', applicable=' +
-              applicable.length
-          );
-        }
-        if (applicable.length === 0) {
-          if (shouldInvokeOrderOverrideDirectly) {
-            Lib.logDebug(
-              '[Order:onEdit] прямой вызов override для "' +
-                header +
-                '" (row ' +
-                row +
-                ", col " +
-                col +
-                ")"
-            );
-            _invokeOnUpdateOverride(sheet, row, col, "Order:onEdit:noRules");
-          } else if (isOrderForm) {
-            const headerForTrigger = dataHeader || header;
-            const normalizedHeader = String(headerForTrigger || "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .toLowerCase();
-            const normalizedTopHeader = String(header || "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .toLowerCase();
-            let normalizedHeaderKey = normalizedHeader;
-            if (
-              normalizedHeaderKey === "да" &&
-              normalizedTopHeader === "добавить в прайс"
-            ) {
-              normalizedHeaderKey = normalizedTopHeader;
-            }
-            let triggerLabel = null;
-            if (row > headerRowIndex) {
-              switch (normalizedHeaderKey) {
-                case "предварительный заказ":
-                  triggerLabel = "preOrder";
-                  break;
-                case "заказ в упаковках":
-                  triggerLabel = "packs";
-                  break;
-                case "заказ":
-                  triggerLabel = "order";
-                  break;
-                case "шт./уп.":
-                  triggerLabel = "unitsPerPack";
-                  break;
-                case "exw alfaspa текущая, €":
-                  triggerLabel = "price";
-                  break;
-                case "предварительная сумма заказа":
-                  triggerLabel = "sum";
-                  break;
-                case "добавить в прайс":
-                  triggerLabel = "addToPrice";
-                  break;
-                case "акции":
-                  triggerLabel = "promotions";
-                  break;
-                case "набор":
-                  triggerLabel = "sets";
-                  break;
-                default:
-                  break;
-              }
-            }
-            if (triggerLabel) {
-              Lib.logDebug(
-                '[Order:onEdit] прямой вызов override для "' +
-                  header +
-                  '" (row ' +
-                  row +
-                  ", col " +
-                  col +
-                  ", trigger=" +
-                  triggerLabel +
-                  ")"
-              );
-              _invokeOnUpdateOverride(
-                sheet,
-                row,
-                col,
-                "Order:onEdit:" + triggerLabel
-              );
-            } else if (row > headerRowIndex) {
-              // Доп. случай: изменения в колонках Остаток/Резерв/Товар в пути/Продажи/Остаток 1-3/СГ 1-3/СПИСАНО → пересчёт производных
-              const compact = normalizedHeader.replace(/\s+/g, "");
-              const shouldRecalcDerived =
-                normalizedHeader === "остаток" ||
-                normalizedHeader.indexOf("остаток1") === 0 ||
-                normalizedHeader.indexOf("остаток 1") === 0 ||
-                normalizedHeader.indexOf("остаток2") === 0 ||
-                normalizedHeader.indexOf("остаток 2") === 0 ||
-                normalizedHeader.indexOf("остаток3") === 0 ||
-                normalizedHeader.indexOf("остаток 3") === 0 ||
-                normalizedHeader.indexOf("сг 1") === 0 ||
-                normalizedHeader.indexOf("сг 2") === 0 ||
-                normalizedHeader.indexOf("сг 3") === 0 ||
-                normalizedHeader === "списано" ||
-                normalizedHeader === "резерв" ||
-                compact.indexOf("товарвпути") === 0 ||
-                normalizedHeader.indexOf("продажи") === 0 ||
-                normalizedHeader.indexOf("среднемесячные продажи") === 0;
-              if (shouldRecalcDerived) {
-                Lib.logDebug(
-                  '[Order:onEdit] пересчёт производных по колонке "' +
-                    header +
-                    '" (row ' +
-                    row +
-                    ", col " +
-                    col +
-                    ")"
-                );
-                _invokeOnUpdateOverride(sheet, row, col, "Order:onEdit:derived");
-              }
-            }
-          }
-          if (isPriceSheet && row > 1) {
-            if (
-              normalizedHeaderForPrice === "группа линии" ||
-              normalizedHeaderForPrice === "линия прайс"
-            ) {
-              _autoAssignPriceLineId(sheet, row);
-            } else if (normalizedHeaderForPrice === "продублировать") {
-              const duplicateValue = values[r][c];
-              if (_isPriceDuplicateFlagSet(duplicateValue)) {
-                _duplicatePriceRow(sheet, row);
-              }
-            }
-          }
-          continue;
-        }
-        // Если есть правила, но мы редактируем строку 3 с заголовком 'Потребность на N месяцев' — принудим override
-        if (isOrderForm && row === 3) {
-          try {
-            if (/^\s*Потребность\s+на\s*\d+\s*месяц/i.test(row3Label)) {
-              Lib.logDebug(
-                "[Order:onEdit] row3Label matches Потребность pattern and applicable.length=" +
-                  applicable.length +
-                  ", forcing override"
-              );
-              _invokeOnUpdateOverride(sheet, row, col, "Order:onEdit:force");
-              continue;
-            }
-          } catch (e) {
-            /* ignore */
-          }
-        }
-
-        const key = sheet.getRange(row, 1).getValue();
-        if (!key || !String(key).trim()) continue;
-
-        const newValue = values[r][c];
-        const newRich = richTextValues[r][c];
-        const srcInfo = `${sheetName}!(${header} R${row})`;
-
-        applicable.forEach((rule) =>
-          _syncSingleValue(rule, key, newValue, newRich, srcInfo)
-        );
-
-        // ВАЖНО: Завершаем цикл обработки каскадом для текущего листа.
-        // Это необходимо, чтобы локальные вычисления (например на листе Сертификация)
-        // срабатывали даже если нет правил синхронизации "наружу".
-        if (sheetName === Lib.CONFIG.SHEETS.CERTIFICATION) {
-           _triggerCascadeUpdates(sheet, row, col);
-        }
-
-        // Дополнительно: для листа Заказ всегда пересчитываем зависимые поля
-        // даже если есть правила синхронизации (post-sync триггер).
-        if (isOrderForm && row > headerRowIndex) {
-          try {
-            const headerForTrigger = dataHeader || header;
-            const normalizedHeader = String(headerForTrigger || "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .toLowerCase();
-            const normalizedTopHeader = String(header || "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .toLowerCase();
-            let normalizedHeaderKey = normalizedHeader;
-            if (
-              normalizedHeaderKey === "да" &&
-              normalizedTopHeader === "добавить в прайс"
-            ) {
-              normalizedHeaderKey = normalizedTopHeader;
-            }
-            let triggerLabel = null;
-            switch (normalizedHeaderKey) {
-              case "предварительный заказ":
-                triggerLabel = "preOrder";
-                break;
-              case "заказ в упаковках":
-                triggerLabel = "packs";
-                break;
-              case "заказ":
-                triggerLabel = "order";
-                break;
-              case "шт./уп.":
-                triggerLabel = "unitsPerPack";
-                break;
-              case "exw alfaspa текущая, €":
-                triggerLabel = "price";
-                break;
-              case "предварительная сумма заказа":
-                triggerLabel = "sum";
-                break;
-              case "добавить в прайс":
-                triggerLabel = "addToPrice";
-                break;
-              default: {
-                const compact = normalizedHeader.replace(/\s+/g, "");
-                const derived =
-                  normalizedHeader === "остаток" ||
-                  normalizedHeader === "резерв" ||
-                  compact.indexOf("товарвпути") === 0 ||
-                  normalizedHeader.indexOf("продажи") === 0 ||
-                  normalizedHeader.indexOf("среднемесячные продажи") === 0;
-                if (derived) triggerLabel = "derived";
-              }
-            }
-            if (triggerLabel) {
-              _invokeOnUpdateOverride(
-                sheet,
-                row,
-                col,
-                "Order:onEdit:postSync:" + triggerLabel
-              );
-            }
-          } catch (_) {
-            // soft-fail
-          }
-        }
-        if (isPriceSheet && row > 1) {
-          if (
-            applicable.length > 0 &&
-            (normalizedHeaderForPrice === "группа линии" ||
-              normalizedHeaderForPrice === "линия прайс")
-          ) {
-            _autoAssignPriceLineId(sheet, row);
-          } else if (
-            normalizedHeaderForPrice === "продублировать" &&
-            _isPriceDuplicateFlagSet(values[r][c])
-          ) {
-            _duplicatePriceRow(sheet, row);
-          }
-        }
-      }
+    } else {
+        Lib.logError("callServerSyncEvent не найден в глобальной области!");
     }
   }
 
+
   /**
-   * Загрузка/кэш правил из листа «Правила синхро»
+   * Загрузка/кэш правил с сервера (YAML), без обращения к листу «Правила синхро».
    * @private
    */
   function _loadSyncRules(forceReload = false) {
     if (_cachedSyncRules && !forceReload) return _cachedSyncRules;
 
-    const rulesSheetName = Lib.CONFIG.SHEETS.RULES;
-    const sheet =
-      SpreadsheetApp.getActiveSpreadsheet().getSheetByName(rulesSheetName);
-    if (!sheet || sheet.getLastRow() <= 1) {
+    try {
+      const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+      const res = Lib.callServer(`/rules/${ssId}`, { force_reload: !!forceReload }, "GET");
+      const rules = (res && res.rules) || [];
+
+      const normalized = rules
+        .filter((r) => r && r.enabled) // сохраняем поведение: только активные правила
+        .map((r) => ({
+          id: String(r.id || "").trim(),
+          enabled: !!r.enabled,
+          category: String(r.category || "").trim(),
+          hashtags: String(r.hashtags || "").trim(),
+          sourceSheet: String(r.source_sheet || r.sourceSheet || "").trim(),
+          sourceHeader: String(r.source_header || r.sourceHeader || "").trim(),
+          targetSheet: String(r.target_sheet || r.targetSheet || "").trim(),
+          targetHeader: String(r.target_header || r.targetHeader || "").trim(),
+          isExternal: !!(r.is_external ?? r.isExternal),
+          targetDocId: String(r.target_doc_id || r.targetDocId || "").trim(),
+          mode: String(r.mode || "unidirectional"),
+          sheetA: String(r.sheet_a || r.sheetA || "").trim(),
+          sheetB: String(r.sheet_b || r.sheetB || "").trim(),
+          headerA: String(r.header_a || r.headerA || "").trim(),
+          headerB: String(r.header_b || r.headerB || "").trim(),
+        }));
+
+      _cachedSyncRules = normalized;
+      Lib.logDebug(`_loadSyncRules (server): активных правил = ${normalized.length}`);
+    } catch (e) {
       _cachedSyncRules = [];
-      return _cachedSyncRules;
+      Lib.logError("Не удалось загрузить правила синхронизации с сервера", e);
     }
 
-    // Берём ширину по факту, но минимум 10 колонок (как у тебя по структуре)
-    const width = Math.max(10, sheet.getLastColumn());
-    const data = sheet
-      .getRange(2, 1, sheet.getLastRow() - 1, width)
-      .getValues();
-
-    const result = [];
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-
-      // Булевы чекбоксы/«Да»
-      const enabled =
-        row[1] === true ||
-        String(row[1] || "")
-          .trim()
-          .toLowerCase() === "да";
-      const isExternal =
-        row[8] === true ||
-        String(row[8] || "")
-          .trim()
-          .toLowerCase() === "да";
-      if (!enabled) continue;
-
-      const rule = {
-        id: String(row[0] || "").trim(),
-        enabled,
-        category: String(row[2] || "").trim(),
-        hashtags: String(row[3] || "").trim(),
-        sourceSheet: String(row[4] || "").trim(),
-        sourceHeader: String(row[5] || "").trim(),
-        targetSheet: String(row[6] || "").trim(),
-        targetHeader: String(row[7] || "").trim(),
-        isExternal,
-        targetDocId: String(row[9] || "").trim(),
-      };
-
-      // Жёсткая валидация, иначе пропускаем строку
-      if (
-        !rule.sourceSheet ||
-        !rule.sourceHeader ||
-        !rule.targetSheet ||
-        !rule.targetHeader
-      )
-        continue;
-      if (rule.isExternal && !rule.targetDocId) continue;
-
-      result.push(rule);
-    }
-
-    _cachedSyncRules = result;
-    Lib.logDebug(`_loadSyncRules: активных правил = ${result.length}`);
     return _cachedSyncRules;
   }
 
@@ -1733,6 +1342,8 @@ if (ss) {
    */
   function _runCertificationCascade(sheet, row, updatedHeader) {
     if (!updatedHeader) return;
+    Lib._runCertificationCascade = _runCertificationCascade; // Export for overrides
+
 
     // --- ХЕЛПЕРЫ НОРМАЛИЗАЦИИ ---
     // Приводим к нижнему регистру и заменяем ё -> е для надежного сравнения
@@ -3838,66 +3449,30 @@ if (ss) {
   // - getExternalDocsList()                    — список внешних документов из служебного листа
   // - getExternalSheetsList(docId)             — список листов во внешнем документе
   // - getExternalSheetColumns(docId, sheet)    — список заголовков во внешнем листе
-  // - saveSyncRule(ruleData)                   — создать/обновить правило в «Правила синхро»
+  // - saveSyncRule(ruleData)                   — создать/обновить правило на сервере
   // =======================================================================================
 
   // ==========================
   // RULES DIALOG: SERVER SIDE
   // ==========================
   Lib.showSyncConfigDialog = function () {
-    const HTML_FILE_NAME = "RuleEditor"; // имя твоего HTML-файла
-    const html = HtmlService.createHtmlOutputFromFile(HTML_FILE_NAME)
-      .setWidth(720)
-      .setHeight(680);
+    const html = HtmlService.createHtmlOutputFromFile("SyncRulesManager")
+      .setWidth(980)
+      .setHeight(760);
     SpreadsheetApp.getUi().showModalDialog(
       html,
-      "Настройка правила синхронизации"
+      "Управление правилами синхронизации"
     );
   };
 
-  // внутренний помощник: создать/починить лист «Правила синхро»
-  function _ensureRulesSheet_() {
-    const name = Lib.CONFIG.SHEETS.RULES;
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sh = ss.getSheetByName(name);
-    if (!sh) {
-      sh = ss.insertSheet(name);
-    }
-    // Заголовки по нашей текущей схеме чтения/записи
-    const headers = [
-      "ID правила", // A: row[0]
-      "Активно", // B: row[1] (checkbox/Да)
-      "Категория", // C: row[2]
-      "Хэштеги", // D: row[3]
-      "Источник: Лист", // E: row[4]
-      "Источник: Колонка", // F: row[5]
-      "Цель: Лист", // G: row[6]
-      "Цель: Колонка", // H: row[7]
-      "Внешний документ", // I: row[8] (checkbox/Да)
-      "Target Doc ID", // J: row[9]
-    ];
+  Lib.showSyncRulesManagerDialog = function () {
+    return Lib.showSyncConfigDialog();
+  };
 
-    const lastCol = sh.getLastColumn();
-    const have =
-      lastCol > 0
-        ? sh
-            .getRange(1, 1, 1, Math.max(lastCol, headers.length))
-            .getValues()[0]
-            .map((x) => String(x || "").trim())
-        : [];
-    let changed = false;
-    headers.forEach((h, i) => {
-      if (have[i] !== h) {
-        sh.getRange(1, i + 1)
-          .setValue(h)
-          .setFontWeight("bold");
-        changed = true;
-      }
-    });
-    if (changed) {
-      sh.setFrozenRows(1);
-    }
-    return sh;
+  // Legacy stub: лист «Правила синхро» больше не используется
+  function _ensureRulesSheet_() {
+    // Лист «Правила синхро» больше не используется — правила хранятся на сервере
+    return null;
   }
 
   // Список внешних документов:
@@ -4033,71 +3608,20 @@ if (ss) {
     // ПУБЛИЧНО: единая автоконфигурация инфраструктуры
     Lib.ensureInfra = function () {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
-      // 1) Правила
-      if (typeof Lib.ensureRulesSheetStructure === "function") {
-        Lib.ensureRulesSheetStructure();
-      }
-      // 2) Журнал
+      // 1) Журнал
       _ensureLogSheet_();
-      // 3) Внешние документы
+      // 2) Внешние документы
       _ensureExternalDocsSheet_();
-      // 4) Лёгкая проверка «Внешних документов» (не обязательно)
+      // 3) Лёгкая проверка «Внешних документов» (не обязательно)
       try {
         Lib.updateExternalDocsStatus && Lib.updateExternalDocsStatus();
       } catch (_) {}
       ss.toast("Инфраструктура проверена/создана", "OK", 3);
     };
 
+    // Лист правил больше не используется — структура не требуется
     Lib.ensureRulesSheetStructure = function () {
-      const name =
-        (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.RULES) ||
-        "Правила синхро";
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      let sh = ss.getSheetByName(name);
-      if (!sh) sh = ss.insertSheet(name);
-
-      const HEADERS = [
-        "ID правила",
-        "Активно",
-        "Категория",
-        "Хэштеги",
-        "Источник: Лист",
-        "Источник: Колонка",
-        "Цель: Лист",
-        "Цель: Колонка",
-        "Внешний документ",
-        "Target Doc ID",
-        "Дата создания",
-        "Последнее изм.",
-      ];
-
-      // Шапка
-      if (sh.getMaxColumns() < HEADERS.length) {
-        sh.insertColumnsAfter(
-          Math.max(1, sh.getMaxColumns()),
-          HEADERS.length - sh.getMaxColumns()
-        );
-      }
-      sh.getRange(1, 1, 1, HEADERS.length)
-        .setValues([HEADERS])
-        .setFontWeight("bold");
-      sh.setFrozenRows(1);
-
-      // «Да/Нет» на B и I
-      const yn = SpreadsheetApp.newDataValidation()
-        .requireValueInList(["Да", "Нет"], true)
-        .build();
-      sh.getRange(2, 2, Math.max(1, sh.getMaxRows() - 1), 1).setDataValidation(
-        yn
-      );
-      sh.getRange(2, 9, Math.max(1, sh.getMaxRows() - 1), 1).setDataValidation(
-        yn
-      );
-
-      // Формат времени для K/L
-      sh.getRange(2, 11, Math.max(1, sh.getMaxRows() - 1), 2).setNumberFormat(
-        "dd.MM.yyyy HH:mm"
-      );
+      return null;
     };
 
     // ---------------- ЖУРНАЛ ----------------
@@ -4274,199 +3798,34 @@ if (ss) {
   })();
   // Публичная: сохранить/обновить правило синхронизации из RuleEditor.html
   Lib.saveSyncRule = function (ruleData) {
-    const lock = LockService.getUserLock();
-    lock.waitLock(10000); // ждём до 10 секунд именно пользовательский лок
+    const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+    const asStr = (v) => (v === undefined || v === null ? "" : String(v).trim());
 
-    try {
-      // Подстрахуемся: инфраструктура и лист с правилами должны существовать
-      if (typeof Lib.ensureInfra === "function") Lib.ensureInfra();
-      const rulesSheetName =
-        (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.RULES) ||
-        "Правила синхро";
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      const sh = ss.getSheetByName(rulesSheetName);
-      if (!sh) throw new Error(`Лист "${rulesSheetName}" не найден`);
+    const payload = {
+      mode: ruleData.mode || "unidirectional",
+      enabled: ruleData.enabled !== undefined ? !!ruleData.enabled : true,
+      category: asStr(ruleData.category),
+      hashtags: asStr(ruleData.hashtags),
+      source_sheet: asStr(ruleData.sourceSheet || ruleData.source_sheet),
+      source_header: asStr(ruleData.sourceHeader || ruleData.source_header),
+      target_sheet: asStr(ruleData.targetSheet || ruleData.target_sheet),
+      target_header: asStr(ruleData.targetHeader || ruleData.target_header),
+      sheet_a: asStr(ruleData.sheetA || ruleData.sheet_a),
+      header_a: asStr(ruleData.headerA || ruleData.header_a),
+      sheet_b: asStr(ruleData.sheetB || ruleData.sheet_b),
+      header_b: asStr(ruleData.headerB || ruleData.header_b),
+      is_external: !!(ruleData.isExternal ?? ruleData.is_external),
+      target_doc_id: asStr(ruleData.targetDocId || ruleData.target_doc_id),
+    };
 
-      // Нормализаторы
-      const toYesNo = (v) => {
-        const s = String(v).trim().toLowerCase();
-        return v === true ||
-          s === "true" ||
-          s === "1" ||
-          s === "да" ||
-          s === "yes" ||
-          s === "y"
-          ? "Да"
-          : "Нет";
-      };
-      const asStr = (v) => String(v || "").trim();
+    const hasId = !!asStr(ruleData.id);
+    const endpoint = hasId
+      ? `/rules/${ssId}/${asStr(ruleData.id)}`
+      : `/rules/${ssId}/create`;
+    const method = hasId ? "PATCH" : "POST";
 
-      // Поля из формы
-      const id = asStr(ruleData.id);
-      const enabledYN = toYesNo(ruleData.enabled);
-      const category = asStr(ruleData.category);
-      const hashtags = asStr(ruleData.hashtags);
-      const sourceSheet = asStr(ruleData.sourceSheet);
-      const sourceHeader = asStr(ruleData.sourceHeader);
-      const targetSheet = asStr(ruleData.targetSheet);
-      const targetHeader = asStr(ruleData.targetHeader);
-      const isExternalYN = toYesNo(ruleData.isExternal);
-      const targetDocId =
-        isExternalYN === "Да" ? asStr(ruleData.targetDocId) : "";
-
-      // Валидация
-      if (!sourceSheet || !sourceHeader || !targetSheet || !targetHeader) {
-        throw new Error(
-          "Заполните: Исходный лист/столбец и Целевой лист/столбец."
-        );
-      }
-      if (isExternalYN === "Да" && !targetDocId) {
-        throw new Error(
-          "Включён внешний документ, но не указан Target Doc ID."
-        );
-      }
-
-      // Эталонная шапка (A…L)
-      const HEADERS = [
-        "ID правила",
-        "Активно",
-        "Категория",
-        "Хэштеги",
-        "Источник: Лист",
-        "Источник: Колонка",
-        "Цель: Лист",
-        "Цель: Колонка",
-        "Внешний документ",
-        "Target Doc ID",
-        "Дата создания",
-        "Последнее изм.",
-      ];
-      // Добьем шапку при необходимости (в конец, порядок не ломаем)
-      if (typeof Lib.ensureHeadersPresent_ === "function")
-        Lib.ensureHeadersPresent_(sh, HEADERS);
-
-      // Проставим валидацию «Да/Нет» на B и I (мягко, каждый раз безопасно)
-      try {
-        const ynRule = SpreadsheetApp.newDataValidation()
-          .requireValueInList(["Да", "Нет"], true)
-          .build();
-        sh.getRange(
-          2,
-          2,
-          Math.max(1, sh.getMaxRows() - 1),
-          1
-        ).setDataValidation(ynRule); // B
-        sh.getRange(
-          2,
-          9,
-          Math.max(1, sh.getMaxRows() - 1),
-          1
-        ).setDataValidation(ynRule); // I
-      } catch (_) {}
-
-      const now = new Date();
-      const tz =
-        (Lib.CONFIG && Lib.CONFIG.SETTINGS && Lib.CONFIG.SETTINGS.TIMEZONE) ||
-        "UTC";
-
-      // Попытка найти строку по ID
-      let row = -1;
-      if (id) {
-        // используем быстрый поиск по колонке A
-        row =
-          typeof Lib.findRowByKey_ === "function"
-            ? Lib.findRowByKey_(sh, id, true)
-            : -1;
-      }
-
-      // Если ID нет или не найден — проверим, не существует ли уже дубль по ключевым полям
-      if (row === -1 && sh.getLastRow() > 1) {
-        const data = sh
-          .getRange(2, 1, sh.getLastRow() - 1, HEADERS.length)
-          .getValues();
-        for (let i = 0; i < data.length; i++) {
-          const r = data[i];
-          const same =
-            asStr(r[4]) === sourceSheet &&
-            asStr(r[5]) === sourceHeader &&
-            asStr(r[6]) === targetSheet &&
-            asStr(r[7]) === targetHeader &&
-            asStr(r[8]) === isExternalYN &&
-            asStr(r[9]) === targetDocId;
-          if (same) {
-            row = i + 2;
-            break;
-          }
-        }
-      }
-
-      // Если строка не найдена — создаём новую
-      if (row === -1) {
-        const newId =
-          id ||
-          "SR-" +
-            Utilities.formatDate(now, tz, "yyyyMMdd-HHmmss") +
-            "-" +
-            (100 + Math.floor(Math.random() * 900));
-        sh.appendRow([
-          newId,
-          enabledYN,
-          category,
-          hashtags,
-          sourceSheet,
-          sourceHeader,
-          targetSheet,
-          targetHeader,
-          isExternalYN,
-          targetDocId,
-          now,
-          now,
-        ]);
-        // Сброс кэша индексов по ID для этого листа
-        if (typeof Lib.deleteKeyCacheForSheet === "function")
-          Lib.deleteKeyCacheForSheet(sh.getName());
-        // Обнулить кэш правил
-        try {
-          _cachedSyncRules = null;
-        } catch (_) {
-          /* no-op */
-        }
-        return { success: true, id: newId, action: "created" };
-      }
-
-      // Обновление существующей строки (сохраняем «Дата создания» из листа)
-      const createdCell = sh.getRange(row, 11).getValue(); // K
-      const created = createdCell ? createdCell : now;
-      const keepId = sh.getRange(row, 1).getValue() || id;
-
-      sh.getRange(row, 1, 1, HEADERS.length).setValues([
-        [
-          keepId,
-          enabledYN,
-          category,
-          hashtags,
-          sourceSheet,
-          sourceHeader,
-          targetSheet,
-          targetHeader,
-          isExternalYN,
-          targetDocId,
-          created,
-          now,
-        ],
-      ]);
-
-      try {
-        _cachedSyncRules = null;
-      } catch (_) {}
-      return { success: true, id: keepId, action: "updated" };
-    } catch (e) {
-      return { success: false, error: e && e.message ? e.message : String(e) };
-    } finally {
-      try {
-        lock.releaseLock();
-      } catch (_) {}
-    }
+    const res = Lib.callServer(endpoint, payload, method);
+    return res && (res.rule || res);
   };
 })(Lib, this);
 

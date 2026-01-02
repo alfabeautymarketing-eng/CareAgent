@@ -27,8 +27,8 @@ sheets:
   price_calculation: "Расчет цены"
   local_lookup: "Вид и код"
   rules: "Правила синхро"
-  log: "Журнал синхро"
-  log_debug: "Журнал логов"
+  log: "Логи"
+  sync_log: "Журнал синхро"
 
 # Листы для автосоздания строк при новом артикуле
 base_sheets_for_creation:
@@ -194,6 +194,15 @@ drive:
   root_folder_id: "YOUR_SS_ROOT_FOLDER_ID"
   templates_folder_id: "YOUR_SS_TEMPLATES_FOLDER_ID"
   invoices_folder_id: "YOUR_SS_INVOICES_FOLDER_ID"
+
+# ============================================================
+# Source document (Б/З поставщик)
+# ============================================================
+source:
+  doc_id: "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0"
+  sheets:
+    main: "-Б/З поставщик"
+    stocks: "-остатки"
 
 # ============================================================
 # Sync settings

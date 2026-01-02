@@ -129,10 +129,45 @@
    
    <fieldset class="form-section">
       <legend>3. Настройки</legend>
+      <div class="form-group">
+        <label for="modeSelect">Режим синхронизации</label>
+        <select id="modeSelect">
+          <option value="unidirectional">Односторонний</option>
+          <option value="bidirectional">Двунаправленный</option>
+        </select>
+      </div>
       <div class="checkbox-group">
           <input type="checkbox" id="isEnabled" checked>
           <label for="isEnabled" class="checkbox-label">Правило активно</label>
       </div>
+   </fieldset>
+
+   <fieldset class="form-section" id="bidirectionalGroup" style="display:none;">
+     <legend>4. Двунаправленный режим</legend>
+     <div class="inline-group">
+       <div class="form-group">
+         <label for="sheetA">Лист A:</label>
+         <select id="sheetA"></select>
+         <small class="error-message" id="sheetAError"></small>
+       </div>
+       <div class="form-group">
+         <label for="headerA">Колонка A:</label>
+         <select id="headerA"></select>
+         <small class="error-message" id="headerAError"></small>
+       </div>
+     </div>
+     <div class="inline-group">
+       <div class="form-group">
+         <label for="sheetB">Лист B:</label>
+         <select id="sheetB"></select>
+         <small class="error-message" id="sheetBError"></small>
+       </div>
+       <div class="form-group">
+         <label for="headerB">Колонка B:</label>
+         <select id="headerB"></select>
+         <small class="error-message" id="headerBError"></small>
+       </div>
+     </div>
    </fieldset>
 
    <div class="button-bar">
@@ -158,6 +193,12 @@
     targetHeader: document.getElementById('targetHeaderSelect'),
     isEnabled: document.getElementById('isEnabled'),
     saveButton: document.getElementById('saveRule'),
+    modeSelect: document.getElementById('modeSelect'),
+    bidirectionalGroup: document.getElementById('bidirectionalGroup'),
+    sheetA: document.getElementById('sheetA'),
+    headerA: document.getElementById('headerA'),
+    sheetB: document.getElementById('sheetB'),
+    headerB: document.getElementById('headerB'),
   };
 
   // --- Инициализация ---
@@ -169,26 +210,42 @@
       .withSuccessHandler(sheetsList => {
         populateSelect(elements.sourceSheet, sheetsList, "-- Выберите лист --");
         populateSelect(elements.targetSheet, sheetsList, "-- Выберите лист --");
+        populateSelect(elements.sheetA, sheetsList, "-- Выберите лист --");
+        populateSelect(elements.sheetB, sheetsList, "-- Выберите лист --");
         loadColumnsFor('source');
         loadColumnsFor('target');
+        loadColumnsFor('a');
+        loadColumnsFor('b');
         loadExternalDocs();
+        toggleMode();
       })
       .withFailureHandler(handleError)
       .getSheetsList();
 
     // --- Обработчики событий ---
     elements.saveButton.addEventListener('click', saveRule);
+    elements.modeSelect.addEventListener('change', toggleMode);
     elements.isExternal.addEventListener('change', toggleExternal);
     elements.sourceSheet.addEventListener('change', () => loadColumnsFor('source'));
     elements.targetSheet.addEventListener('change', () => loadColumnsFor('target'));
+    elements.sheetA.addEventListener('change', () => loadColumnsFor('a'));
+    elements.sheetB.addEventListener('change', () => loadColumnsFor('b'));
     elements.externalDoc.addEventListener('change', loadExternalSheets);
     elements.externalSheet.addEventListener('change', loadExternalHeaders);
   }
 
   // --- Логика загрузки данных ---
   function loadColumnsFor(type) {
-    const sheetSelect = (type === 'source') ? elements.sourceSheet : elements.targetSheet;
-    const headerSelect = (type === 'source') ? elements.sourceHeader : elements.targetHeader;
+    const mapping = {
+      source: { sheet: elements.sourceSheet, header: elements.sourceHeader },
+      target: { sheet: elements.targetSheet, header: elements.targetHeader },
+      a: { sheet: elements.sheetA, header: elements.headerA },
+      b: { sheet: elements.sheetB, header: elements.headerB },
+    };
+    const entry = mapping[type];
+    if (!entry) return;
+    const sheetSelect = entry.sheet;
+    const headerSelect = entry.header;
     const sheetName = sheetSelect.value;
     
     headerSelect.disabled = true;
@@ -239,9 +296,25 @@
   
   // --- UI-хелперы ---
   function toggleExternal() {
+    if (elements.modeSelect.value === 'bidirectional') {
+      elements.isExternal.checked = false;
+      elements.externalDocGroup.style.display = 'none';
+      elements.internalTargetGroup.style.display = 'none';
+      return;
+    }
     const isChecked = elements.isExternal.checked;
     elements.externalDocGroup.style.display = isChecked ? 'block' : 'none';
     elements.internalTargetGroup.style.display = isChecked ? 'none' : 'block';
+  }
+
+  function toggleMode() {
+    const isBi = elements.modeSelect.value === 'bidirectional';
+    elements.bidirectionalGroup.style.display = isBi ? 'block' : 'none';
+    elements.internalTargetGroup.style.display = isBi ? 'none' : (elements.isExternal.checked ? 'none' : 'block');
+    elements.externalDocGroup.style.display = isBi ? 'none' : (elements.isExternal.checked ? 'block' : 'none');
+    if (isBi) {
+      elements.isExternal.checked = false;
+    }
   }
 
   function populateSelect(selectEl, options, defaultText) {
@@ -263,21 +336,34 @@
   // --- Сохранение и Валидация ---
   function saveRule() {
     // Валидация будет добавлена на следующем шаге
+    const mode = elements.modeSelect.value || 'unidirectional';
     const ruleData = {
       id: elements.ruleIdInput.value || null,
-      sourceSheet: elements.sourceSheet.value,
-      sourceHeader: elements.sourceHeader.value,
-      targetSheet: elements.isExternal.checked ? elements.externalSheet.value : elements.targetSheet.value,
-      targetHeader: elements.isExternal.checked ? elements.externalHeader.value : elements.targetHeader.value,
-      isExternal: elements.isExternal.checked,
-      targetDocId: elements.isExternal.checked ? elements.externalDoc.value : '',
+      mode,
       enabled: elements.isEnabled.checked,
     };
+
+    if (mode === 'bidirectional') {
+      ruleData.sheetA = elements.sheetA.value;
+      ruleData.headerA = elements.headerA.value;
+      ruleData.sheetB = elements.sheetB.value;
+      ruleData.headerB = elements.headerB.value;
+      ruleData.isExternal = false;
+      ruleData.targetDocId = '';
+    } else {
+      ruleData.sourceSheet = elements.sourceSheet.value;
+      ruleData.sourceHeader = elements.sourceHeader.value;
+      ruleData.targetSheet = elements.isExternal.checked ? elements.externalSheet.value : elements.targetSheet.value;
+      ruleData.targetHeader = elements.isExternal.checked ? elements.externalHeader.value : elements.targetHeader.value;
+      ruleData.isExternal = elements.isExternal.checked;
+      ruleData.targetDocId = elements.isExternal.checked ? elements.externalDoc.value : '';
+    }
     
     showOverlay('Сохранение правила...');
     google.script.run
       .withSuccessHandler(response => {
-        if (response && response.success) {
+        const ok = response && (response.status === 'ok' || response.rule || response.id || response.success);
+        if (ok) {
           google.script.host.close();
         } else {
           handleError(new Error(response.error || 'Неизвестная ошибка сохранения'));

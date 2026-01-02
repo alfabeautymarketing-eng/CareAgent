@@ -303,6 +303,9 @@ var Lib = Lib || {};
       }
 
       _applyPriceDynamicsFormulas(sheet);
+      if (typeof Lib.logStep === 'function') {
+        Lib.logStep("Startup", "Загрузили/обновили формулы на листе \"Динамика цены\"");
+      }
 
       // Обновляем вертикальные границы на листе "Динамика цены"
       if (typeof Lib.updatePriceDynamicsBorders === 'function') {
@@ -317,6 +320,9 @@ var Lib = Lib || {};
           Lib.CONFIG.SHEETS.PRICE_CALCULATION
             ? Lib.CONFIG.SHEETS.PRICE_CALCULATION
             : "Расчет цены";
+        if (typeof Lib.logStep === 'function') {
+          Lib.logStep("Startup", "Обновлены формулы на листе \"Расчет цены\"");
+        }
         var priceCalcSheet = ss.getSheetByName(priceCalcSheetName);
         if (priceCalcSheet) {
           _applyPriceCalculationFormulas(priceCalcSheet, sheet);
@@ -363,6 +369,9 @@ var Lib = Lib || {};
           ? Lib.CONFIG.SHEETS.PRICE_CALCULATION
           : "Расчет цены";
       var priceCalcSheet = ss.getSheetByName(priceCalcSheetName);
+      if (typeof Lib.logStep === 'function') {
+        Lib.logStep("Startup", "Обновляем формулы листа \"Расчет цены\"");
+      }
       if (!priceCalcSheet) {
         if (!silent) {
           _showAlert(
@@ -2559,11 +2568,10 @@ var Lib = Lib || {};
       }
     };
 
-    global.Lib.__autoPriceSheetHooksInitialized = true;
     global.Lib.__autoPriceExwOrderHooked = true; // сохраняем старый флаг для совместимости
   }
 
-  _ensureSheetRefreshHooksOnOpen();
+  // _ensureSheetRefreshHooksOnOpen(); // ОТКЛЮЧЕНО: Миграция на Python (load-functions)
 
   // =======================================================================================
   // ГЛОБАЛЬНЫЕ ПРОКСИ-ФУНКЦИИ ДЛЯ МЕНЮ

@@ -1,0 +1,421 @@
+/**
+ * =======================================================================================
+ * SERVER-SIDE OVERRIDES (z-server-overrides.js)
+ * ---------------------------------------------------------------------------------------
+ * Replaces local logic with Server API calls for consistency and performance.
+ * Loaded last (z-) to override previous definitions.
+ * =======================================================================================
+ */
+
+var Lib = Lib || {};
+
+(function (Lib) {
+    
+    // --- HELPER: Call Server ---
+    Lib.callServer = function(endpoint, payload, method) {
+        const SERVER_URL = "http://46.226.167.153:8000";
+        const httpMethod = (method || "post").toUpperCase();
+        
+        // Log Entry
+        if (Lib.logStep) {
+            Lib.logStep("Network", `>>> START: ${endpoint} [${httpMethod}]`, "DEBUG");
+        }
+        
+        try {
+            const options = {
+                method: httpMethod,
+                contentType: "application/json",
+                payload: httpMethod === "GET" ? undefined : JSON.stringify(payload || {}),
+                headers: { "ngrok-skip-browser-warning": "true" },
+                muteHttpExceptions: true
+            };
+            
+            let finalEndpoint = endpoint;
+            if (!finalEndpoint.startsWith("/api/v1")) {
+                if (!finalEndpoint.startsWith("/")) finalEndpoint = "/" + finalEndpoint;
+                finalEndpoint = "/api/v1" + finalEndpoint;
+            }
+
+            let url = `${SERVER_URL}${finalEndpoint}`;
+
+            // GET: добавляем query-параметры вместо тела
+            if (httpMethod === "GET" && payload && typeof payload === "object") {
+                const qs = Object.entries(payload)
+                  .filter(([,v]) => v !== undefined && v !== null)
+                  .map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+                  .join("&");
+                if (qs) url += (url.includes("?") ? "&" : "?") + qs;
+            }
+
+            const response = UrlFetchApp.fetch(url, options);
+            const code = response.getResponseCode();
+            const text = response.getContentText();
+            let json = {};
+            try { json = JSON.parse(text); } catch(e) {}
+            
+            // Log Exit
+            if (Lib.logStep) {
+                const statusIcon = (code >= 200 && code < 300) ? "✅" : "❌";
+                Lib.logStep("Network", `<<< END: ${endpoint} [${code}] ${statusIcon}`, "DEBUG");
+            }
+
+            if (code >= 200 && code < 300) {
+                return json;
+            } else {
+                throw new Error(`Server Error (${code}): ${json.detail || text}`);
+            }
+        } catch (e) {
+            if (Lib.logWarn) {
+                Lib.logWarn(`Network: ${endpoint} FAILED`, e);
+            }
+            throw e;
+        }
+    };
+
+    // --- HELPER: Init Session Logs ---
+    Lib.initSessionLogs = function() {
+        try {
+            const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+            Lib.callServer("/logs/init", { spreadsheet_id: ssId });
+        } catch(e) {
+            console.error("Failed to init session logs:", e);
+        }
+    };
+
+    // --- OVERRIDE: Add Article ---
+    Lib.addArticleManually = function() {
+        const ui = SpreadsheetApp.getUi();
+        
+        try {
+            const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+
+            // --- 1. Smart Match Prompt ---
+            const prompt = ui.prompt("Добавить артикул", "Введите название продукта или артикул производителя для сопоставления:", ui.ButtonSet.OK_CANCEL);
+            if (prompt.getSelectedButton() !== ui.Button.OK) return;
+            const productName = prompt.getResponseText().trim();
+
+            let matchedDetails = null;
+            if (productName) {
+                ui.toast("🎯 Ищем совпадения в базе...", "Smart Match", 5);
+                // serverSmartMatch defined in 00_GlobalApiBridge.js calls callServerSmartMatch
+                const matchRes = Lib.serverSmartMatch ? Lib.serverSmartMatch(productName) : null;
+                if (matchRes && matchRes.match_found && matchRes.confidence > 80) {
+                    const details = matchRes.matched_product_details;
+                    const confirm = ui.alert("Найдено совпадение!", 
+                        `Найдено: "${details.name_rus_ds}" (${matchRes.confidence}%)\n\nЗаполнить данные сертификации автоматически?`, 
+                        ui.ButtonSet.YES_NO);
+                    if (confirm === ui.Button.YES) {
+                        matchedDetails = details;
+                    }
+                }
+            }
+
+            ui.toast("🔄 Создание нового артикула...", "Агент", 5);
+            if (Lib.logStep) {
+              Lib.logStep("Article", "Запрос создания артикула на сервере");
+            }
+            
+            // We deduce project from SS ID on server
+            const res = Lib.callServer("/sync/add-article", {
+                article: "", // Server will generate automatically
+                spreadsheet_id: ssId,
+                project: "UNKNOWN" // Server resolves it
+            });
+
+            const newArticle = res && res.article ? res.article : null;
+            
+            if (Lib.logStep) {
+              const status = res && res.status ? res.status : "unknown";
+              Lib.logStep("Article", `Артикул ${newArticle} создан на сервере, статус: ${status}`);
+            }
+
+            // --- 2. Apply Matched Data ---
+            if (newArticle && matchedDetails) {
+                ui.toast("📝 Заполняем данные сертификации...", "Smart Match", 5);
+                Lib.applyMatchedDataToCertification(newArticle, matchedDetails);
+            }
+
+            ui.alert(`✅ Артикул создан: ${newArticle}\nСтатус: ${res.status}`);
+        } catch (e) {
+            if (Lib.logWarn) {
+              Lib.logWarn("Article: ошибка создания артикула", e);
+            }
+            ui.alert(`❌ Ошибка: ${e.message}`);
+        }
+    };
+
+    /**
+     * Заполняет данные сертификации для нового артикула на основе найденного совпадения.
+     */
+    Lib.applyMatchedDataToCertification = function(article, details) {
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+        const sheet = ss.getSheetByName("Сертификация");
+        if (!sheet) return;
+
+        const lastCol = sheet.getLastColumn();
+        const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+        const rowData = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues(); // ID в колонке A
+        
+        let targetRow = -1;
+        for (let i = 0; i < rowData.length; i++) {
+            if (String(rowData[i][0]).trim() === String(article).trim()) {
+                targetRow = i + 1;
+                break;
+            }
+        }
+
+        if (targetRow === -1) {
+            if (Lib.logWarn) Lib.logWarn(`ApplyMatch: Артикул ${article} не найден на листе Сертификация`);
+            return;
+        }
+
+        const fieldMap = {
+            "наименования англ по дс": "name_eng_ds",
+            "наименования рус по дс": "name_rus_ds",
+            "категория": "категория",
+            "вид продукции": "Вид продукции",
+            "код тн вэд": "Код ТН ВЭД",
+            "дс": "ДС",
+            "номер дс": "номер ДС",
+            "дс до": "ДС до",
+            "протокол дс": "Протокол ДС",
+            "протокол доп": "Протокол доп",
+            "inci": "INCI",
+            "coa": "COA"
+        };
+
+        let updateCount = 0;
+        headers.forEach((h, idx) => {
+            const hLower = String(h).toLowerCase().trim().replace(/ё/g, "е");
+            if (fieldMap[hLower]) {
+                const val = details[fieldMap[hLower]];
+                if (val !== undefined && val !== null && val !== "") {
+                    sheet.getRange(targetRow, idx + 1).setValue(val);
+                    updateCount++;
+                }
+            }
+        });
+
+        // Запуск каскада для обновления производных полей
+        if (updateCount > 0 && (typeof Lib._runCertificationCascade === "function")) {
+            Lib._runCertificationCascade(sheet, targetRow, "Наименования рус по ДС");
+        }
+    };
+
+    // --- OVERRIDE: Delete Selected Rows ---
+    Lib.deleteSelectedRowsWithSync = function() {
+        const ui = SpreadsheetApp.getUi();
+        const sel = SpreadsheetApp.getActiveRangeList();
+        if (!sel) { ui.alert("Выберите строки"); return; }
+        
+        const sheet = SpreadsheetApp.getActiveSheet();
+        const rows = new Set();
+        sel.getRanges().forEach(r => {
+            for (let i = r.getRow(); i <= r.getLastRow(); i++) if(i>1) rows.add(i);
+        });
+        
+        if (rows.size === 0) { ui.alert("Нет строк для удаления"); return; }
+        
+        const confirm = ui.alert("Подтверждение удаление (Сервер)", 
+            `Удалить ${rows.size} строк через сервер? Это удалит артикулы из всех связанных листов.`, 
+            ui.ButtonSet.YES_NO);
+        if (confirm !== ui.Button.YES) return;
+        if (Lib.logStep) {
+          Lib.logStep("Delete", "Подтверждено удаление " + rows.size + " строк");
+        }
+        
+        const ids = [];
+        rows.forEach(r => {
+            const val = String(sheet.getRange(r, 1).getValue() || "").trim();
+            if (val) ids.push(val);
+        });
+        
+        if (ids.length === 0) { ui.alert("Не найдены ID в колонке A."); return; }
+        
+        try {
+            const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+            const res = Lib.callServer("/sync/delete-articles", {
+                articles: ids,
+                spreadsheet_id: ssId,
+                project: "UNKNOWN"
+            });
+            if (Lib.logStep) {
+              const message = res && res.message ? res.message : "Удаление выполнено";
+              Lib.logStep("Delete", message);
+            }
+            ui.alert(`✅ Удалено!\n${res.message}`);
+            // Force refresh or delete locally too? 
+            // Server deleted rows, but GAS sheet might need refresh to see changes or we delete locally to be instant.
+            // Better to delete locally too to avoid confusion, but server does it. 
+            // If server deletes, we should reload? Google Sheets updates automatically.
+        } catch (e) {
+            ui.alert(`❌ Ошибка: ${e.message}`);
+        }
+    };
+
+    // --- OVERRIDE: Sync Selected Row ---
+    Lib.syncSelectedRow = function() {
+        const ui = SpreadsheetApp.getUi();
+        const row = SpreadsheetApp.getActiveRange().getRow();
+        if (row <= 1) return;
+        const sheet = SpreadsheetApp.getActiveSheet();
+        const article = String(sheet.getRange(row, 1).getValue() || "").trim();
+        
+        if (!article) { ui.alert("Нет ID в этой строке"); return; }
+
+        try {
+            ui.toast("Синхронизация строки...");
+            const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+            if (Lib.logStep) {
+              Lib.logStep("Sync", `Синхронизация строки ${sheet.getName()}#${row} (ID=${article})`);
+            }
+            const res = Lib.callServer("/sync/row", {
+                spreadsheet_id: ssId,
+                sheet_name: sheet.getName(),
+                article: article,
+                project: "UNKNOWN"
+            });
+            if (Lib.logStep) {
+              Lib.logStep("Sync", "Синхронизация завершена: " + (res && res.status ? res.status : "ok"));
+            }
+            ui.alert(`✅ Синхронизация завершена.`);
+        } catch (e) {
+            ui.alert(`❌ Ошибка: ${e.message}`);
+        }
+    };
+    
+    // --- OVERRIDE: Run Full Sync ---
+    Lib.runFullSync = function() {
+        // ... (existing content) ...
+        const ui = SpreadsheetApp.getUi();
+        const sheet = SpreadsheetApp.getActiveSheet();
+        const confirm = ui.alert("Полная синхронизация", 
+            `Запустить полную синхронизацию для листа "${sheet.getName()}" через сервер? Это может занять время.`, 
+            ui.ButtonSet.YES_NO);
+        if (confirm !== ui.Button.YES) return;
+
+        try {
+            ui.toast("Запуск полной синхронизации...");
+            const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+            if (Lib.logStep) {
+              Lib.logStep("Sync", "Полная синхронизация запущена для листа " + sheet.getName());
+            }
+            const res = Lib.callServer("/sync/full", {
+                spreadsheet_id: ssId,
+                source_sheet: sheet.getName(),
+                project: "UNKNOWN"
+            });
+            if (Lib.logStep) {
+              Lib.logStep("Sync", "Полная синхронизация завершена: " + (res && res.status ? res.status : "ok"));
+            }
+            ui.alert(`✅ Завершено.\nСтатус: ${res.status}`);
+        } catch (e) {
+            ui.alert(`❌ Ошибка: ${e.message}`);
+        }
+    };
+    
+    // --- BATCH PROCESS EVENT ---
+    Lib.processEditEvent_Batch_ = function(e) {
+        if (!e || !e.range) return;
+        const range = e.range;
+        const sheet = range.getSheet();
+        const sheetName = sheet.getName();
+        const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+        const userEmail = (e.user && e.user.getEmail()) ? e.user.getEmail() : "";
+        
+        const events = [];
+        const startRow = range.getRow();
+        const startCol = range.getColumn();
+        const numRows = range.getNumRows();
+        const numCols = range.getNumColumns();
+        
+        // Fetch data for the whole range for efficiency
+        const values = range.getValues(); // 2D array
+        // Fetch IDs (Col A) for rows involved
+        // Optimization: fetch Col A range once
+        let rowKeys = [];
+        try {
+            rowKeys = sheet.getRange(startRow, 1, numRows, 1).getValues().map(r => String(r[0] || "").trim());
+        } catch(err) {
+            // fallback if range is invalid or header row
+        }
+        
+        // Fetch headers for columns involved
+        // Optimization: fetch row 1 for columns
+        let headerNames = [];
+        try {
+            headerNames = sheet.getRange(1, startCol, 1, numCols).getValues()[0].map(h => String(h || "").trim());
+        } catch(err) {
+        }
+        
+        for (let i = 0; i < numRows; i++) {
+            const rowIndex = startRow + i;
+            // Skip header row if selected
+            if (rowIndex <= 1) continue;
+            
+            for (let j = 0; j < numCols; j++) {
+                const colIndex = startCol + j;
+                const value = values[i][j];
+                const header = headerNames[j] || "";
+                const key = rowKeys[i] || "";
+                
+                // If single cell, we might have e.oldValue. Batch doesn't have it easily.
+                // We send what we have.
+                
+                events.push({
+                    spreadsheet_id: ssId,
+                    sheet_name: sheetName,
+                    row: rowIndex,
+                    col: colIndex,
+                    value: value,
+                    old_value: null, // Unknown in batch
+                    user_email: userEmail,
+                    header_name: header,
+                    row_key: key
+                });
+            }
+        }
+        
+        if (events.length === 0) return;
+        
+        // Split into chunks if too large? 
+        // 500 events limit?
+        if (events.length > 0) {
+            Lib.logInfo(`[BatchSync] Sending ${events.length} events...`);
+            try {
+                // Call batch endpoint
+                 Lib.callServer("/sync/batch-event", {
+                    spreadsheet_id: ssId,
+                    events: events
+                });
+            } catch (err) {
+                Lib.logError("[BatchSync] Error: " + err.message);
+            }
+        }
+    };
+    
+    // --- OVERRIDE: onEdit Internal ---
+    // Replaces the core edit handler to use Batch Processing
+    Lib.onEdit_internal_ = function(e) {
+        if (!e) return;
+        const sheet = e.range.getSheet();
+        const row = e.range.getRow();
+        
+        // 1. Maintain Price Auto ID Logic
+        try {
+            if (typeof Lib.autoAssignPriceLineIdForRow === "function") {
+                Lib.autoAssignPriceLineIdForRow(sheet, row);
+            }
+        } catch(err) {
+            Lib.logError("PriceLogic Error", err);
+        }
+        
+        // 2. Batch Sync Process
+        try {
+            Lib.processEditEvent_Batch_(e);
+        } catch(err) {
+            Lib.logError("BatchSync Error", err);
+        }
+    };
+
+})(Lib);

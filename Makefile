@@ -1,4 +1,4 @@
-.PHONY: help install dev run test lint format clean docker-build docker-up docker-down
+.PHONY: help install dev run test lint format clean docker-build docker-up docker-down deploy
 
 help:
 	@echo "AgentCare - Available commands:"
@@ -14,6 +14,7 @@ help:
 	@echo "  docker-build  Build Docker image"
 	@echo "  docker-up     Start Docker containers"
 	@echo "  docker-down   Stop Docker containers"
+	@echo "  deploy        Full deploy (Server + GAS)"
 
 install:
 	poetry install
@@ -51,3 +52,6 @@ docker-down:
 
 docker-logs:
 	docker compose logs -f app
+
+deploy:
+	./scripts/deploy_all.sh

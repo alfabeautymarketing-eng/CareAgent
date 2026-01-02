@@ -11,6 +11,9 @@ Google Sheets automation with AI - Python replacement for MyGoogleScripts.
 - Auto-order calculation
 - Cascade rules engine
 - Transaction support with rollback
+- Live server logging to sheet `Логи` (всегда первая вкладка)
+- Server-side sync rules support (`config/rules/<spreadsheet_id>.yaml`) to avoid лишних чтений листа правил
+- HTML-форма управления правилами: `docs/rules-form.html` (работает через API `/rules/{spreadsheet_id}`)
 
 ## Quick Start
 
@@ -42,6 +45,7 @@ docker compose up -d
 - [Architecture](docs/ARCHITECTURE.md)
 - [Modules](docs/MODULES.md)
 - [API](docs/API.md)
+- [Rules](docs/RULES.md)
 - [Dependencies](docs/DEPENDENCIES.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [GAS & CI: clasp credentials and GitHub secrets](docs/GAS_CI_SECRETS.md)

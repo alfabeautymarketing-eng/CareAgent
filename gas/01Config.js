@@ -70,6 +70,7 @@
     LOG: "Журнал синхро",
     LOG_DEBUG: "Журнал логов",
     EXTERNAL_DOCS: "Внешние документы",
+    SESSION_LOG: "Логи",
   };
 
   // =======================================================================================
@@ -480,7 +481,7 @@
     {
       title: "⚙️ Синхронизация",
       items: [
-        { label: "Настроить правила", fn: "showSyncConfigDialog" },
+        { label: "Настроить правила", fn: "showSyncRulesManagerDialog" },
         { label: "🧹 Очистить уведомления", fn: "clearAllToasts" },
         { label: "Управление внешними документами", fn: "showExternalDocManagerDialog" },
         { separator: true },
@@ -533,6 +534,7 @@
         { label: "⚙️ Настройки Gemini", fn: "setupGeminiComplete" },
         { label: "📋 Показать настройки", fn: "showGeminiSettings" },
         { separator: true },
+        { label: "🎯 Smart Match для строки", fn: "menuSmartMatch" },
         { label: "Анализировать выбранную строку", fn: "menuAnalyzeSelected" },
         { label: "Анализировать пустые строки", fn: "menuAnalyzeEmpty" },
         { separator: true },

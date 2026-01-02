@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Управление правилами синхронизации</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --border: #1f2937;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #22c55e;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, .08), transparent 30%), radial-gradient(circle at 80% 0%, rgba(34, 197, 94, .08), transparent 25%), var(--bg);
+      color: var(--text);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin: 6px 0 2px;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0b1220;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      background: var(--accent);
+      color: #0b1220;
+      font-weight: 600;
+    }
+
+    button.secondary {
+      background: #1f2937;
+      color: var(--text);
+    }
+
+    button.danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .row {
+      display: grid;
+      gap: 10px;
+    }
+
+    .row.cols-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .row.cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: left;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    tr:hover {
+      background: rgba(56, 189, 248, 0.05);
+    }
+
+    .badge {
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      background: rgba(56, 189, 248, .12);
+      color: var(--accent);
+    }
+
+    .chip {
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      background: rgba(34, 197, 94, .12);
+      color: var(--accent-2);
+    }
+
+    .flex {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Правила синхронизации (сервер)</h1>
+
+  <div class="panel">
+    <div class="row cols-3">
+      <div>
+        <label>Spreadsheet ID</label>
+        <input id="spreadsheetId" placeholder="Введите Spreadsheet ID" />
+      </div>
+      <div>
+        <label>Фильтр (лист/столбец/категория)</label>
+        <input id="filter" placeholder="Строка фильтрации" oninput="renderTable()" />
+      </div>
+      <div class="flex" style="align-items:flex-end; gap:10px;">
+        <button onclick="loadRules()" title="Загрузить из кеша">Загрузить</button>
+        <button class="secondary" onclick="reloadRules()" title="Сбросить кеш и прочитать из Google Sheets">🔄</button>
+        <button class="secondary" onclick="saveRules()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Добавить правила</h3>
+    <div class="row cols-2">
+      <div>
+        <label>Категория</label>
+        <input id="category" placeholder="Напр. Сертификация" />
+      </div>
+      <div>
+        <label>Внешний документ ID (если is_external)</label>
+        <input id="targetDocId" placeholder="Опционально" />
+      </div>
+    </div>
+    <div class="row cols-3">
+      <div>
+        <label>Исходный лист</label>
+        <input id="sourceSheet" placeholder="Главная" />
+      </div>
+      <div>
+        <label>Целевой лист</label>
+        <input id="targetSheet" placeholder="Сертификация" />
+      </div>
+      <div>
+        <label>Столбцы (через запятую)</label>
+        <input id="headers" placeholder="Арт. Рус, Арт. произв., Код база" />
+      </div>
+    </div>
+    <div class="row cols-3" style="align-items:center;">
+      <div class="flex" style="gap:6px;">
+        <input type="checkbox" id="isExternal" style="width:auto;" />
+        <label for="isExternal" style="margin:0;">Внешний документ</label>
+      </div>
+      <div class="flex" style="gap:6px;">
+        <input type="checkbox" id="enabled" style="width:auto;" checked />
+        <label for="enabled" style="margin:0;">Включено</label>
+      </div>
+      <button onclick="addRules()">Добавить (создаст правило на каждый столбец)</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Правила</h3>
+    <div id="tableContainer"></div>
+  </div>
+
+  <script>
+    let rules = [];
+
+    function apiBase() {
+      // Use standard prefix matching our FastAPI router
+      return "/api/v1";
+    }
+
+    function $(id) { return document.getElementById(id); }
+
+    function getSpreadsheetId() {
+      const id = $("spreadsheetId").value.trim();
+      if (!id) throw new Error("Укажите Spreadsheet ID");
+      return id;
+    }
+
+    function applyFilter(list) {
+      const f = $("filter").value.trim().toLowerCase();
+      if (!f) return list;
+      return list.filter(r => {
+        return (
+          (r.source_sheet || "").toLowerCase().includes(f) ||
+          (r.target_sheet || "").toLowerCase().includes(f) ||
+          (r.source_header || "").toLowerCase().includes(f) ||
+          (r.target_header || "").toLowerCase().includes(f) ||
+          (r.category || "").toLowerCase().includes(f) ||
+          (r.id || "").toLowerCase().includes(f)
+        );
+      });
+    }
+
+    async function loadRules() {
+      try {
+        const id = getSpreadsheetId();
+        const resp = await fetch(`${apiBase()}/rules/${id}`);
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        rules = data.rules || [];
+        renderTable();
+      } catch (e) {
+        alert("Ошибка загрузки: " + e.message);
+      }
+    }
+
+    async function reloadRules() {
+      try {
+        const id = getSpreadsheetId();
+        if (!confirm("Это принудительно обновит правила из Google Sheets. Это может занять несколько секунд. Продолжить?")) return;
+        const resp = await fetch(`${apiBase()}/rules/${id}/reload`, { method: "POST" });
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        rules = data.rules || [];
+        renderTable();
+        alert("Правила обновлены из Google Sheets");
+      } catch (e) {
+        alert("Ошибка обновления: " + e.message);
+      }
+    }
+
+    async function saveRules() {
+      try {
+        const id = getSpreadsheetId();
+        const payload = {
+          rules: rules.map(r => ({
+            enabled: !!r.enabled,
+            category: r.category || "",
+            source_sheet: r.source_sheet || "",
+            source_header: r.source_header || "",
+            target_sheet: r.target_sheet || "",
+            target_header: r.target_header || "",
+            is_external: !!r.is_external,
+            target_doc_id: r.target_doc_id || ""
+          }))
+        };
+        const resp = await fetch(`${apiBase()}/rules/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        rules = data.rules || [];
+        renderTable();
+        alert("Правила сохранены");
+      } catch (e) {
+        alert("Ошибка сохранения: " + e.message);
+      }
+    }
+
+    function addRules() {
+      try {
+        const category = $("category").value.trim();
+        const srcSheet = $("sourceSheet").value.trim();
+        const tgtSheet = $("targetSheet").value.trim();
+        const headerStr = $("headers").value.trim();
+        const isExternal = $("isExternal").checked;
+        const enabled = $("enabled").checked;
+        const targetDocId = $("targetDocId").value.trim();
+
+        if (!srcSheet || !tgtSheet || !headerStr) {
+          alert("Заполните исходный лист, целевой лист и столбцы");
+          return;
+        }
+
+        const headers = headerStr.split(",").map(h => h.trim()).filter(Boolean);
+        headers.forEach(h => {
+          rules.push({
+            id: "",
+            enabled,
+            category,
+            source_sheet: srcSheet,
+            source_header: h,
+            target_sheet: tgtSheet,
+            target_header: h,
+            is_external: isExternal,
+            target_doc_id: targetDocId
+          });
+        });
+        renderTable();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    function removeRule(idx) {
+      rules.splice(idx, 1);
+      renderTable();
+    }
+
+    function toggleRule(idx) {
+      rules[idx].enabled = !rules[idx].enabled;
+      renderTable();
+    }
+
+    function onEdit(idx, field, value) {
+      rules[idx][field] = value;
+    }
+
+    function renderTable() {
+      const filtered = applyFilter(rules);
+      const rows = filtered.map((r, i) => {
+        const idx = rules.indexOf(r); // original index
+        return `
+          <tr>
+            <td><input type="checkbox" ${r.enabled ? "checked" : ""} onchange="toggleRule(${idx})" /></td>
+            <td><span class="badge">${r.id || "auto"}</span></td>
+            <td><input value="${r.category || ""}" onchange="onEdit(${idx}, 'category', this.value)" /></td>
+            <td><input value="${r.source_sheet || ""}" onchange="onEdit(${idx}, 'source_sheet', this.value)" /></td>
+            <td><input value="${r.source_header || ""}" onchange="onEdit(${idx}, 'source_header', this.value)" /></td>
+            <td><input value="${r.target_sheet || ""}" onchange="onEdit(${idx}, 'target_sheet', this.value)" /></td>
+            <td><input value="${r.target_header || ""}" onchange="onEdit(${idx}, 'target_header', this.value)" /></td>
+            <td><input value="${r.target_doc_id || ""}" onchange="onEdit(${idx}, 'target_doc_id', this.value)" /></td>
+            <td style="width:80px; text-align:center;"><input type="checkbox" ${r.is_external ? "checked" : ""} onchange="onEdit(${idx}, 'is_external', this.checked)" /></td>
+            <td style="width:60px;"><button class="danger" onclick="removeRule(${idx})">✕</button></td>
+          </tr>
+        `;
+      }).join("");
+
+      $("tableContainer").innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>On</th><th>ID</th><th>Категория</th><th>Источник</th><th>Столбец</th><th>Цель</th><th>Столбец</th><th>Doc ID</th><th>Ext</th><th></th>
+            </tr>
+          </thead>
+          <tbody>${rows || "<tr><td colspan='10'>Нет правил</td></tr>"}</tbody>
+        </table>
+      `;
+    }
+  </script>
+</body>
+
+</html>

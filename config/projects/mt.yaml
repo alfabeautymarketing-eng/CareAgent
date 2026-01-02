@@ -8,7 +8,7 @@ project:
 
 # Google Sheets
 spreadsheet:
-  id: "YOUR_MT_SPREADSHEET_ID_HERE"
+  id: "13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ"
 
 # ============================================================
 # Реестр листов (SHEETS)
@@ -31,8 +31,8 @@ sheets:
   for_database: "Для базы"
   local_lookup: "Вид и код"
   rules: "Правила синхро"
-  log: "Журнал синхро"
-  log_debug: "Журнал логов"
+  log: "Логи"
+  sync_log: "Журнал синхро"
   external_docs: "Внешние документы"
 
 # Листы для автосоздания строк при новом артикуле
@@ -318,13 +318,13 @@ parser:
     header_row: 1
     # Индексы колонок в Excel поставщика
     excel_columns:
-      CODE: 0           # Арт. произв.
-      CATEGORY: 1       # (определяет группу)
-      DESCRIPTION: 2    # Название ENG
-      FORMAT: 3         # Объём
-      UNITS: 4          # шт./уп.
-      PRICE: 5          # Цена EXW
-      EAN: 6            # BAR CODE
+      CODE: 0 # Арт. произв.
+      CATEGORY: 1 # (определяет группу)
+      DESCRIPTION: 2 # Название ENG
+      FORMAT: 3 # Объём
+      UNITS: 4 # шт./уп.
+      PRICE: 5 # Цена EXW
+      EAN: 6 # BAR CODE
     # Логика определения группы:
     # if CODE exists AND CATEGORY empty → это строка группы
     # if CODE exists AND DESCRIPTION exists → это артикул
@@ -337,11 +337,11 @@ parser:
     function: processMtTesterPrice
     # Трансформации:
     transformations:
-      volume_prefix: "-Тестер "     # Добавляется к объёму
-      group_suffix: " - Тестер"     # Добавляется к группе
+      volume_prefix: "-Тестер " # Добавляется к объёму
+      group_suffix: " - Тестер" # Добавляется к группе
     # Особенности:
-    continue_idp_numbering: true    # НЕ очищает ID-P, продолжает нумерацию
-    price_multiplier: 1             # Без множителя
+    continue_idp_numbering: true # НЕ очищает ID-P, продолжает нумерацию
+    price_multiplier: 1 # Без множителя
 
   # Режим 3: Пробники
   samples:
@@ -349,10 +349,10 @@ parser:
     function: processMtSamplesPrice
     # Трансформации:
     transformations:
-      group_suffix: " - пробник"    # Добавляется к группе
+      group_suffix: " - пробник" # Добавляется к группе
     # Особенности:
-    price_multiplier: 10            # ВАЖНО: цена × 10
-    update_statuses_after: true     # Вызывает updateStatusesAfterProcessing()
+    price_multiplier: 10 # ВАЖНО: цена × 10
+    update_statuses_after: true # Вызывает updateStatusesAfterProcessing()
 
 # ============================================================
 # Порядок синхронизации MT
@@ -367,7 +367,7 @@ sync_order:
   - step: copyPriceFromPrimaryToSheets
     description: "Копирование цены (с множителем для пробников)"
     params:
-      multiplier: "from_parser_config"  # 1 или 10
+      multiplier: "from_parser_config" # 1 или 10
   - step: recalculatePriceDynamicsFormulas
     description: "Формулы на Динамика цены"
   # Для пробников дополнительно:
@@ -381,10 +381,10 @@ sync_order:
 features:
   testers: true
   samples: true
-  rrp: false              # НЕТ RRP в MT (исправлено)
+  rrp: false # НЕТ RRP в MT (исправлено)
   discounts: false
-  group_id: true          # ID-G
-  line_id: true           # ID-L
+  group_id: true # ID-G
+  line_id: true # ID-L
   abc_analysis: true
   tz_by_status: true
   order_verification: true
@@ -405,11 +405,22 @@ constants:
     - "ДС"
     - "СГР"
   tn_ved_codes:
-    - "3304"  # Косметические средства для кожи
-    - "3305"  # Средства для волос
-    - "3307"  # Прочие парфюмерные средства
+    - "3304" # Косметические средства для кожи
+    - "3305" # Средства для волос
+    - "3307" # Прочие парфюмерные средства
   spirits:
     max_group_size: 5
+
+# ============================================================
+# Source document (Б/З поставщик)
+# ============================================================
+source:
+  doc_id: "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0"
+  sheets:
+    main: "-Б/З поставщик"
+    tester: "-Тестер"
+    samples: "-Пробники"
+    stocks: "-остатки"
 
 # ============================================================
 # Google Drive folders
