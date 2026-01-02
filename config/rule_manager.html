@@ -4,168 +4,365 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AgentCare | Управление Правилами</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>AgentCare • Управление правилами синхронизации</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            --glass-bg: rgba(255, 255, 255, 0.05);
-            --glass-border: rgba(255, 255, 255, 0.1);
-            --text-main: #ffffff;
-            --text-secondary: #94a3b8;
-            --bg-color: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.7);
-            --success: #10b981;
-            --danger: #ef4444;
+            --bg: #f6f1ea;
+            --bg-2: #f2efe8;
+            --ink: #1e2a2f;
+            --muted: #6b7280;
+            --accent: #0f766e;
+            --accent-2: #f59e0b;
+            --danger: #dc2626;
+            --card: #ffffff;
+            --card-border: rgba(15, 118, 110, 0.12);
+            --shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+            --shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.06);
+            --radius-xl: 28px;
+            --radius: 18px;
         }
 
         * {
             box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-            /* Premium feel, prevent accidental selection */
         }
 
         body {
-            font-family: 'Outfit', sans-serif;
-            background-color: var(--bg-color);
-            background-image:
-                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.15) 0px, transparent 50%);
-            color: var(--text-main);
+            margin: 0;
+            font-family: "Space Grotesk", "Noto Sans", sans-serif;
+            background:
+                radial-gradient(circle at 10% 20%, rgba(15, 118, 110, 0.12), transparent 45%),
+                radial-gradient(circle at 90% 0%, rgba(245, 158, 11, 0.14), transparent 40%),
+                linear-gradient(180deg, var(--bg), var(--bg-2));
+            color: var(--ink);
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            padding: 40px 20px;
         }
 
-        .container {
-            width: 100%;
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image: radial-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 0);
+            background-size: 22px 22px;
+            opacity: 0.35;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app {
+            position: relative;
+            z-index: 1;
             max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 20px 80px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
             animation: fadeIn 0.8s ease-out;
         }
 
-        header {
+        header.hero {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 40px;
-            padding: 24px;
-            background: var(--glass-bg);
+            flex-direction: column;
+            gap: 10px;
+            padding: 28px 32px;
+            border-radius: var(--radius-xl);
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: var(--shadow);
             backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
-            border-radius: 24px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         }
 
-        .logo {
-            font-size: 24px;
-            font-weight: 700;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -0.5px;
-        }
-
-        .actions {
+        .hero-top {
             display: flex;
+            align-items: center;
+            justify-content: space-between;
             gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .eyebrow {
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        h1 {
+            margin: 0;
+            font-family: "Fraunces", serif;
+            font-weight: 700;
+            font-size: clamp(28px, 4vw, 40px);
+        }
+
+        .hero-subtitle {
+            margin: 0;
+            color: var(--muted);
+            max-width: 720px;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
         }
 
         .btn {
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            color: var(--text-main);
-            padding: 12px 24px;
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 500;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            padding: 10px 18px;
             font-family: inherit;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(4px);
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn.primary {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 12px 24px rgba(15, 118, 110, 0.2);
+        }
+
+        .btn.primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 32px rgba(15, 118, 110, 0.24);
+        }
+
+        .btn.ghost {
+            background: rgba(255, 255, 255, 0.7);
+            color: var(--ink);
+            border-color: rgba(15, 118, 110, 0.18);
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-xl);
+            padding: 22px 24px;
+            box-shadow: var(--shadow-soft);
+            backdrop-filter: blur(10px);
+        }
+
+        .controls {
+            display: grid;
+            gap: 18px;
+        }
+
+        .field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .field label {
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .input,
+        select {
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(15, 118, 110, 0.2);
+            background: #fff;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 16px;
+            align-items: end;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 16px;
+        }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .toggle input {
+            accent-color: var(--accent);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.85);
+            border-radius: 18px;
+            padding: 16px;
+            border: 1px solid rgba(15, 118, 110, 0.12);
+            display: grid;
+            gap: 6px;
+            box-shadow: var(--shadow-soft);
+        }
+
+        .stat-card span {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .stat-card strong {
+            font-size: 20px;
+        }
+
+        .rules {
+            display: grid;
+            gap: 20px;
+        }
+
+        .group {
+            display: grid;
+            gap: 14px;
+        }
+
+        .group-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .group-title span {
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(15, 118, 110, 0.12);
+            color: var(--accent);
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .rules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .rule-card {
+            background: var(--card);
+            border: 1px solid rgba(15, 118, 110, 0.15);
+            border-radius: var(--radius);
+            padding: 16px;
+            box-shadow: var(--shadow-soft);
+            display: grid;
+            gap: 12px;
+            position: relative;
+            animation: cardIn 0.6s ease both;
+            animation-delay: calc(var(--i) * 0.04s);
+        }
+
+        .rule-card.disabled {
+            opacity: 0.6;
+        }
+
+        .rule-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .rule-id {
+            font-size: 12px;
+            color: var(--muted);
+            background: rgba(15, 118, 110, 0.08);
+            padding: 4px 8px;
+            border-radius: 8px;
+        }
+
+        .pill {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: rgba(245, 158, 11, 0.14);
+            color: #b45309;
+            font-weight: 600;
+        }
+
+        .pill.mode {
+            background: rgba(15, 118, 110, 0.12);
+            color: var(--accent);
+        }
+
+        .path {
+            display: grid;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .node {
             display: flex;
             align-items: center;
             gap: 8px;
         }
 
-        .btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        .node strong {
+            font-weight: 600;
         }
 
-        .btn-primary {
-            background: var(--primary-gradient);
-            border: none;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        .arrow {
+            font-size: 18px;
+            color: var(--accent);
         }
 
-        .btn-primary:hover {
-            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.6);
-            background: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
-        }
-
-        .rules-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 24px;
-        }
-
-        .rule-card {
-            background: var(--card-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: 20px;
-            padding: 24px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .rule-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: var(--primary-gradient);
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-
-        .rule-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        .rule-card:hover::before {
-            opacity: 1;
-        }
-
-        .card-header {
+        .meta {
             display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--muted);
         }
 
-        .rule-id {
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn.small {
+            padding: 6px 12px;
             font-size: 12px;
-            color: var(--text-secondary);
-            font-family: monospace;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 4px 8px;
-            border-radius: 6px;
+            border-radius: 10px;
+        }
+
+        .btn.danger {
+            background: rgba(220, 38, 38, 0.12);
+            color: var(--danger);
+            border: 1px solid rgba(220, 38, 38, 0.2);
         }
 
         .switch {
             position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 26px;
+            width: 44px;
+            height: 24px;
         }
 
         .switch input {
@@ -177,377 +374,755 @@
         .slider {
             position: absolute;
             cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(255, 255, 255, 0.1);
-            transition: .4s;
-            border-radius: 34px;
+            inset: 0;
+            background: rgba(15, 118, 110, 0.15);
+            border-radius: 999px;
+            transition: 0.2s;
         }
 
-        .slider:before {
-            position: absolute;
+        .slider::before {
             content: "";
+            position: absolute;
             height: 18px;
             width: 18px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: .4s;
+            left: 3px;
+            top: 3px;
+            background: #fff;
             border-radius: 50%;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: 0.2s;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
         }
 
-        input:checked+.slider {
-            background: var(--success);
+        .switch input:checked + .slider {
+            background: var(--accent);
         }
 
-        input:checked+.slider:before {
-            transform: translateX(24px);
+        .switch input:checked + .slider::before {
+            transform: translateX(20px);
         }
 
-        .rule-details {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        .empty {
+            padding: 24px;
+            border-radius: var(--radius);
+            background: rgba(255, 255, 255, 0.9);
+            text-align: center;
+            color: var(--muted);
         }
 
-        .detail-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 14px;
-        }
-
-        .detail-icon {
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            color: var(--text-secondary);
-        }
-
-        .connection-line {
-            height: 20px;
-            width: 2px;
-            background: var(--glass-border);
-            margin-left: 11px;
-            margin-top: -8px;
-            margin-bottom: -8px;
-        }
-
-        .sheet-badge {
-            background: rgba(99, 102, 241, 0.1);
-            color: #818cf8;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-weight: 600;
-        }
-
-        .header-badge {
-            color: var(--text-main);
-            font-weight: 500;
-        }
-
-        .category-tag {
-            position: absolute;
-            bottom: 24px;
-            right: 24px;
-            font-size: 12px;
-            color: var(--text-secondary);
-            background: rgba(255, 255, 255, 0.05);
-            padding: 6px 12px;
-            border-radius: 20px;
-        }
-
-        /* Modal Styles */
         .modal {
-            display: none;
             position: fixed;
-            z-index: 100;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(8px);
+            inset: 0;
+            background: rgba(15, 23, 42, 0.35);
+            display: none;
             align-items: center;
             justify-content: center;
+            padding: 20px;
+            z-index: 10;
+            backdrop-filter: blur(6px);
         }
 
         .modal.active {
             display: flex;
-            animation: fadeIn 0.3s ease;
+            animation: fadeIn 0.2s ease;
         }
 
-        .modal-content {
-            background: #1e293b;
-            border: 1px solid var(--glass-border);
-            border-radius: 24px;
-            width: 90%;
-            max-width: 500px;
-            padding: 32px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            position: relative;
+        .modal-card {
+            background: #fff;
+            border-radius: var(--radius-xl);
+            padding: 24px;
+            width: min(720px, 96vw);
+            box-shadow: var(--shadow);
+            display: grid;
+            gap: 18px;
         }
 
-        .close-modal {
-            position: absolute;
-            top: 24px;
-            right: 24px;
-            font-size: 24px;
-            color: var(--text-secondary);
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 22px;
+        }
+
+        .close {
             cursor: pointer;
-            transition: color 0.3s;
+            font-size: 22px;
+            color: var(--muted);
         }
 
-        .close-modal:hover {
-            color: var(--text-main);
+        .form-grid {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         }
 
-        .form-group {
-            margin-bottom: 20px;
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
         }
 
-        .form-label {
-            display: block;
-            margin-bottom: 8px;
-            color: var(--text-secondary);
-            font-size: 14px;
+        .help {
+            font-size: 12px;
+            color: var(--muted);
         }
 
-        .form-input {
-            width: 100%;
+        .toast {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            background: #fff;
+            color: var(--ink);
+            border-radius: 14px;
             padding: 12px 16px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            color: var(--text-main);
-            font-family: inherit;
-            transition: border-color 0.3s;
+            box-shadow: var(--shadow);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: 0.2s;
+            z-index: 20;
+            max-width: 300px;
         }
 
-        .form-input:focus {
-            outline: none;
-            border-color: #818cf8;
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
         }
 
-        .modal-title {
-            margin-bottom: 24px;
-            font-size: 24px;
-            font-weight: 600;
+        .toast.success {
+            border-left: 4px solid var(--accent);
+        }
+
+        .toast.error {
+            border-left: 4px solid var(--danger);
         }
 
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Loading State */
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: var(--text-secondary);
+        @keyframes cardIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 900px) {
+            .controls-grid,
+            .filters-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-top {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .hero-actions {
+                width: 100%;
+                justify-content: flex-start;
+                flex-wrap: wrap;
+            }
         }
     </style>
 </head>
 
 <body>
 
-    <div class="container">
-
-        <header>
-            <div class="logo">
-                ✨ SyncRules AI
-            </div>
-            <div class="actions">
-                <button class="btn" onclick="fetchRules()">
-                    🔄 Обновить
-                </button>
-                <button class="btn btn-primary" onclick="openModal()">
-                    + Добавить правило
-                </button>
+    <main class="app">
+        <header class="hero">
+            <div class="hero-top">
+                <div class="brand">
+                    <div class="eyebrow">AgentCare • Sync Rules</div>
+                    <h1>Управление правилами синхронизации</h1>
+                    <p class="hero-subtitle">Единый контроль правил на сервере: редактируйте, группируйте и включайте двустороннюю синхронизацию без обращения к листу «Правила синхро».</p>
+                </div>
+                <div class="hero-actions">
+                    <button class="btn ghost" onclick="reloadRules()">🔄 Перечитать</button>
+                    <button class="btn primary" onclick="openRuleModal()">＋ Новое правило</button>
+                </div>
             </div>
         </header>
 
-        <div id="rulesContainer" class="rules-grid">
-            <div class="loading">Загрузка правил синхронизации...</div>
-        </div>
+        <section class="panel controls">
+            <div class="controls-grid">
+                <div class="field">
+                    <label for="spreadsheetId">Spreadsheet ID</label>
+                    <input class="input" id="spreadsheetId" placeholder="Введите ID таблицы" />
+                </div>
+                <div class="field">
+                    <label>&nbsp;</label>
+                    <button class="btn primary" onclick="loadRules()">Загрузить правила</button>
+                </div>
+                <div class="field">
+                    <label>&nbsp;</label>
+                    <button class="btn ghost" onclick="saveSpreadsheetId()">Сохранить ID</button>
+                </div>
+            </div>
+            <div class="filters-grid">
+                <div class="field">
+                    <label for="search">Поиск</label>
+                    <input class="input" id="search" placeholder="ID, лист, заголовок, категория" oninput="updateFilters()" />
+                </div>
+                <div class="field">
+                    <label for="groupBy">Группировка</label>
+                    <select id="groupBy" onchange="updateFilters()">
+                        <option value="category">По категории</option>
+                        <option value="source">По источнику</option>
+                        <option value="target">По цели</option>
+                        <option value="mode">По режиму</option>
+                        <option value="external">По типу</option>
+                        <option value="none">Без группировки</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Отображение</label>
+                    <label class="toggle"><input type="checkbox" id="showDisabled" checked onchange="updateFilters()">Показывать отключённые</label>
+                </div>
+            </div>
+        </section>
 
-    </div>
+        <section class="stats" id="stats"></section>
 
-    <!-- Modal -->
-    <div id="addRuleModal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal" onclick="closeModal()">&times;</span>
-            <h2 class="modal-title">Новое Правило</h2>
-            <form id="addRuleForm" onsubmit="handleFormSubmit(event)">
-                <div class="form-group">
-                    <label class="form-label">Источник (Лист)</label>
-                    <input type="text" name="source_sheet" class="form-input" placeholder="Например: Заказ" required>
+        <section class="rules" id="rulesContainer">
+            <div class="empty">Введите Spreadsheet ID и нажмите «Загрузить правила».</div>
+        </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="modal" id="ruleModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="modalTitle">Новое правило</h2>
+                <span class="close" onclick="closeRuleModal()">×</span>
+            </div>
+            <form id="ruleForm" onsubmit="submitRule(event)">
+                <div class="form-grid">
+                    <div class="field">
+                        <label>Режим</label>
+                        <select id="ruleMode" onchange="toggleModeFields()">
+                            <option value="unidirectional">Одностороннее</option>
+                            <option value="bidirectional">Двустороннее</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Категория</label>
+                        <input class="input" id="ruleCategory" placeholder="Напр. Сертификация" />
+                    </div>
+                    <div class="field">
+                        <label>Хэштеги (опционально)</label>
+                        <input class="input" id="ruleTags" placeholder="#sync" />
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Источник (Заголовок)</label>
-                    <input type="text" name="source_header" class="form-input" placeholder="Например: Статус" required>
+
+                <div class="form-grid" id="unidirectionalFields">
+                    <div class="field">
+                        <label>Источник (лист)</label>
+                        <input class="input" id="sourceSheet" placeholder="Главная" />
+                    </div>
+                    <div class="field">
+                        <label>Источник (заголовок)</label>
+                        <input class="input" id="sourceHeader" placeholder="Статус" />
+                    </div>
+                    <div class="field">
+                        <label>Цель (лист)</label>
+                        <input class="input" id="targetSheet" placeholder="Сертификация" />
+                    </div>
+                    <div class="field">
+                        <label>Цель (заголовок)</label>
+                        <input class="input" id="targetHeader" placeholder="Статус" />
+                    </div>
+                    <div class="field" style="grid-column: span 2;">
+                        <label>Список столбцов (для пакетного создания)</label>
+                        <input class="input" id="bulkHeaders" placeholder="Статус, Код в 1С, Категория" />
+                        <div class="help">Если заполнено, создаст правило на каждый заголовок с одинаковыми именами в источнике и цели.</div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Цель (Лист)</label>
-                    <input type="text" name="target_sheet" class="form-input" placeholder="Например: Этикетки" required>
+
+                <div class="form-grid" id="bidirectionalFields" style="display:none;">
+                    <div class="field">
+                        <label>Лист A</label>
+                        <input class="input" id="sheetA" placeholder="Сертификация" />
+                    </div>
+                    <div class="field">
+                        <label>Заголовок A</label>
+                        <input class="input" id="headerA" placeholder="Код ТН ВЭД" />
+                    </div>
+                    <div class="field">
+                        <label>Лист B</label>
+                        <input class="input" id="sheetB" placeholder="Расчет цены" />
+                    </div>
+                    <div class="field">
+                        <label>Заголовок B</label>
+                        <input class="input" id="headerB" placeholder="Код ТН ВЭД" />
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Цель (Заголовок)</label>
-                    <input type="text" name="target_header" class="form-input" placeholder="Например: Статус заказа"
-                        required>
+
+                <div class="form-grid">
+                    <div class="field">
+                        <label class="toggle"><input type="checkbox" id="ruleEnabled" checked>Правило активно</label>
+                    </div>
+                    <div class="field">
+                        <label class="toggle"><input type="checkbox" id="isExternal" onchange="toggleExternal()">Внешний документ</label>
+                    </div>
+                    <div class="field" id="externalDocField" style="display:none;">
+                        <label>ID внешнего документа</label>
+                        <input class="input" id="targetDocId" placeholder="1Abc..." />
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Категория</label>
-                    <input type="text" name="category" class="form-input" placeholder="Например: Статусы"
-                        value="General">
+
+                <div class="form-actions">
+                    <button type="button" class="btn ghost" onclick="closeRuleModal()">Отмена</button>
+                    <button type="submit" class="btn primary" id="submitBtn">Сохранить</button>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">
-                    Сохранить Правило
-                </button>
             </form>
         </div>
     </div>
 
     <script>
-        // Mock data for dev, will be replaced by API
-        let rules = [];
-        const SPREADSHEET_ID = new URLSearchParams(window.location.search).get('spreadsheet_id') || 'UNKNOWN';
+        const state = {
+            rules: [],
+            search: "",
+            groupBy: "category",
+            showDisabled: true,
+            spreadsheetId: "",
+            editingId: null
+        };
 
-        async function fetchRules() {
-            const container = document.getElementById('rulesContainer');
+        function apiBase() {
+            return "/api/v1";
+        }
+
+        function $(id) {
+            return document.getElementById(id);
+        }
+
+        function escapeHtml(value) {
+            return String(value || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function notify(message, kind = "success") {
+            const toast = $("toast");
+            toast.textContent = message;
+            toast.className = `toast show ${kind}`;
+            clearTimeout(window.__toastTimer);
+            window.__toastTimer = setTimeout(() => {
+                toast.className = "toast";
+            }, 2800);
+        }
+
+        function saveSpreadsheetId() {
+            const id = $("spreadsheetId").value.trim();
+            if (!id) {
+                notify("Введите Spreadsheet ID", "error");
+                return;
+            }
+            localStorage.setItem("agentcare_spreadsheet_id", id);
+            notify("ID сохранён", "success");
+        }
+
+        function getSpreadsheetId() {
+            const id = $("spreadsheetId").value.trim();
+            if (!id) {
+                throw new Error("Укажите Spreadsheet ID");
+            }
+            return id;
+        }
+
+        async function loadRules() {
             try {
-                const response = await fetch(`/api/rules/list?spreadsheet_id=${SPREADSHEET_ID}`);
-                if (!response.ok) throw new Error('API Error');
-                rules = await response.json();
-                renderRules();
+                const id = getSpreadsheetId();
+                const resp = await fetch(`${apiBase()}/rules/${id}?include_disabled=true`);
+                if (!resp.ok) throw new Error(await resp.text());
+                const data = await resp.json();
+                state.rules = data.rules || [];
+                updateFilters();
+                notify("Правила загружены", "success");
             } catch (e) {
-                console.error(e);
-                container.innerHTML = '<div class="loading" style="color: var(--danger)">Ошибка загрузки правил. Проверьте консоль.</div>';
+                renderError(e.message);
             }
         }
 
-        function renderRules() {
-            const container = document.getElementById('rulesContainer');
-            container.innerHTML = '';
+        async function reloadRules() {
+            try {
+                const id = getSpreadsheetId();
+                const resp = await fetch(`${apiBase()}/rules/${id}/reload?include_disabled=true`, { method: "POST" });
+                if (!resp.ok) throw new Error(await resp.text());
+                const data = await resp.json();
+                state.rules = data.rules || [];
+                updateFilters();
+                notify("Кеш обновлён", "success");
+            } catch (e) {
+                renderError(e.message);
+            }
+        }
 
-            rules.forEach(rule => {
-                const card = document.createElement('div');
-                card.className = 'rule-card';
-                card.innerHTML = `
-                    <div class="card-header">
-                        <span class="rule-id">${rule.id}</span>
+        function updateFilters() {
+            state.search = $("search").value.trim().toLowerCase();
+            state.groupBy = $("groupBy").value;
+            state.showDisabled = $("showDisabled").checked;
+            render();
+        }
+
+        function renderError(message) {
+            $("rulesContainer").innerHTML = `<div class="empty">Ошибка: ${escapeHtml(message)}</div>`;
+        }
+
+        function render() {
+            const filtered = state.rules.filter(rule => {
+                if (!state.showDisabled && !rule.enabled) {
+                    return false;
+                }
+                if (!state.search) {
+                    return true;
+                }
+                const haystack = [
+                    rule.id,
+                    rule.category,
+                    rule.mode,
+                    rule.source_sheet,
+                    rule.source_header,
+                    rule.target_sheet,
+                    rule.target_header,
+                    rule.sheet_a,
+                    rule.header_a,
+                    rule.sheet_b,
+                    rule.header_b,
+                    rule.target_doc_id
+                ].join(" ").toLowerCase();
+                return haystack.includes(state.search);
+            });
+
+            renderStats(filtered);
+            renderGroups(filtered);
+        }
+
+        function renderStats(list) {
+            const total = list.length;
+            const enabled = list.filter(r => r.enabled).length;
+            const disabled = total - enabled;
+            const bidirectional = list.filter(r => r.mode === "bidirectional").length;
+            const external = list.filter(r => r.is_external).length;
+
+            $("stats").innerHTML = `
+                <div class="stat-card"><span>Всего правил</span><strong>${total}</strong></div>
+                <div class="stat-card"><span>Активные</span><strong>${enabled}</strong></div>
+                <div class="stat-card"><span>Отключённые</span><strong>${disabled}</strong></div>
+                <div class="stat-card"><span>Двусторонние</span><strong>${bidirectional}</strong></div>
+                <div class="stat-card"><span>Внешние</span><strong>${external}</strong></div>
+            `;
+        }
+
+        function groupTitle(rule) {
+            switch (state.groupBy) {
+                case "category":
+                    return rule.category || "Без категории";
+                case "source":
+                    return rule.mode === "bidirectional"
+                        ? `${rule.sheet_a || "?"} ↔ ${rule.sheet_b || "?"}`
+                        : rule.source_sheet || "Без источника";
+                case "target":
+                    return rule.mode === "bidirectional"
+                        ? `${rule.sheet_a || "?"} ↔ ${rule.sheet_b || "?"}`
+                        : rule.target_sheet || "Без цели";
+                case "mode":
+                    return rule.mode === "bidirectional" ? "Двусторонние" : "Односторонние";
+                case "external":
+                    return rule.is_external ? "Внешние" : "Локальные";
+                default:
+                    return "Все правила";
+            }
+        }
+
+        function renderGroups(list) {
+            const container = $("rulesContainer");
+            if (!list.length) {
+                container.innerHTML = `<div class="empty">Нет правил по заданному фильтру.</div>`;
+                return;
+            }
+
+            const groups = new Map();
+            list.forEach(rule => {
+                const key = groupTitle(rule);
+                if (!groups.has(key)) {
+                    groups.set(key, []);
+                }
+                groups.get(key).push(rule);
+            });
+
+            const groupBlocks = Array.from(groups.entries())
+                .sort((a, b) => a[0].localeCompare(b[0], "ru"))
+                .map(([title, rules]) => {
+                    rules.sort((a, b) => String(a.id || "").localeCompare(String(b.id || ""), "ru"));
+                    const cards = rules.map((rule, index) => renderRuleCard(rule, index)).join("");
+                return `
+                    <div class="group">
+                        <div class="group-title">${escapeHtml(title)} <span>${rules.length}</span></div>
+                        <div class="rules-grid">${cards}</div>
+                    </div>
+                `;
+            }).join("");
+
+            container.innerHTML = groupBlocks;
+        }
+
+        function renderRuleCard(rule, index) {
+            const isBidirectional = rule.mode === "bidirectional";
+            const badge = isBidirectional ? "двустороннее" : "одностороннее";
+            const extLabel = rule.is_external ? `Внешний документ: ${shorten(rule.target_doc_id)}` : "Локальная таблица";
+            const path = isBidirectional
+                ? `
+                    <div class="node"><strong>${escapeHtml(rule.sheet_a || "—")}</strong> / ${escapeHtml(rule.header_a || "—")}</div>
+                    <div class="arrow">↔</div>
+                    <div class="node"><strong>${escapeHtml(rule.sheet_b || "—")}</strong> / ${escapeHtml(rule.header_b || "—")}</div>
+                `
+                : `
+                    <div class="node"><strong>${escapeHtml(rule.source_sheet || "—")}</strong> / ${escapeHtml(rule.source_header || "—")}</div>
+                    <div class="arrow">→</div>
+                    <div class="node"><strong>${escapeHtml(rule.target_sheet || "—")}</strong> / ${escapeHtml(rule.target_header || "—")}</div>
+                `;
+
+            return `
+                <div class="rule-card ${rule.enabled ? "" : "disabled"}" style="--i:${index}">
+                    <div class="rule-head">
+                        <span class="rule-id">${escapeHtml(rule.id || "auto")}</span>
+                        <div class="meta">
+                            <span class="pill mode">${badge}</span>
+                            ${rule.category ? `<span class="pill">${escapeHtml(rule.category)}</span>` : ""}
+                        </div>
                         <label class="switch">
-                            <input type="checkbox" ${rule.enabled ? 'checked' : ''} 
-                                   onchange="toggleRule('${rule.id}', this.checked)">
+                            <input type="checkbox" ${rule.enabled ? "checked" : ""} data-id="${escapeHtml(rule.id)}" onchange="toggleRule(this.dataset.id, this.checked)">
                             <span class="slider"></span>
                         </label>
                     </div>
-                    
-                    <div class="rule-details">
-                        <div class="detail-row">
-                            <div class="detail-icon">📤</div>
-                            <div>
-                                <span class="sheet-badge">${rule.source_sheet}</span>
-                                <span class="header-badge"># ${rule.source_header}</span>
-                            </div>
-                        </div>
-                        
-                        <div class="connection-line"></div>
-                        
-                        <div class="detail-row">
-                            <div class="detail-icon">📥</div>
-                            <div>
-                                <span class="sheet-badge">${rule.target_sheet}</span>
-                                <span class="header-badge"># ${rule.target_header}</span>
-                            </div>
-                        </div>
+                    <div class="path">${path}</div>
+                    <div class="meta">
+                        <span>${escapeHtml(extLabel)}</span>
+                        ${rule.target_doc_id ? `<span title="${escapeHtml(rule.target_doc_id)}">${escapeHtml(shorten(rule.target_doc_id))}</span>` : ""}
                     </div>
-
-                    <div class="category-tag">${rule.category}</div>
-                `;
-                container.appendChild(card);
-            });
+                    <div class="actions">
+                        <button class="btn ghost small" data-id="${escapeHtml(rule.id)}" onclick="openRuleModal(this.dataset.id)">Редактировать</button>
+                        <button class="btn danger small" data-id="${escapeHtml(rule.id)}" onclick="deleteRule(this.dataset.id)">Удалить</button>
+                    </div>
+                </div>
+            `;
         }
 
-        async function toggleRule(id, enabled) {
-            // Find rule and update locally first for responsiveness
-            const rule = rules.find(r => r.id === id);
-            if (rule) rule.enabled = enabled;
+        function shorten(text) {
+            if (!text) return "";
+            if (text.length <= 10) return text;
+            return `${text.slice(0, 4)}…${text.slice(-4)}`;
+        }
 
+        async function toggleRule(ruleId, enabled) {
             try {
-                await saveRules();
+                const id = getSpreadsheetId();
+                const safeId = encodeURIComponent(ruleId);
+                const resp = await fetch(`${apiBase()}/rules/${id}/${safeId}/toggle`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ enabled })
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                state.rules = state.rules.map(r => r.id === ruleId ? { ...r, enabled } : r);
+                render();
             } catch (e) {
-                console.error("Save failed", e);
-                alert("Ошибка сохранения. Правило может не сохраниться на сервере.");
+                notify(`Ошибка обновления: ${e.message}`, "error");
             }
         }
 
-        async function saveRules() {
-            const response = await fetch(`/api/rules/save?spreadsheet_id=${SPREADSHEET_ID}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rules: rules })
-            });
-            if (!response.ok) throw new Error('Save failed');
-        }
-
-        function openModal() {
-            document.getElementById('addRuleModal').classList.add('active');
-        }
-
-        function closeModal() {
-            document.getElementById('addRuleModal').classList.remove('active');
-        }
-
-        async function handleFormSubmit(e) {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const newRule = {
-                enabled: true,
-                source_sheet: formData.get('source_sheet'),
-                source_header: formData.get('source_header'),
-                target_sheet: formData.get('target_sheet'),
-                target_header: formData.get('target_header'),
-                category: formData.get('category'),
-                hashtags: "",
-                is_external: false
-            };
-
-            // Add to local list and save
-            rules.push(newRule);
+        async function deleteRule(ruleId) {
+            if (!confirm("Удалить правило?")) {
+                return;
+            }
             try {
-                await saveRules();
-                renderRules();
-                closeModal();
-                e.target.reset();
-            } catch (err) {
-                alert("Ошибка при сохранении: " + err.message);
+                const id = getSpreadsheetId();
+                const safeId = encodeURIComponent(ruleId);
+                const resp = await fetch(`${apiBase()}/rules/${id}/${safeId}`, { method: "DELETE" });
+                if (!resp.ok) throw new Error(await resp.text());
+                state.rules = state.rules.filter(r => r.id !== ruleId);
+                render();
+                notify("Правило удалено", "success");
+            } catch (e) {
+                notify(`Ошибка удаления: ${e.message}`, "error");
             }
         }
 
-        // Close modal on click outside
-        window.onclick = function (event) {
-            if (event.target == document.getElementById('addRuleModal')) {
-                closeModal();
+        function openRuleModal(ruleId = null) {
+            state.editingId = ruleId;
+            $("ruleForm").reset();
+            $("bulkHeaders").value = "";
+            $("bulkHeaders").disabled = !!ruleId;
+            $("ruleEnabled").checked = true;
+            $("isExternal").checked = false;
+            toggleExternal();
+
+            if (ruleId) {
+                const rule = state.rules.find(r => r.id === ruleId);
+                if (!rule) return;
+                $("modalTitle").textContent = `Правило ${rule.id}`;
+                $("ruleMode").value = rule.mode || "unidirectional";
+                $("ruleCategory").value = rule.category || "";
+                $("ruleTags").value = rule.hashtags || "";
+                $("ruleEnabled").checked = !!rule.enabled;
+                $("isExternal").checked = !!rule.is_external;
+                $("targetDocId").value = rule.target_doc_id || "";
+
+                $("sourceSheet").value = rule.source_sheet || "";
+                $("sourceHeader").value = rule.source_header || "";
+                $("targetSheet").value = rule.target_sheet || "";
+                $("targetHeader").value = rule.target_header || "";
+                $("sheetA").value = rule.sheet_a || "";
+                $("headerA").value = rule.header_a || "";
+                $("sheetB").value = rule.sheet_b || "";
+                $("headerB").value = rule.header_b || "";
+
+                toggleModeFields();
+            } else {
+                $("modalTitle").textContent = "Новое правило";
+                $("ruleMode").value = "unidirectional";
+                toggleModeFields();
+                $("bulkHeaders").disabled = false;
+            }
+
+            $("ruleModal").classList.add("active");
+        }
+
+        function closeRuleModal() {
+            $("ruleModal").classList.remove("active");
+        }
+
+        function toggleModeFields() {
+            const mode = $("ruleMode").value;
+            $("unidirectionalFields").style.display = mode === "unidirectional" ? "grid" : "none";
+            $("bidirectionalFields").style.display = mode === "bidirectional" ? "grid" : "none";
+
+            if (mode === "bidirectional") {
+                $("isExternal").checked = false;
+                $("targetDocId").value = "";
+            }
+            $("isExternal").disabled = mode === "bidirectional";
+            toggleExternal();
+        }
+
+        function toggleExternal() {
+            const mode = $("ruleMode").value;
+            const show = $("isExternal").checked && mode === "unidirectional";
+            $("externalDocField").style.display = show ? "block" : "none";
+        }
+
+        async function submitRule(event) {
+            event.preventDefault();
+            try {
+                const id = getSpreadsheetId();
+                const mode = $("ruleMode").value;
+                const payload = {
+                    mode,
+                    enabled: $("ruleEnabled").checked,
+                    category: $("ruleCategory").value.trim(),
+                    hashtags: $("ruleTags").value.trim(),
+                    is_external: $("isExternal").checked,
+                    target_doc_id: $("targetDocId").value.trim()
+                };
+
+                if (mode === "bidirectional") {
+                    if (payload.is_external) {
+                        throw new Error("Bidirectional правила не поддерживают внешний документ");
+                    }
+                    payload.sheet_a = $("sheetA").value.trim();
+                    payload.header_a = $("headerA").value.trim();
+                    payload.sheet_b = $("sheetB").value.trim();
+                    payload.header_b = $("headerB").value.trim();
+
+                    if (!payload.sheet_a || !payload.header_a || !payload.sheet_b || !payload.header_b) {
+                        throw new Error("Заполните sheet_a/header_a и sheet_b/header_b");
+                    }
+                } else {
+                    payload.source_sheet = $("sourceSheet").value.trim();
+                    payload.source_header = $("sourceHeader").value.trim();
+                    payload.target_sheet = $("targetSheet").value.trim();
+                    payload.target_header = $("targetHeader").value.trim();
+
+                    if (!payload.source_sheet || !payload.source_header || !payload.target_sheet || !payload.target_header) {
+                        throw new Error("Заполните источник и цель для правила");
+                    }
+
+                    if (payload.is_external && !payload.target_doc_id) {
+                        throw new Error("Для внешнего правила нужен target_doc_id");
+                    }
+                }
+
+                if (state.editingId) {
+                    await updateRule(id, state.editingId, payload);
+                    notify("Правило обновлено", "success");
+                } else {
+                    const bulkHeaders = $("bulkHeaders").value
+                        .split(",")
+                        .map(h => h.trim())
+                        .filter(Boolean);
+
+                    if (bulkHeaders.length && mode === "unidirectional") {
+                        for (const header of bulkHeaders) {
+                            await createRule(id, {
+                                ...payload,
+                                source_header: header,
+                                target_header: header
+                            });
+                        }
+                        notify(`Создано правил: ${bulkHeaders.length}`, "success");
+                    } else {
+                        await createRule(id, payload);
+                        notify("Правило создано", "success");
+                    }
+                }
+
+                closeRuleModal();
+                await loadRules();
+            } catch (e) {
+                notify(e.message, "error");
             }
         }
 
-        // Init
-        fetchRules();
+        async function createRule(spreadsheetId, payload) {
+            const resp = await fetch(`${apiBase()}/rules/${spreadsheetId}/create`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+        }
+
+        async function updateRule(spreadsheetId, ruleId, payload) {
+            const safeId = encodeURIComponent(ruleId);
+            const resp = await fetch(`${apiBase()}/rules/${spreadsheetId}/${safeId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+        }
+
+        window.addEventListener("click", (event) => {
+            if (event.target === $("ruleModal")) {
+                closeRuleModal();
+            }
+        });
+
+        const queryId = new URLSearchParams(window.location.search).get("spreadsheet_id");
+        const savedId = localStorage.getItem("agentcare_spreadsheet_id");
+        state.spreadsheetId = queryId || savedId || "";
+        if (state.spreadsheetId) {
+            $("spreadsheetId").value = state.spreadsheetId;
+            loadRules();
+        }
     </script>
 </body>
 

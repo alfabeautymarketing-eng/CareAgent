@@ -992,46 +992,50 @@ var Lib = Lib || {};
     Lib.logInfo('[' + projectKey + '] Начало прямой синхронизации статусов');
 
     try {
-      // Получаем правила синхронизации из листа "Правила синхро"
-      var rulesSheetName = (global.CONFIG && global.CONFIG.SHEETS && global.CONFIG.SHEETS.RULES) || 'Правила синхро';
-      var rulesSheet = ss.getSheetByName(rulesSheetName);
-
-      if (!rulesSheet) {
-        Lib.logWarn('[' + projectKey + '] Лист "' + rulesSheetName + '" не найден');
+      // Получаем правила синхронизации с сервера (лист "Правила синхро" не используется)
+      if (typeof Lib.callServer !== 'function') {
+        Lib.logWarn('[' + projectKey + '] Lib.callServer недоступен, правила не загружены');
         return;
       }
 
-      var rulesLastRow = rulesSheet.getLastRow();
-      if (rulesLastRow <= 1) {
-        Lib.logInfo('[' + projectKey + '] Нет правил синхронизации');
-        return;
-      }
-
-      // Читаем все правила
-      var rulesData = rulesSheet.getRange(2, 1, rulesLastRow - 1, 10).getValues();
-
-      // Структура строки правила:
-      // 0: ID, 1: Активно, 2: Категория, 3: Хештеги,
-      // 4: Источник: Лист, 5: Источник: Колонка,
-      // 6: Цель: Лист, 7: Цель: Колонка,
-      // 8: Внешний документ, 9: ID документа
+      var ssId = ss.getId();
+      var rulesRes = Lib.callServer('/rules/' + ssId, { force_reload: true, include_disabled: false }, 'GET');
+      var rulesData = (rulesRes && rulesRes.rules) || [];
 
       var orderSheetName = orderSheet.getName();
       var applicableRules = [];
 
       // Находим правила для синхронизации статуса
       for (var i = 0; i < rulesData.length; i++) {
-        var rule = rulesData[i];
-        var enabled = rule[1] === true || String(rule[1] || '').trim().toLowerCase() === 'да';
-        var sourceSheet = String(rule[4] || '').trim();
-        var sourceHeader = String(rule[5] || '').trim();
-        var targetSheet = String(rule[6] || '').trim();
-        var targetHeader = String(rule[7] || '').trim();
-        var isExternal = rule[8] === true || String(rule[8] || '').trim().toLowerCase() === 'да';
-        var targetDocId = String(rule[9] || '').trim();
+        var rule = rulesData[i] || {};
+        var enabled = rule.enabled === true || String(rule.enabled || '').trim().toLowerCase() === 'да';
+        if (!enabled) continue;
+
+        var mode = String(rule.mode || 'unidirectional').trim();
+
+        if (mode === 'bidirectional') {
+          var sheetA = String(rule.sheet_a || rule.sheetA || '').trim();
+          var headerA = String(rule.header_a || rule.headerA || '').trim();
+          var sheetB = String(rule.sheet_b || rule.sheetB || '').trim();
+          var headerB = String(rule.header_b || rule.headerB || '').trim();
+
+          if (sheetA === orderSheetName && headerA === 'Статус') {
+            applicableRules.push({ targetSheet: sheetB, targetHeader: headerB, isExternal: false, targetDocId: '' });
+          } else if (sheetB === orderSheetName && headerB === 'Статус') {
+            applicableRules.push({ targetSheet: sheetA, targetHeader: headerA, isExternal: false, targetDocId: '' });
+          }
+          continue;
+        }
+
+        var sourceSheet = String(rule.source_sheet || rule.sourceSheet || '').trim();
+        var sourceHeader = String(rule.source_header || rule.sourceHeader || '').trim();
+        var targetSheet = String(rule.target_sheet || rule.targetSheet || '').trim();
+        var targetHeader = String(rule.target_header || rule.targetHeader || '').trim();
+        var isExternal = !!(rule.is_external ?? rule.isExternal);
+        var targetDocId = String(rule.target_doc_id || rule.targetDocId || '').trim();
 
         // Фильтруем правила: активные, источник = наш лист, колонка = Статус
-        if (enabled && sourceSheet === orderSheetName && sourceHeader === 'Статус' && targetSheet && targetHeader === 'Статус') {
+        if (sourceSheet === orderSheetName && sourceHeader === 'Статус' && targetSheet && targetHeader === 'Статус') {
           applicableRules.push({
             targetSheet: targetSheet,
             targetHeader: targetHeader,

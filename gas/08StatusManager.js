@@ -201,39 +201,49 @@ var Lib = Lib || {};
     Lib.logInfo('[StatusManager] Начало прямой синхронизации статусов из Главная');
 
     try {
-      // Получаем правила синхронизации
-      const rulesSheetName = Lib.CONFIG.SHEETS.RULES || 'Правила синхро';
-      const rulesSheet = ss.getSheetByName(rulesSheetName);
-
-      if (!rulesSheet) {
-        Lib.logWarn('[StatusManager] Лист "' + rulesSheetName + '" не найден');
+      // Получаем правила синхронизации с сервера (лист "Правила синхро" не используется)
+      if (typeof Lib.callServer !== 'function') {
+        Lib.logWarn('[StatusManager] Lib.callServer недоступен, правила не загружены');
         return;
       }
 
-      const rulesLastRow = rulesSheet.getLastRow();
-      if (rulesLastRow <= 1) {
-        Lib.logInfo('[StatusManager] Нет правил синхронизации');
-        return;
-      }
-
-      // Читаем все правила
-      const rulesData = rulesSheet.getRange(2, 1, rulesLastRow - 1, 10).getValues();
+      const ssId = ss.getId();
+      const rulesRes = Lib.callServer('/rules/' + ssId, { force_reload: true, include_disabled: false }, 'GET');
+      const rulesData = (rulesRes && rulesRes.rules) || [];
       const primarySheetName = primarySheet.getName();
       const applicableRules = [];
 
       // Находим правила для синхронизации статуса из Главная
       for (let i = 0; i < rulesData.length; i++) {
-        const rule = rulesData[i];
-        const enabled = rule[1] === true || String(rule[1] || '').trim().toLowerCase() === 'да';
-        const sourceSheet = String(rule[4] || '').trim();
-        const sourceHeader = String(rule[5] || '').trim();
-        const targetSheet = String(rule[6] || '').trim();
-        const targetHeader = String(rule[7] || '').trim();
-        const isExternal = rule[8] === true || String(rule[8] || '').trim().toLowerCase() === 'да';
-        const targetDocId = String(rule[9] || '').trim();
+        const rule = rulesData[i] || {};
+        const enabled = rule.enabled === true || String(rule.enabled || '').trim().toLowerCase() === 'да';
+        if (!enabled) continue;
+
+        const mode = String(rule.mode || 'unidirectional').trim();
+
+        if (mode === 'bidirectional') {
+          const sheetA = String(rule.sheet_a || rule.sheetA || '').trim();
+          const headerA = String(rule.header_a || rule.headerA || '').trim();
+          const sheetB = String(rule.sheet_b || rule.sheetB || '').trim();
+          const headerB = String(rule.header_b || rule.headerB || '').trim();
+
+          if (sheetA === primarySheetName && headerA === 'Статус') {
+            applicableRules.push({ targetSheet: sheetB, targetHeader: headerB, isExternal: false, targetDocId: '' });
+          } else if (sheetB === primarySheetName && headerB === 'Статус') {
+            applicableRules.push({ targetSheet: sheetA, targetHeader: headerA, isExternal: false, targetDocId: '' });
+          }
+          continue;
+        }
+
+        const sourceSheet = String(rule.source_sheet || rule.sourceSheet || '').trim();
+        const sourceHeader = String(rule.source_header || rule.sourceHeader || '').trim();
+        const targetSheet = String(rule.target_sheet || rule.targetSheet || '').trim();
+        const targetHeader = String(rule.target_header || rule.targetHeader || '').trim();
+        const isExternal = !!(rule.is_external ?? rule.isExternal);
+        const targetDocId = String(rule.target_doc_id || rule.targetDocId || '').trim();
 
         // Фильтруем: активные, источник = Главная, колонка = Статус
-        if (enabled && sourceSheet === primarySheetName && sourceHeader === 'Статус' && targetSheet && targetHeader === 'Статус') {
+        if (sourceSheet === primarySheetName && sourceHeader === 'Статус' && targetSheet && targetHeader === 'Статус') {
           applicableRules.push({
             targetSheet: targetSheet,
             targetHeader: targetHeader,

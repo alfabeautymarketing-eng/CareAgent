@@ -28,12 +28,18 @@ ai_service = get_ai_service()
 price_processor = get_price_processor(sheets_service, sync_service, logging_service)
 
 class RuleItem(BaseModel):
+    mode: str = "unidirectional"
     enabled: bool = True
     category: str = ""
-    source_sheet: str
-    source_header: str
-    target_sheet: str
-    target_header: str
+    hashtags: str = ""
+    source_sheet: Optional[str] = None
+    source_header: Optional[str] = None
+    target_sheet: Optional[str] = None
+    target_header: Optional[str] = None
+    sheet_a: Optional[str] = None
+    header_a: Optional[str] = None
+    sheet_b: Optional[str] = None
+    header_b: Optional[str] = None
     is_external: bool = False
     target_doc_id: Optional[str] = None
 
@@ -442,10 +448,14 @@ async def sync_batch_event(request: SyncBatchEventRequest, background_tasks: Bac
 # ============== Rules Management ==============
 
 @api_router.get("/rules/{spreadsheet_id}")
-async def get_rules(spreadsheet_id: str, force_reload: bool = False):
+async def get_rules(spreadsheet_id: str, force_reload: bool = False, include_disabled: bool = True):
     """Return sync rules (server-side YAML storage)."""
     try:
-        rules = sync_service.list_rules(spreadsheet_id, force_reload=force_reload)
+        rules = sync_service.list_rules(
+            spreadsheet_id,
+            force_reload=force_reload,
+            include_disabled=include_disabled
+        )
         return {"rules": rules}
     except Exception as e:
         logger.error("rules_get_failed", error=str(e))
@@ -453,10 +463,14 @@ async def get_rules(spreadsheet_id: str, force_reload: bool = False):
 
 
 @api_router.post("/rules/{spreadsheet_id}/reload")
-async def reload_rules(spreadsheet_id: str):
+async def reload_rules(spreadsheet_id: str, include_disabled: bool = True):
     """Force reload rules from sheets/storage and refresh cache."""
     try:
-        rules = sync_service.list_rules(spreadsheet_id, force_reload=True)
+        rules = sync_service.list_rules(
+            spreadsheet_id,
+            force_reload=True,
+            include_disabled=include_disabled
+        )
         return {"status": "ok", "rules": rules, "message": "Rules reloaded and cache refreshed"}
     except Exception as e:
         logger.error("rules_reload_failed", error=str(e))
