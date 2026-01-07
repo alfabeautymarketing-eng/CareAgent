@@ -511,6 +511,14 @@
         {
           submenu: "📋 Журнал",
           items: [
+            {
+              label: "📦 Архивировать логи",
+              fn: "manualArchiveLogs_proxy",
+            },
+            {
+              label: "📊 Статус архива",
+              fn: "showArchiveStatus_proxy",
+            },
             { separator: true },
             {
               label: "Пересоздать журнал синхро",
