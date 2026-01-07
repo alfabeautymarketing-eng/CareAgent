@@ -3147,3 +3147,71 @@ def get_sync_logs_stats(spreadsheet_id: str):
         logger.error("get_sync_logs_stats_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# Path-based versions for UI compatibility (logs_manager.html)
+
+@api_router.get("/sync-logs/{spreadsheet_id}")
+def get_sync_logs_by_path(
+    spreadsheet_id: str,
+    limit: int = 200,
+    offset: int = 0,
+    order: str = "desc",
+    project: Optional[str] = None,
+    category: Optional[str] = None,
+    status: Optional[str] = None,
+):
+    """
+    Get sync journal entries (path-based for UI compatibility).
+    """
+    try:
+        entries, total = sync_log_service.list_entries(
+            spreadsheet_id=spreadsheet_id,
+            limit=limit,
+            offset=offset,
+            order=order,
+            project=project,
+            category=category,
+            status=status,
+        )
+        return {
+            "items": entries,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    except Exception as e:
+        logger.error("get_sync_logs_by_path_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/sync-logs/{spreadsheet_id}/stats")
+def get_sync_logs_stats_by_path(spreadsheet_id: str):
+    """
+    Get sync log statistics (path-based for UI compatibility).
+    """
+    try:
+        entries, total = sync_log_service.list_entries(
+            spreadsheet_id=spreadsheet_id,
+            limit=10000,
+            offset=0,
+        )
+        
+        by_category = {}
+        by_status = {}
+        for entry in entries:
+            cat = entry.get("category", "unknown") or "unknown"
+            by_category[cat] = by_category.get(cat, 0) + 1
+            
+            st = entry.get("status", "unknown") or "unknown"
+            by_status[st] = by_status.get(st, 0) + 1
+        
+        return {
+            "total": total,
+            "by_category": by_category,
+            "by_status": by_status,
+        }
+    except Exception as e:
+        logger.error("get_sync_logs_stats_by_path_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
