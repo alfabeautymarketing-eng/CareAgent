@@ -372,24 +372,24 @@ function refreshLogs() {
 }
 
 function quickCleanLogSheet() {
-  if (typeof Lib !== 'undefined' && Lib.quickCleanLogSheet) {
-    return Lib.quickCleanLogSheet();
+  if (typeof callServerLogCommand === 'function') {
+    return callServerLogCommand(true);
   }
-  throw new Error('Lib.quickCleanLogSheet не определена');
+  throw new Error('callServerLogCommand не определена');
 }
 
 function recreateLogSheet() {
-  if (typeof Lib !== 'undefined' && Lib.recreateLogSheet) {
-    return Lib.recreateLogSheet();
+  if (typeof callServerLogCommand === 'function') {
+    return callServerLogCommand(false);
   }
-  throw new Error('Lib.recreateLogSheet не определена');
+  throw new Error('callServerLogCommand не определена');
 }
 
 function recreateDebugLogSheet() {
-  if (typeof Lib !== 'undefined' && Lib.recreateDebugLogSheet) {
-    return Lib.recreateDebugLogSheet();
+  if (typeof callServerRecreateDebugLog === 'function') {
+    return callServerRecreateDebugLog();
   }
-  throw new Error('Lib.recreateDebugLogSheet не определена');
+  throw new Error('callServerRecreateDebugLog не определена');
 }
 
 // ============ ОБРАБОТКА ПРАЙСОВ (SK) ============
@@ -597,10 +597,10 @@ function createFullInvoice() {
 
 function collectAndCopyDocuments() {
   return _loggedCall_("collectAndCopyDocuments", function() {
-    if (typeof Lib !== 'undefined' && Lib.collectAndCopyDocuments) {
-      return Lib.collectAndCopyDocuments();
+    if (typeof callServerCollectDocuments === 'function') {
+      return callServerCollectDocuments();
     }
-    throw new Error('Lib.collectAndCopyDocuments не определена');
+    throw new Error('callServerCollectDocuments не определена');
   });
 }
 
@@ -635,10 +635,13 @@ function generateDsLayouts_353pp() {
 
 function structureDocuments_353pp() {
   return _loggedCall_("structureDocuments_353pp", function() {
+    if (typeof callServerStructureDocuments353pp === 'function') {
+      return callServerStructureDocuments353pp();
+    }
     if (typeof Lib !== 'undefined' && Lib.structureDocuments_353pp) {
       return Lib.structureDocuments_353pp();
     }
-    throw new Error('Lib.structureDocuments_353pp не определена');
+    throw new Error('callServerStructureDocuments353pp не определена');
   });
 }
 

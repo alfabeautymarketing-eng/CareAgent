@@ -638,6 +638,10 @@ function midnightLogRotation_trigger() {
  * Прокси для ручного архивирования из меню
  */
 function manualArchiveLogs_proxy() {
+  if (typeof callServerArchiveLogs === 'function') {
+    return callServerArchiveLogs();
+  }
+  // Fallback to local if server auth missing or undefined, but for migration we prefer server
   if (typeof Lib !== "undefined" && Lib.manualArchiveLogs) {
     return Lib.manualArchiveLogs();
   }
@@ -665,6 +669,9 @@ function removeMidnightLogTrigger_proxy() {
  * Прокси для показа статуса архивирования
  */
 function showArchiveStatus_proxy() {
+  if (typeof callServerShowArchiveStatus === 'function') {
+    return callServerShowArchiveStatus();
+  }
   if (typeof Lib !== "undefined" && Lib.showArchiveStatus) {
     return Lib.showArchiveStatus();
   }

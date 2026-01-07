@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
+    # Sync log storage
+    sync_log_data_dir: str = "data/sync_logs"
+    sync_log_retention_days: int = 90
+    sync_log_max_entries: int = 200000
+
 
 settings = Settings()
-

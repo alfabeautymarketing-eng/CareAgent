@@ -49,6 +49,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Middleware to allow iframing (Google Sheets)
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    # Remove X-Frame-Options to allow embedding in GAS iframes
+    if "x-frame-options" in response.headers:
+        del response.headers["x-frame-options"]
+    
+    # Set permissive CSP for frames
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'self' https://*.google.com https://*.googleusercontent.com;"
+    return response
+
 # Routes
 app.include_router(router)
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple
 from pydantic import BaseModel
 from src.services.sheets import SheetsService
+from src.services.function_log_service import FunctionLogService, FunctionLogContext
 from src.utils.logger import logger
 import gspread
 from gspread.utils import rowcol_to_a1
@@ -14,7 +15,6 @@ class SyncRule(BaseModel):
     id: str
     enabled: bool
     category: str
-    hashtags: str = ""
 
     # Режим работы: "unidirectional" (одностороннее) или "bidirectional" (двустороннее)
     mode: str = "unidirectional"
@@ -35,9 +35,16 @@ class SyncRule(BaseModel):
     target_doc_id: Optional[str] = None
 
 class SyncService:
-    def __init__(self, logging_service: Optional[Any] = None):
+    def __init__(
+        self,
+        logging_service: Optional[Any] = None,
+        sync_log_service: Optional[Any] = None,
+        function_log_service: Optional[FunctionLogService] = None,
+    ):
         self.sheets_service = SheetsService()
         self.logging_service = logging_service
+        self.sync_log_service = sync_log_service
+        self.function_log_service = function_log_service or FunctionLogService()
         self._rules_cache: List[SyncRule] = []
         self._rules_cache_time = 0
         self._rules_cache_ttl = 300  # 5 minutes
@@ -116,13 +123,7 @@ class SyncService:
     def _save_rules_yaml(self, spreadsheet_id: str, rules: List[SyncRule]) -> None:
         path = Path("config") / "rules" / f"{spreadsheet_id}.yaml"
         path.parent.mkdir(parents=True, exist_ok=True)
-        data = []
-        for r in rules:
-            d = r.model_dump()
-            # exclude hashtags if empty to keep файл компактным
-            if not d.get("hashtags"):
-                d.pop("hashtags", None)
-            data.append(d)
+        data = [r.model_dump() for r in rules]
         path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     def list_rules(
@@ -155,7 +156,6 @@ class SyncService:
             mode = str(r.get("mode", "unidirectional")).strip() or "unidirectional"
             category = str(r.get("category", "")).strip()
             enabled = bool(r.get("enabled", True))
-            hashtags = str(r.get("hashtags", "")).strip()
             is_external = bool(r.get("is_external", False))
             target_doc_id = str(r.get("target_doc_id", "")).strip() or None
 
@@ -185,7 +185,6 @@ class SyncService:
                         id=rule_id,
                         enabled=enabled,
                         category=category,
-                        hashtags=hashtags,
                         mode=mode,
                         source_sheet="",
                         source_header="",
@@ -227,7 +226,6 @@ class SyncService:
                     id=rule_id,
                     enabled=enabled,
                     category=category,
-                    hashtags=hashtags,
                     mode=mode,
                     source_sheet=src_sheet,
                     source_header=src_header,
@@ -311,7 +309,6 @@ class SyncService:
                         id=str(row.get("id", "")).strip(),
                         enabled=bool(row.get("enabled", True)),
                         category=str(row.get("category", "")).strip(),
-                        hashtags=str(row.get("hashtags", "")).strip(),
                         mode=mode,
                         # Unidirectional fields
                         source_sheet=str(row.get("source_sheet", "")).strip(),
@@ -412,7 +409,7 @@ class SyncService:
                 results.append({"rule_id": rule.id, "status": "skipped", "reason": "Source header missing"})
                 continue
 
-            res = self._apply_rule_extended(spreadsheet_id, rule, row_key, val, sheet_name)
+            res = self._apply_rule_extended(spreadsheet_id, rule, row_key, val, sheet_name, project=project)
             results.append(res)
             
         if self.logging_service:
@@ -471,7 +468,7 @@ class SyncService:
                         val = row[src_idx]
 
                         try:
-                            self._apply_rule_extended(spreadsheet_id, rule, article, val, source_sheet)
+                            self._apply_rule_extended(spreadsheet_id, rule, article, val, source_sheet, project=project)
                         except Exception as e:
                             errors.append(f"{article}-{rule.id}: {str(e)}")
                     else:
@@ -493,6 +490,7 @@ class SyncService:
     async def sync_event(self, spreadsheet_id: str, event_data: Dict[str, Any]):
         """
         Process a single onEdit event with cycle protection.
+        Includes detailed function logging and summary logging.
         """
         sheet_name = event_data.get("sheet_name")
         row_idx = event_data.get("row")
@@ -500,6 +498,7 @@ class SyncService:
         source_header = event_data.get("header_name")
         new_value = event_data.get("value")
         row_key = event_data.get("row_key")
+        project = event_data.get("project")
 
         # === ЗАЩИТА ОТ ЦИКЛОВ: Проверка sync_origin ===
         sync_origin = event_data.get("sync_origin", "user")
@@ -596,7 +595,14 @@ class SyncService:
                 # Блокируем целевую ячейку для защиты от циклов
                 self._lock_cell(spreadsheet_id, row_key, target_header)
 
-                res = self._apply_rule_extended(spreadsheet_id, rule, row_key, new_value, sheet_name)
+                res = self._apply_rule_extended(
+                    spreadsheet_id,
+                    rule,
+                    row_key,
+                    new_value,
+                    sheet_name,
+                    project=event_data.get("project"),
+                )
                 results.append(res)
 
                 # Log success for each rule
@@ -631,7 +637,7 @@ class SyncService:
             except Exception as e:
                 logger.error("cascade_invocation_failed", error=str(e))
                 # Do not re-raise to avoid blocking response
-        
+
         # 6. Handle Deadline Autofill (Migration from GAS)
         if source_header:
             try:
@@ -639,33 +645,61 @@ class SyncService:
             except Exception as e:
                 logger.error("deadline_autofill_failed", error=str(e))
 
-        return {"status": "processed", "rules_matched": len(matching_rules), "results": results}
+        result = {"status": "processed", "rules_matched": len(matching_rules), "results": results}
 
-    def _log_to_sheet(self, spreadsheet_id: str, row_key: str, source_info: str, target_info: str, 
-                      old_val: str, new_val: str, category: str, hashtags: str, status: str):
-        """
-        Append log to 'Журнал синхро' with columns:
-        Дата/время | ID | Источник | Цель | Старое значение | Новое значение | Категория | Хэштеги | Событие
-        """
+        # Log summary to Sheets if available
+        if self.logging_service and len(results) > 0:
+            success_count = sum(1 for r in results if r.get("status") == "success")
+            self.logging_service.log_sync_summary(
+                spreadsheet_id=spreadsheet_id,
+                source_sheet=sheet_name,
+                target_sheet=",".join([r.get("target_sheet", "unknown") for r in results if "target_sheet" in r][:3]) or "multiple",
+                status="success" if success_count > 0 else "error",
+                details=f"Обработано {len(results)} правил, успешно {success_count}",
+            )
+
+        return result
+
+    def _log_sync_journal(
+        self,
+        spreadsheet_id: str,
+        row_key: str,
+        source_info: str,
+        target_info: str,
+        old_val: str,
+        new_val: str,
+        category: str,
+        status: str,
+        project: Optional[str] = None,
+        rule_id: Optional[str] = None,
+    ):
+        if not self.sync_log_service:
+            return
+
         try:
-            ws = self.sheets_service.get_worksheet(spreadsheet_id, "Журнал синхро")
-            from datetime import datetime
-            timestamp = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-            ws.append_row([
-                timestamp,
-                row_key,
-                source_info,
-                target_info,
-                str(old_val),
-                str(new_val),
-                category,
-                hashtags or "",
-                status
-            ])
+            self.sync_log_service.add_entry(
+                spreadsheet_id=spreadsheet_id,
+                project=project,
+                row_key=row_key,
+                source_info=source_info,
+                target_info=target_info,
+                old_value=str(old_val),
+                new_value=str(new_val),
+                category=category,
+                status=status,
+                rule_id=rule_id,
+            )
         except Exception as e:
-            logger.error("log_to_sheet_failed", error=str(e))
+            logger.error("sync_journal_write_failed", error=str(e))
 
-    def _apply_rule(self, spreadsheet_id: str, rule: Any, row_key: str, new_value: Any) -> Dict[str, Any]:
+    def _apply_rule(
+        self,
+        spreadsheet_id: str,
+        rule: Any,
+        row_key: str,
+        new_value: Any,
+        project: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Apply a single sync rule."""
         target_ss_id = rule.target_doc_id if rule.is_external else spreadsheet_id
         
@@ -694,8 +728,8 @@ class SyncService:
         
         ws.update_cell(target_row, target_col, new_value)
         
-        # 5. Log to sync journal (legacy)
-        self._log_to_sheet(
+        # 5. Log to sync journal (server)
+        self._log_sync_journal(
             spreadsheet_id, 
             row_key=row_key,
             source_info=f"Rule: {rule.category}", 
@@ -703,8 +737,9 @@ class SyncService:
             old_val=str(old_val),
             new_val=str(new_value),
             category=rule.category,
-            hashtags=rule.hashtags,
-            status="SUCCESS"
+            status="SUCCESS",
+            project=project,
+            rule_id=rule.id if hasattr(rule, "id") else None,
         )
         
         # 6. Log to session log (new)
@@ -718,7 +753,15 @@ class SyncService:
         
         return {"rule_id": rule.id, "status": "success"}
 
-    def _apply_rule_extended(self, spreadsheet_id: str, rule: SyncRule, row_key: str, new_value: Any, source_sheet: str) -> Dict[str, Any]:
+    def _apply_rule_extended(
+        self,
+        spreadsheet_id: str,
+        rule: SyncRule,
+        row_key: str,
+        new_value: Any,
+        source_sheet: str,
+        project: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Apply a sync rule with bidirectional support."""
         # Определяем целевой лист и заголовок
         target_sheet, target_header = self._get_target_for_rule(rule, source_sheet)
@@ -751,7 +794,7 @@ class SyncService:
         ws.update_cell(target_row, target_col, new_value)
 
         # 5. Log to sync journal
-        self._log_to_sheet(
+        self._log_sync_journal(
             spreadsheet_id,
             row_key=row_key,
             source_info=f"Rule: {rule.category} ({rule.mode})",
@@ -759,8 +802,9 @@ class SyncService:
             old_val=str(old_val),
             new_val=str(new_value),
             category=rule.category,
-            hashtags=rule.hashtags,
-            status="SUCCESS"
+            status="SUCCESS",
+            project=project,
+            rule_id=rule.id,
         )
 
         # 6. Log to session log

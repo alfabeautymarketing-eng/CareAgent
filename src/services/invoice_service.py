@@ -14,6 +14,7 @@ from datetime import datetime
 import re
 
 from src.utils.logger import logger
+from src.services.drive import get_drive_service
 
 
 @dataclass
@@ -517,6 +518,94 @@ class InvoiceService:
 
         except Exception as e:
             logger.error(f"Create full invoice failed: {e}")
+            raise
+
+    async def collect_and_copy_documents(
+        self,
+        spreadsheet_id: str,
+        target_sheet: str = "Для инвойса",
+        parent_folder_id: Optional[str] = "1DjrtDKLUMCypFqlC38kjgOESupTjjUpK"
+    ) -> Dict[str, Any]:
+        """
+        Collect documents from invoice sheet and copy to a new folder.
+        """
+        if not self.sheets:
+            raise ValueError("Sheets service not initialized")
+            
+        drive = get_drive_service()
+        
+        try:
+            logger.info("Starting document collection")
+            
+            # Read invoice data
+            result = await self.sheets.get(
+                spreadsheet_id=spreadsheet_id,
+                range=f"'{target_sheet}'"
+            )
+            values = result.get("values", [])
+            
+            if not values or len(values) < 2:
+                return {"message": "Invoice sheet is empty", "count": 0}
+                
+            headers = values[0]
+            data = values[1:]
+            
+            # Find columns
+            try:
+                ds_idx = headers.index("ДС")
+                spirit_idx = headers.index("Спирт")
+                art_idx = headers.index("Арт. Рус")
+            except ValueError:
+                return {"message": "Required columns (ДС, Спирт, Арт. Рус) not found", "count": 0}
+                
+            # Create folder
+            date_str = datetime.now().strftime("%Y-%m-%d_%H-%M")
+            folder_name = f"Documents_{date_str}"
+            folder_id = drive.create_folder(folder_name, parent_folder_id)
+            
+            copied_files = 0
+            errors = 0
+            
+            processed_links = set()
+            
+            for row in data:
+                # Helper to process link
+                for idx, type_name in [(ds_idx, "DS"), (spirit_idx, "Spirit")]:
+                    if idx >= len(row):
+                        continue
+                        
+                    cell_val = row[idx]
+                    if not cell_val:
+                        continue
+                        
+                    # Extract URL
+                    file_id = drive.get_file_id_from_url(cell_val)
+                    if not file_id:
+                        continue
+                        
+                    if file_id in processed_links:
+                        continue
+                        
+                    processed_links.add(file_id)
+                    
+                    try:
+                        art = row[art_idx] if art_idx < len(row) else "Unknown"
+                        new_name = f"{art}_{type_name}_{date_str}"
+                        drive.copy_file(file_id, folder_id, new_name)
+                        copied_files += 1
+                    except Exception as copy_err:
+                        logger.error(f"Failed to copy file {file_id}: {copy_err}")
+                        errors += 1
+                        
+            return {
+                "message": f"Copied {copied_files} files to folder {folder_name}", 
+                "count": copied_files,
+                "folder_id": folder_id,
+                "errors": errors
+            }
+            
+        except Exception as e:
+            logger.error(f"Collect documents failed: {e}")
             raise
 
 

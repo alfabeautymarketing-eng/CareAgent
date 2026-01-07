@@ -8,6 +8,58 @@
 
 const SERVER_URL = 'http://46.226.167.153:8000';
 
+/**
+ * Proxy for API requests from the native GAS UI.
+ * Bypasses Mixed Content restrictions by fetching from server-side GAS.
+ * @param {string} path - Relative API path (e.g. "rules/123")
+ * @param {string} method - HTTP method
+ * @param {string} payload - JSON string payload
+ */
+function apiProxy(path, method, payload) {
+  let url = SERVER_URL + '/api/v1' + (path.startsWith('/') ? '' : '/') + path;
+  const httpMethod = (method || 'GET').toUpperCase();
+  
+  const options = {
+    method: httpMethod,
+    muteHttpExceptions: true,
+    contentType: 'application/json'
+  };
+  
+  if (payload) {
+    if (httpMethod === 'GET') {
+      const qs = Object.entries(payload)
+        .filter(([_, v]) => v !== null && v !== undefined)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('&');
+      if (qs) url += (url.includes('?') ? '&' : '?') + qs;
+    } else {
+      options.payload = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    }
+  }
+
+  console.log(`[apiProxy] ${httpMethod} ${url}`);
+  
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    const content = response.getContentText();
+    let json = null;
+    try { json = JSON.parse(content); } catch(e) {}
+    
+    return {
+      status: response.getResponseCode(),
+      content: content,
+      json: json
+    };
+  } catch (e) {
+    console.error(`[apiProxy] Error: ${e.toString()}`);
+    return {
+      status: 500,
+      content: JSON.stringify({ error: e.toString() }),
+      json: { error: e.toString() }
+    };
+  }
+}
+
 // Cache for sort config (avoid repeated API calls)
 var _sortConfigCache = null;
 
@@ -690,6 +742,283 @@ function reorderSheetsSilent() {
     }
   } catch (e) {
     console.error('Silent reorder failed:', e);
+  }
+}
+
+// =======================================================================================
+// LOGS & DOCUMENTS (Python Server)
+// =======================================================================================
+
+/**
+ * Call server to recreate or clean log sheet.
+ * @param {boolean} forceClean - If true, clears the sheet.
+ */
+function callServerLogCommand(forceClean) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const endpoint = forceClean ? '/api/v1/logs/clean' : '/api/v1/logs/recreate';
+
+  const payload = {
+    spreadsheet_id: ss.getId()
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(SERVER_URL + endpoint, options);
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      const result = JSON.parse(text);
+      ss.toast('✅ ' + result.message);
+      return true;
+    } else {
+      SpreadsheetApp.getUi().alert('❌ Ошибка сервера (' + code + '):\n' + text);
+      return false;
+    }
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('❌ Ошибка сети:\n' + e.message);
+    return false;
+  }
+}
+
+/**
+ * Call server to recreate Debug Log sheet.
+ */
+function callServerRecreateDebugLog() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ spreadsheet_id: ss.getId() }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/logs/recreate-debug', options);
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      ss.toast('✅ Журнал логов пересоздан');
+      return true;
+    } else {
+      SpreadsheetApp.getUi().alert('❌ Ошибка сервера (' + code + '):\n' + text);
+      return false;
+    }
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('❌ Ошибка сети:\n' + e.message);
+    return false;
+  }
+}
+
+/**
+ * Call server to collect documents.
+ */
+function callServerCollectDocuments() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+
+  const payload = {
+    spreadsheet_id: ss.getId(),
+    target_sheet: "Для инвойса" // Default
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+    timeout: 300 // 5 minutes timeout for large copy jobs
+  };
+
+  try {
+    ss.toast('⏳ Сбор документов начат...', 'Python Server', 60);
+
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/documents/collect', options);
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      const result = JSON.parse(text);
+      const data = result.data;
+      
+      let msg = '✅ Документы собраны!\n\n';
+      msg += 'Файлов скопировано: ' + data.count + '\n';
+      msg += 'Ошибок: ' + data.errors + '\n';
+      if (data.folder_id) {
+        msg += 'ID папки: ' + data.folder_id + '\n';
+      }
+      
+      ui.alert('Сбор документов', msg, ui.ButtonSet.OK);
+      return true;
+    } else {
+      ui.alert('❌ Ошибка сервера (' + code + '):\n' + text);
+      return false;
+    }
+  } catch (e) {
+    ui.alert('❌ Ошибка сети:\n' + e.message);
+    return false;
+  }
+}
+
+/**
+ * Call server to archive logs manually.
+ */
+function callServerArchiveLogs() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+
+  const confirm = ui.alert(
+    "Архивирование логов",
+    "Скопировать все текущие логи в месячный архив?\n\n" +
+    "Логи будут скопированы в папку архивов, лист 'Логи' будет очищен.",
+    ui.ButtonSet.YES_NO
+  );
+
+  if (confirm !== ui.Button.YES) return;
+
+  const payload = {
+    spreadsheet_id: ss.getId()
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+    timeout: 300 // Long timeout for archive
+  };
+
+  try {
+    ss.toast('⏳ Архивирование...', 'Python Server', 30);
+
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/logs/archive', options);
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      const result = JSON.parse(text);
+      const data = result.data;
+      
+      let msg = '✅ Архивирование завершено!\n\n';
+      msg += 'Всего строк: ' + data.total_rows + '\n';
+      msg += 'Имя архива: ' + data.archive_name + '\n';
+      
+      ui.alert('Архивирование', msg, ui.ButtonSet.OK);
+      return true;
+    } else {
+      ui.alert('❌ Ошибка сервера (' + code + '):\n' + text);
+      return false;
+    }
+  } catch (e) {
+    ui.alert('❌ Ошибка сети:\n' + e.message);
+    return false;
+  }
+}
+
+/**
+ * Call server to show archive status.
+ */
+function callServerShowArchiveStatus() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+
+  const url = SERVER_URL + '/api/v1/logs/archive/status?spreadsheet_id=' + encodeURIComponent(ss.getId());
+
+  try {
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      const result = JSON.parse(text);
+      const status = result.data;
+      
+      let msg = "📊 СТАТУС АРХИВИРОВАНИЯ (Server)\n\n";
+      msg += `📁 Текущий архив: ${status.archive_name}\n`;
+      msg += `📂 ID Папки: ${status.folder_id}\n`;
+      msg += `✅ Существует: ${status.exists ? "Да" : "Нет"}\n`;
+      if (status.last_modified) {
+          msg += `🕒 Изменен: ${status.last_modified}\n`;
+      }
+      
+      ui.alert("Статус архивирования", msg, ui.ButtonSet.OK);
+      return true;
+    } else {
+      ui.alert('❌ Ошибка сервера (' + code + '):\n' + text);
+      return false;
+    }
+  } catch (e) {
+    ui.alert('❌ Ошибка сети:\n' + e.message);
+    return false;
+  }
+}
+
+/**
+ * Call server to structure documents for 353pp (Certification).
+ */
+function callServerStructureDocuments353pp() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+
+  const confirm = ui.alert(
+    "Сбор документов (353пп)",
+    "Запустить сбор документов для заявки (353пп)?\n\n" +
+    "Будут обработаны строки листа 'New sert' с видом документа '353'.\n" +
+    "Документы будут скопированы в папку 'Заявка 353пп'.",
+    ui.ButtonSet.YES_NO
+  );
+
+  if (confirm !== ui.Button.YES) return;
+
+  const payload = {
+    spreadsheet_id: ss.getId()
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+    timeout: 300 // Long timeout
+  };
+
+  try {
+    ss.toast('⏳ Обработка документов...', 'Python Server', 60);
+
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/documents/structure-353pp', options);
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      const result = JSON.parse(text);
+      const data = result.data;
+      
+      let msg = '✅ Обработка завершена!\n\n';
+      msg += 'Обработано строк: ' + data.processed + '\n';
+      if (data.folder_url) {
+        msg += '📁 Ссылка на папку: ' + data.folder_url + '\n';
+      }
+      
+      if (data.details && data.details.length > 0) {
+        msg += '\n\n⚠️ Есть ошибки (см. логи): ' + data.details.length;
+      }
+
+      ui.alert('Сбор документов 353пп', msg, ui.ButtonSet.OK);
+      return true;
+    } else {
+      ui.alert('❌ Ошибка сервера (' + code + '):\n' + text);
+      return false;
+    }
+  } catch (e) {
+    ui.alert('❌ Ошибка сети:\n' + e.message);
+    return false;
   }
 }
 

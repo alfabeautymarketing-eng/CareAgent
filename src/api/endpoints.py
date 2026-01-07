@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from src.utils.logger import logger
+from src.utils.config import settings
 
 api_router = APIRouter()
 
@@ -19,19 +20,33 @@ from src.services.sorting import SortingService
 from src.services.logging import LoggingService
 from src.services.ai import AIService, get_ai_service
 from src.services.price_processor import PriceProcessor, get_price_processor
+from src.services.invoice_service import get_invoice_service
+from src.services.external_docs import ExternalDocsService
+from src.services.sync_log_service import SyncLogService
+from src.services.function_log_service import FunctionLogService
+from src.services.certification import CertificationService
+from src.services.meta_cache import MetaCacheService
 
 sheets_service = SheetsService()
+function_log_service = FunctionLogService()
 logging_service = LoggingService(sheets_service)
-sync_service = SyncService(logging_service) # Pass logger to sync service
+sync_log_service = SyncLogService(
+    data_dir=settings.sync_log_data_dir,
+    retention_days=settings.sync_log_retention_days,
+    max_entries=settings.sync_log_max_entries,
+)
+sync_service = SyncService(logging_service, sync_log_service) # Pass logger to sync service
 sorting_service = SortingService()
 ai_service = get_ai_service()
 price_processor = get_price_processor(sheets_service, sync_service, logging_service)
+external_docs_service = ExternalDocsService()
+meta_cache_service = MetaCacheService()
+certification_service = CertificationService(sheets_service)
 
 class RuleItem(BaseModel):
     mode: str = "unidirectional"
     enabled: bool = True
     category: str = ""
-    hashtags: str = ""
     source_sheet: Optional[str] = None
     source_header: Optional[str] = None
     target_sheet: Optional[str] = None
@@ -53,7 +68,6 @@ class RuleCreateRequest(BaseModel):
     mode: str = "unidirectional"  # "unidirectional" | "bidirectional"
     enabled: bool = True
     category: str = ""
-    hashtags: str = ""
     # For unidirectional
     source_sheet: Optional[str] = None
     source_header: Optional[str] = None
@@ -73,7 +87,6 @@ class RuleUpdateRequest(BaseModel):
     """Request to update an existing sync rule."""
     enabled: Optional[bool] = None
     category: Optional[str] = None
-    hashtags: Optional[str] = None
     mode: Optional[str] = None
     source_sheet: Optional[str] = None
     source_header: Optional[str] = None
@@ -534,6 +547,453 @@ async def toggle_rule_endpoint(spreadsheet_id: str, rule_id: str, request: RuleT
 async def get_rules_ui():
     """Serve the Rule Manager UI."""
     return FileResponse("config/rule_manager.html")
+
+
+# ============== Sync Logs ==============
+
+def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid datetime format: {value}")
+
+
+@api_router.get("/sync-logs/{spreadsheet_id}")
+async def list_sync_logs(
+    spreadsheet_id: str,
+    limit: int = 200,
+    offset: int = 0,
+    order: str = "desc",
+    project: Optional[str] = None,
+    category: Optional[str] = None,
+    status: Optional[str] = None,
+    row_key: Optional[str] = None,
+    source: Optional[str] = None,
+    target: Optional[str] = None,
+    rule_id: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+):
+    """List sync journal entries from server storage."""
+    try:
+        start_dt = _parse_iso_datetime(start)
+        end_dt = _parse_iso_datetime(end)
+        safe_limit = min(max(limit, 0), 1000)
+        safe_offset = max(offset, 0)
+
+        items, total = sync_log_service.list_entries(
+            spreadsheet_id=spreadsheet_id,
+            limit=safe_limit,
+            offset=safe_offset,
+            order=order,
+            project=project,
+            category=category,
+            status=status,
+            row_key=row_key,
+            source=source,
+            target=target,
+            rule_id=rule_id,
+            start=start_dt,
+            end=end_dt,
+        )
+
+        return {
+            "items": items,
+            "total": total,
+            "limit": safe_limit,
+            "offset": safe_offset,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("sync_logs_list_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/sync-logs/{spreadsheet_id}/stats")
+async def sync_logs_stats(spreadsheet_id: str):
+    """Get statistics for sync logs (summary by category and status)."""
+    try:
+        items, _ = sync_log_service.list_entries(
+            spreadsheet_id=spreadsheet_id,
+            limit=10000,  # Get all for statistics
+        )
+
+        # Aggregate statistics
+        stats = {
+            "total": len(items),
+            "by_category": {},
+            "by_status": {},
+            "by_rule_id": {},
+            "latest_timestamp": None,
+            "oldest_timestamp": None,
+        }
+
+        for entry in items:
+            # By category
+            cat = entry.get("category", "unknown")
+            if cat not in stats["by_category"]:
+                stats["by_category"][cat] = 0
+            stats["by_category"][cat] += 1
+
+            # By status
+            status = entry.get("status", "unknown")
+            if status not in stats["by_status"]:
+                stats["by_status"][status] = 0
+            stats["by_status"][status] += 1
+
+            # By rule_id
+            rule_id = entry.get("rule_id", "unknown")
+            if rule_id not in stats["by_rule_id"]:
+                stats["by_rule_id"][rule_id] = 0
+            stats["by_rule_id"][rule_id] += 1
+
+            # Timestamps
+            ts_str = entry.get("timestamp")
+            if ts_str:
+                if not stats["latest_timestamp"]:
+                    stats["latest_timestamp"] = ts_str
+                if not stats["oldest_timestamp"]:
+                    stats["oldest_timestamp"] = ts_str
+
+        return stats
+    except Exception as e:
+        logger.error("sync_logs_stats_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/sync-logs/{spreadsheet_id}/export")
+async def export_sync_logs(
+    spreadsheet_id: str,
+    format: str = "json",
+    limit: int = 10000,
+):
+    """Export sync logs in JSON or CSV format."""
+    try:
+        items, _ = sync_log_service.list_entries(
+            spreadsheet_id=spreadsheet_id,
+            limit=min(limit, 50000),
+        )
+
+        if format.lower() == "csv":
+            import csv
+            import io
+            import tempfile
+            from pathlib import Path
+
+            output = io.StringIO()
+            if items:
+                fieldnames = list(items[0].keys())
+                writer = csv.DictWriter(output, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(items)
+
+            # Write to temp file for FileResponse
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.csv', delete=False, encoding='utf-8'
+            ) as f:
+                f.write(output.getvalue())
+                temp_path = f.name
+
+            return FileResponse(
+                path=temp_path,
+                filename=f"sync_logs_{spreadsheet_id}.csv",
+                media_type="text/csv",
+            )
+        else:  # JSON
+            return {
+                "format": "json",
+                "spreadsheet_id": spreadsheet_id,
+                "count": len(items),
+                "items": items,
+            }
+    except Exception as e:
+        logger.error("sync_logs_export_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/sync-logs/{spreadsheet_id}/truncate")
+async def truncate_sync_logs(
+    spreadsheet_id: str,
+    keep_days: int = 0,
+):
+    """Remove old sync logs (older than keep_days)."""
+    try:
+        items, _ = sync_log_service.list_entries(
+            spreadsheet_id=spreadsheet_id,
+            limit=100000,
+        )
+
+        if keep_days <= 0:
+            # Delete all
+            deleted = len(items)
+            log_path = sync_log_service._log_path(spreadsheet_id)
+            lock_path = sync_log_service._lock_path(spreadsheet_id)
+            from filelock import FileLock
+            with FileLock(lock_path):
+                if log_path.exists():
+                    log_path.unlink()
+        else:
+            # Keep entries newer than keep_days
+            from datetime import datetime, timedelta
+            cutoff = datetime.utcnow() - timedelta(days=keep_days)
+            filtered = []
+            deleted = 0
+
+            for entry in items:
+                ts = sync_log_service._parse_timestamp(entry.get("timestamp"))
+                if ts and ts >= cutoff:
+                    filtered.append(entry)
+                else:
+                    deleted += 1
+
+            # Write back filtered logs
+            log_path = sync_log_service._log_path(spreadsheet_id)
+            lock_path = sync_log_service._lock_path(spreadsheet_id)
+            from filelock import FileLock
+            import json
+
+            with FileLock(lock_path):
+                with open(log_path, "w", encoding="utf-8") as handle:
+                    for entry in filtered:
+                        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+        return {
+            "deleted": deleted,
+            "remaining": len(items) - deleted,
+        }
+    except Exception as e:
+        logger.error("sync_logs_truncate_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# --- Log Management Endpoints ---
+
+@api_router.post("/logs/recreate")
+async def recreate_log_sheet_endpoint(request: LogInitRequest):
+    """Recreate log sheet (ensure headers are correct)."""
+    try:
+        logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=False)
+        return {"status": "success", "message": "Log sheet recreated"}
+    except Exception as e:
+        logger.error("log_recreate_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/logs/clean")
+async def clean_log_sheet_endpoint(request: LogInitRequest):
+    """Clean log sheet (force clear and recreate headers)."""
+    try:
+        logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=True)
+        return {"status": "success", "message": "Log sheet cleaned"}
+    except Exception as e:
+        logger.error("log_clean_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/logs/recreate-debug")
+async def recreate_debug_log_sheet_endpoint(request: LogInitRequest):
+    """Recreate debug log sheet ('Журнал логов')."""
+    try:
+        # 'Журнал логов' is the sheet name for debug logs
+        logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=False, sheet_name="Журнал логов")
+        return {"status": "success", "message": "Debug log sheet recreated"}
+    except Exception as e:
+        logger.error("log_debug_recreate_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/logs/archive")
+async def archive_logs_endpoint(request: LogInitRequest):
+    """Manually archive logs."""
+    try:
+        # Need to determine project prefix, default to 'Common' or try to get from request/sheet?
+        # For now, let's look up project from sheet title or just use "Project"
+        # Ideally, we should receive 'project' in request, but LogInitRequest only has spreadsheet_id
+        # We can fetch project from sheet name or config.
+        # Let's peek at sheet name? Or just use "Archive"
+        
+        # Simple heuristic:
+        try:
+             ss = sheets_service.get_spreadsheet(request.spreadsheet_id)
+             title = ss.title.lower()
+             prefix = "common"
+             if "mt" in title: prefix = "mt"
+             elif "sk" in title: prefix = "sk"
+             elif "ss" in title: prefix = "ss"
+        except:
+             prefix = "common"
+             
+        result = await logging_service.archive_logs(request.spreadsheet_id, project_prefix=prefix)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        logger.error("log_archive_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/logs/archive/status")
+async def get_archive_status_endpoint(spreadsheet_id: str):
+    """Get archive status."""
+    try:
+        try:
+             ss = sheets_service.get_spreadsheet(spreadsheet_id)
+             title = ss.title.lower()
+             prefix = "common"
+             if "mt" in title: prefix = "mt"
+             elif "sk" in title: prefix = "sk"
+             elif "ss" in title: prefix = "ss"
+        except:
+             prefix = "common"
+             
+        status = logging_service.get_archive_status(project_prefix=prefix)
+        return {"status": "success", "data": status}
+    except Exception as e:
+        logger.error("get_archive_status_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Document Collection Endpoints ---
+
+# --- Document Collection Endpoints ---
+
+class CollectDocumentsRequest(BaseModel):
+    spreadsheet_id: str
+    target_sheet: str = "Для инвойса"
+
+@api_router.post("/documents/structure-353pp")
+async def structure_documents_353pp_endpoint(request: CollectDocumentsRequest):
+    """Structure documents for 353pp application (from New Sert sheet)."""
+    try:
+        result = await certification_service.structure_documents_353pp(
+            request.spreadsheet_id
+        )
+        return {"status": "success", "data": result}
+    except Exception as e:
+        logger.error("structure_353pp_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/documents/collect")
+async def collect_documents_endpoint(request: CollectDocumentsRequest):
+    """Collect and copy documents for invoice."""
+    try:
+        # Get invoice service
+        inv_service = get_invoice_service(sheets_service)
+        
+        result = await inv_service.collect_and_copy_documents(
+            spreadsheet_id=request.spreadsheet_id,
+            target_sheet=request.target_sheet
+        )
+        return {"status": "success", "data": result}
+    except Exception as e:
+        logger.error("collect_documents_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Function Logs Endpoints ---
+
+@api_router.get("/function-logs/executions")
+async def list_function_executions(
+    module: Optional[str] = None,
+    function_name: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """List historical function executions."""
+    try:
+        executions, total = function_log_service.list_executions(
+            module=module,
+            function_name=function_name,
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "executions": executions,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    except Exception as e:
+        logger.error("function_logs_list_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Metadata & External Docs Endpoints ---
+
+class ExternalDocAddRequest(BaseModel):
+    name: str
+    doc_id: str
+
+@api_router.get("/meta/{spreadsheet_id}/sheets")
+async def get_meta_sheets(spreadsheet_id: str):
+    """List sheets in a spreadsheet."""
+    try:
+        sh = sheets_service.gc.open_by_key(spreadsheet_id)
+        return {"sheets": [s.title for s in sh.worksheets()]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/meta/{spreadsheet_id}/{sheet_name}/headers")
+async def get_meta_headers(spreadsheet_id: str, sheet_name: str):
+    """List column headers in a sheet."""
+    try:
+        headers = sheets_service.get_worksheet_headers(spreadsheet_id, sheet_name)
+        return {"headers": headers}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/meta/discovery")
+async def get_meta_discovery():
+    """Build and return a map of common headers across the ecosystem."""
+    return meta_cache_service.get_discovery_map()
+
+@api_router.post("/meta/index")
+async def trigger_meta_index(background_tasks: BackgroundTasks, spreadsheet_id: Optional[str] = None):
+    """
+    Trigger re-indexing of metadata. 
+    If spreadsheet_id is provided, only index that document.
+    Otherwise, index all projects in PROJECT_IDS.
+    """
+    if spreadsheet_id:
+        targets = [spreadsheet_id]
+    else:
+        # Get all unique IDs from PROJECT_IDS
+        targets = list(PROJECT_IDS.keys())
+    
+    background_tasks.add_task(meta_cache_service.build_global_index, targets)
+    return {"status": "queued", "targets": len(targets)}
+
+@api_router.get("/meta/index/status")
+async def get_meta_index_status():
+    """Get status of the metadata cache."""
+    return {
+        "updated_at": meta_cache_service.index.get("updated_at"),
+        "total_spreadsheets": len(meta_cache_service.index.get("spreadsheets", {})),
+        "total_headers": len(meta_cache_service.index.get("headers", {})),
+        "spreadsheets": meta_cache_service.get_indexed_spreadsheets()
+    }
+
+@api_router.get("/meta/search")
+async def search_meta_header(q: str):
+    """Search for sheets containing a specific header."""
+    return meta_cache_service.search_header(q)
+
+@api_router.get("/external-docs")
+async def list_external_docs():
+    """List registered external documents."""
+    return {"docs": external_docs_service.list_docs()}
+
+@api_router.post("/external-docs")
+async def add_external_doc(request: ExternalDocAddRequest):
+    """Register a new external document."""
+    try:
+        doc = external_docs_service.add_doc(request.name, request.doc_id)
+        return {"status": "ok", "doc": doc}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.delete("/external-docs/{doc_id}")
+async def remove_external_doc(doc_id: str):
+    """Unregister an external document."""
+    if external_docs_service.remove_doc(doc_id):
+        return {"status": "ok"}
+    raise HTTPException(status_code=404, detail="Document not found")
 
 
 @api_router.post("/rules/{spreadsheet_id}")

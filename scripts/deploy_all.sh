@@ -18,23 +18,24 @@ echo "========================================"
 # 1. Deploy Python Server
 # ============================================================
 echo ""
-echo "📦 [1/3] Syncing Python code to server..."
+echo "📦 [1/3] Syncing project files to server..."
 
+# Sync entire project except git, caches, venv and .env (to preserve server-side .env)
 rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '.venv' --exclude '.env' \
     -e "ssh -o StrictHostKeyChecking=no" \
-    ./src/ ${SERVER_USER}@${SERVER_IP}:~/AgentCare/src/
+    ./ ${SERVER_USER}@${SERVER_IP}:~/AgentCare/
 
-echo "✅ Python code synced"
+echo "✅ Project files synced"
 
 # ============================================================
-# 2. Restart Docker
+# 2. Restart Docker with Rebuild
 # ============================================================
 echo ""
-echo "🐳 [2/3] Updating Docker containers..."
+echo "🐳 [2/3] Rebuilding and updating Docker containers..."
 
-ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} "cd ~/AgentCare && docker-compose down && docker-compose up -d"
+ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} "cd ~/AgentCare && docker-compose down && docker-compose up -d --build"
 
-echo "✅ Docker updated"
+echo "✅ Docker updated (rebuilt)"
 
 # ============================================================
 # 3. Deploy Google Apps Script
@@ -48,19 +49,10 @@ if ! command -v clasp &> /dev/null; then
     exit 0
 fi
 
-# Check for .clasp.json in gas folder
-if [ ! -f "$GAS_DIR/.clasp.json" ]; then
-    echo "⚠️  $GAS_DIR/.clasp.json not found. Creating..."
-    echo '{
-  "scriptId": "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g",
-  "rootDir": "."
-}' > "$GAS_DIR/.clasp.json"
-fi
+# Deploy all GAS projects (MT, SK, SS) using the push_all_gas.sh script
+bash ./scripts/push_all_gas.sh
 
-cd "$GAS_DIR"
-clasp push
-
-echo "✅ GAS code pushed"
+echo "✅ All GAS projects pushed"
 
 # ============================================================
 # Done

@@ -3456,115 +3456,16 @@ if (ss) {
   Lib.showSyncRulesManagerDialog = function () {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const ssId = ss.getId();
-    const serverUrl =
-      PropertiesService.getScriptProperties().getProperty("SERVER_URL") ||
-      (typeof SERVER_URL !== "undefined" ? SERVER_URL : "http://localhost:8000");
-    const rulesUrl =
-      serverUrl.replace(/\/$/, "") +
-      "/api/v1/rules-ui?spreadsheet_id=" +
-      encodeURIComponent(ssId);
-
-    const html = HtmlService.createHtmlOutput(`
-      <!DOCTYPE html>
-      <html lang="ru">
-        <head>
-          <base target="_top">
-          <meta charset="UTF-8">
-          <style>
-            * { box-sizing: border-box; }
-            body {
-              margin: 0;
-              font-family: Arial, sans-serif;
-              background: #f6f1ea;
-              color: #1e2a2f;
-            }
-            .shell {
-              padding: 12px;
-              display: grid;
-              gap: 10px;
-            }
-            .header {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 10px;
-              padding: 10px 12px;
-              background: #ffffff;
-              border: 1px solid rgba(15, 118, 110, 0.18);
-              border-radius: 12px;
-            }
-            .header h3 {
-              margin: 0;
-              font-size: 14px;
-            }
-            .header span {
-              color: #6b7280;
-              font-size: 12px;
-            }
-            .frame {
-              width: 100%;
-              height: 700px;
-              border: 1px solid rgba(15, 118, 110, 0.18);
-              border-radius: 14px;
-              overflow: hidden;
-              background: #ffffff;
-            }
-            iframe {
-              width: 100%;
-              height: 100%;
-              border: 0;
-            }
-            .fallback {
-              display: none;
-              padding: 10px 12px;
-              border: 1px dashed rgba(15, 118, 110, 0.18);
-              border-radius: 10px;
-              background: #ffffff;
-              color: #6b7280;
-              font-size: 12px;
-            }
-            .fallback a {
-              color: #0f766e;
-              text-decoration: none;
-              font-weight: 600;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="shell">
-            <div class="header">
-              <div>
-                <h3>Управление правилами синхронизации</h3>
-                <span>Источник: серверный UI</span>
-              </div>
-              <span>ID: ${ssId}</span>
-            </div>
-            <div class="frame">
-              <iframe src="${rulesUrl}" allow="clipboard-read; clipboard-write"></iframe>
-            </div>
-            <div class="fallback" id="fallback">
-              Не удалось встроить интерфейс. Откройте в новой вкладке:
-              <a href="${rulesUrl}" target="_blank" rel="noopener">перейти к правилам</a>
-            </div>
-          </div>
-          <script>
-            const frame = document.querySelector("iframe");
-            const fallback = document.getElementById("fallback");
-            const timer = setTimeout(() => {
-              fallback.style.display = "block";
-            }, 3500);
-            frame.addEventListener("load", () => clearTimeout(timer));
-          </script>
-        </body>
-      </html>
-    `)
-      .setWidth(1180)
+    
+    const template = HtmlService.createTemplateFromFile('SyncRulesManager');
+    template.spreadsheetId = ssId;
+    
+    const html = template.evaluate()
+      .setTitle('AgentCare • Управление правилами')
+      .setWidth(1000)
       .setHeight(850);
-
-    SpreadsheetApp.getUi().showModalDialog(
-      html,
-      "Управление правилами синхронизации (v2)"
-    );
+      
+    SpreadsheetApp.getUi().showModalDialog(html, 'Управление правилами синхронизации (GAS-Native)');
   };
 
   // Удалить устаревший лист «Правила синхро» во всех проектах

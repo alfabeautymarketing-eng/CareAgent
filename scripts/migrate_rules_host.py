@@ -87,7 +87,6 @@ def migrate_rules_for_project(gc, name, ss_id):
                 'mode': mode,
                 'enabled': True,
                 'category': 'Миграция',
-                'hashtags': ['#legacy']
             }
 
             # Check enabled
@@ -97,9 +96,6 @@ def migrate_rules_for_project(gc, name, ss_id):
 
             # Load metadata
             rule['category'] = get_val(row, ['category', 'категория']) or rule['category']
-            rule['hashtags'] = get_val(row, ['hashtags', 'хэштеги', 'хештеги']) or rule['hashtags']
-            if isinstance(rule['hashtags'], str) and rule['hashtags']:
-                 rule['hashtags'] = [t.strip() for t in rule['hashtags'].replace(',', ' ').split()]
 
             if mode == 'bidirectional':
                 rule['sheet_a'] = get_val(row, ['sheet a', 'лист а', 'лист 1', 'source sheet'])

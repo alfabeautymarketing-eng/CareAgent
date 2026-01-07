@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentCare • Журнал синхронизации</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --card: #1e293b;
+            --card-hover: #2d3748;
+            --ink: #f8fafc;
+            --muted: #94a3b8;
+            --accent: #0d9488;
+            --accent-glow: rgba(13, 148, 136, 0.3);
+            --danger: #ef4444;
+            --danger-bg: rgba(239, 68, 68, 0.1);
+            --warning: #f59e0b;
+            --success: #10b981;
+            --radius-xl: 16px;
+            --radius: 12px;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --font: 'Inter', system-ui, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--ink);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Glass Background Effect */
+        body::before {
+            content: "";
+            position: fixed;
+            top: -10%;
+            left: -10%;
+            width: 120%;
+            height: 120%;
+            background:
+                radial-gradient(circle at 10% 20%, rgba(13, 148, 136, 0.08), transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(245, 158, 11, 0.05), transparent 40%);
+            z-index: -1;
+        }
+
+        .app {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        /* --- Header & Stats Card --- */
+        .stats-panel {
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius-xl);
+            padding: 32px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .header-row h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        /* --- Buttons --- */
+        .btn {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 16px;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn.primary {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+
+        .btn.primary:hover {
+            transform: translateY(-1px);
+            background: #0f766e;
+            box-shadow: 0 6px 16px var(--accent-glow);
+        }
+
+        .btn.secondary {
+            background: rgba(148, 163, 184, 0.1);
+            color: var(--ink);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn.secondary:hover {
+            background: rgba(148, 163, 184, 0.2);
+        }
+
+        .btn.ghost {
+            background: transparent;
+            color: var(--muted);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn.ghost:hover {
+            color: var(--ink);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .btn.danger {
+            background: var(--danger-bg);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+
+        .btn.danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* --- Filters & Search --- */
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            position: relative;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .search-box input {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px 12px 10px 36px;
+            color: var(--ink);
+            font-size: 14px;
+        }
+
+        .search-box::before {
+            content: "🔍";
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            opacity: 0.5;
+        }
+
+        .form-select, .form-input {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px 12px;
+            color: var(--ink);
+            font-size: 14px;
+        }
+
+        .form-select:focus, .form-input:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+
+        /* --- Badges & Stats --- */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stat-label {
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-value {
+            font-weight: 700;
+            font-size: 24px;
+            color: var(--accent);
+        }
+
+        .stat-desc {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        /* --- Table --- */
+        .table-container {
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .table-toolbar {
+            padding: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .table-info {
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .log-table th {
+            text-align: left;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .log-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .log-table tbody tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .timestamp {
+            color: var(--muted);
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .category-badge {
+            display: inline-block;
+            background: rgba(13, 148, 136, 0.15);
+            color: #2dd4bf;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-badge.success {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+        }
+
+        .status-badge.error {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+        }
+
+        .status-badge.pending {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+        }
+
+        .col-value {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--ink);
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .col-muted {
+            color: var(--muted);
+        }
+
+        /* --- Pagination --- */
+        .pagination {
+            padding: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pagination-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: transparent;
+            color: var(--ink);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--accent);
+        }
+
+        .pagination-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* --- Modals --- */
+        .modal {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+        }
+
+        .modal.active {
+            display: flex;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal-body {
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-xl);
+            width: min(600px, 95vw);
+            padding: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 22px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .form-row.full {
+            grid-template-columns: 1fr;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .field label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--muted);
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        /* --- Notifications --- */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            background: #1e293b;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border-left: 4px solid var(--accent);
+            animation: slideIn 0.3s ease-out;
+            max-width: 350px;
+            font-size: 13px;
+        }
+
+        .toast.error {
+            border-left-color: var(--danger);
+        }
+
+        .toast.warning {
+            border-left-color: var(--warning);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .empty-state {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .header-actions {
+                width: 100%;
+            }
+
+            .header-actions .btn {
+                flex: 1;
+                justify-content: center;
+            }
+
+            .filter-bar {
+                flex-direction: column;
+            }
+
+            .filter-bar > * {
+                width: 100%;
+            }
+
+            .table-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .log-table {
+                font-size: 11px;
+            }
+
+            .log-table th,
+            .log-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <section class="stats-panel">
+            <div class="header-row">
+                <h1>📜 Журнал синхронизации</h1>
+                <div class="header-actions">
+                    <button class="btn secondary" onclick="refreshData()">🔄 Обновить</button>
+                    <button class="btn ghost" onclick="openExportModal()">⬇️ Экспорт</button>
+                    <button class="btn danger" onclick="openTruncateModal()">🗑️ Очистить</button>
+                </div>
+            </div>
+
+            <div class="filter-bar">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Поиск по полю/ID..." oninput="applyFilters()">
+                </div>
+                <select class="form-select" id="categoryFilter" onchange="applyFilters()">
+                    <option value="">Все категории</option>
+                </select>
+                <select class="form-select" id="statusFilter" onchange="applyFilters()">
+                    <option value="">Все статусы</option>
+                    <option value="success">Успех</option>
+                    <option value="error">Ошибка</option>
+                    <option value="pending">Ожидание</option>
+                </select>
+                <input type="number" id="limitInput" value="200" min="10" max="1000" class="form-input"
+                    style="width: 80px;" onchange="applyFilters()" title="Количество записей">
+            </div>
+
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card">
+                    <div class="stat-label">Всего записей</div>
+                    <div class="stat-value" id="totalCount">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Успешных</div>
+                    <div class="stat-value" id="successCount" style="color: var(--success);">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Ошибок</div>
+                    <div class="stat-value" id="errorCount" style="color: var(--danger);">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Категорий</div>
+                    <div class="stat-value" id="categoryCount">-</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="table-container">
+            <div class="table-toolbar">
+                <span class="table-info">
+                    Показано: <strong id="visibleCount">0</strong> из <strong id="totalLogsCount">0</strong>
+                </span>
+                <div style="flex: 1;"></div>
+                <span id="loadingStatus" style="color: var(--muted); font-size: 12px; display: none;">
+                    ⏳ Загрузка...
+                </span>
+            </div>
+
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th>🕒 Время</th>
+                        <th>📦 Объект</th>
+                        <th>🏷️ Категория</th>
+                        <th>📝 Поле</th>
+                        <th>Было → Стало</th>
+                        <th>✓ Статус</th>
+                    </tr>
+                </thead>
+                <tbody id="logsTableBody">
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 40px; color: var(--muted);">
+                            Загрузка...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="pagination" id="pagination">
+                <!-- Pagination controls injected here -->
+            </div>
+        </section>
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal" id="exportModal">
+        <div class="modal-body">
+            <div class="modal-header">
+                <h2>Экспорт журнала</h2>
+                <button class="btn ghost" onclick="closeModal('exportModal')">✕</button>
+            </div>
+            <div class="form-row full">
+                <div class="field">
+                    <label>Формат экспорта</label>
+                    <select class="form-select" id="exportFormat">
+                        <option value="json">JSON (все доступные поля)</option>
+                        <option value="csv">CSV (табличный формат)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row full">
+                <div class="field">
+                    <label>Количество записей</label>
+                    <input type="number" id="exportLimit" value="10000" min="10" max="50000" class="form-input">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn ghost" onclick="closeModal('exportModal')">Отмена</button>
+                <button class="btn primary" onclick="performExport()">⬇️ Скачать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Truncate Modal -->
+    <div class="modal" id="truncateModal">
+        <div class="modal-body">
+            <div class="modal-header">
+                <h2>⚠️ Очистить журнал</h2>
+                <button class="btn ghost" onclick="closeModal('truncateModal')">✕</button>
+            </div>
+            <p style="color: var(--warning); margin-bottom: 20px;">
+                Это действие невозможно отменить!
+            </p>
+            <div class="form-row full">
+                <div class="field">
+                    <label>Действие</label>
+                    <select class="form-select" id="truncateAction" onchange="updateTruncateInfo()">
+                        <option value="delete_all">Удалить все записи</option>
+                        <option value="keep_7">Оставить только последние 7 дней</option>
+                        <option value="keep_30">Оставить только последние 30 дней</option>
+                        <option value="keep_90">Оставить только последние 90 дней</option>
+                    </select>
+                </div>
+            </div>
+            <p id="truncateInfo" style="color: var(--muted); font-size: 12px; margin: 16px 0;"></p>
+            <div class="modal-footer">
+                <button class="btn ghost" onclick="closeModal('truncateModal')">Отмена</button>
+                <button class="btn danger" onclick="performTruncate()" id="confirmTruncateBtn">🗑️ Удалить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        const state = {
+            spreadsheetId: "13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ",
+            allLogs: [],
+            filteredLogs: [],
+            stats: {},
+            currentPage: 0,
+            pageSize: 200,
+        };
+
+        const api = {
+            base: "/api/v1",
+            fetch: async (path, opts = {}) => {
+                try {
+                    const r = await fetch(`${api.base}${path}`, opts);
+                    if (!r.ok) throw new Error(await r.text());
+                    return await r.json();
+                } catch (e) {
+                    notify(e.message, "error");
+                    throw e;
+                }
+            }
+        };
+
+        function $(id) { return document.getElementById(id); }
+
+        function notify(msg, type = "success") {
+            const container = $("toastContainer");
+            const t = document.createElement("div");
+            t.className = `toast ${type}`;
+            t.textContent = msg;
+            container.appendChild(t);
+            setTimeout(() => t.remove(), 4000);
+        }
+
+        function openModal(id) { $(id).classList.add("active"); }
+        function closeModal(id) { $(id).classList.remove("active"); }
+        function openExportModal() { openModal("exportModal"); }
+        function openTruncateModal() { openModal("truncateModal"); updateTruncateInfo(); }
+
+        async function init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            state.spreadsheetId = urlParams.get('id') || localStorage.getItem("last_ss_id") || state.spreadsheetId;
+            localStorage.setItem("last_ss_id", state.spreadsheetId);
+
+            await refreshData();
+        }
+
+        async function refreshData() {
+            $("loadingStatus").style.display = "inline";
+            try {
+                // Load logs
+                const logsData = await api.fetch(`/sync-logs/${state.spreadsheetId}?limit=10000&order=desc`);
+                state.allLogs = logsData.items || [];
+
+                // Load stats
+                const statsData = await api.fetch(`/sync-logs/${state.spreadsheetId}/stats`);
+                state.stats = statsData;
+
+                // Update filters
+                populateFilters();
+                applyFilters();
+                renderStats();
+            } catch (e) {
+                console.error("Failed to load data", e);
+            } finally {
+                $("loadingStatus").style.display = "none";
+            }
+        }
+
+        function populateFilters() {
+            const categories = new Set(state.allLogs.map(l => l.category).filter(Boolean));
+            const catSelect = $("categoryFilter");
+            catSelect.innerHTML = `<option value="">Все категории (${categories.size})</option>` +
+                Array.from(categories).sort().map(c => `<option value="${c}">${c}</option>`).join("");
+        }
+
+        function applyFilters() {
+            state.currentPage = 0;
+            const search = $("searchInput").value.toLowerCase();
+            const category = $("categoryFilter").value;
+            const status = $("statusFilter").value;
+            const limit = parseInt($("limitInput").value);
+            state.pageSize = limit;
+
+            state.filteredLogs = state.allLogs.filter(log => {
+                if (search && !`${log.row_key} ${log.source_info} ${log.target_info}`.toLowerCase().includes(search)) return false;
+                if (category && log.category !== category) return false;
+                if (status && log.status !== status) return false;
+                return true;
+            });
+
+            renderLogs();
+        }
+
+        function renderStats() {
+            $("totalCount").textContent = state.stats.total || 0;
+            $("successCount").textContent = (state.stats.by_status?.success || 0);
+            $("errorCount").textContent = (state.stats.by_status?.error || 0);
+            $("categoryCount").textContent = Object.keys(state.stats.by_category || {}).length;
+        }
+
+        function renderLogs() {
+            const start = state.currentPage * state.pageSize;
+            const end = start + state.pageSize;
+            const pageItems = state.filteredLogs.slice(start, end);
+
+            const tbody = $("logsTableBody");
+
+            if (!pageItems.length) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="padding: 40px; text-align: center; color: var(--muted);">
+                            Нет записей для отображения
+                        </td>
+                    </tr>
+                `;
+            } else {
+                tbody.innerHTML = pageItems.map(log => {
+                    const time = new Date(log.timestamp).toLocaleTimeString('ru-RU', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                    const date = new Date(log.timestamp).toLocaleDateString('ru-RU');
+
+                    return `
+                        <tr>
+                            <td class="timestamp" title="${log.timestamp}">
+                                ${time}<br><small>${date}</small>
+                            </td>
+                            <td><strong>${log.row_key || '-'}</strong></td>
+                            <td>
+                                <span class="category-badge">${log.category || 'unknown'}</span>
+                            </td>
+                            <td>${log.source_info || '-'}</td>
+                            <td>
+                                <small class="col-muted">${log.old_value || '-'}</small>
+                                <br/>
+                                <strong class="col-value">${log.new_value || '-'}</strong>
+                            </td>
+                            <td>
+                                <span class="status-badge ${log.status?.toLowerCase() || 'pending'}">
+                                    ${log.status || 'unknown'}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                }).join("");
+            }
+
+            // Update info
+            const total = state.filteredLogs.length;
+            $("visibleCount").textContent = Math.min(end, total);
+            $("totalLogsCount").textContent = total;
+
+            // Render pagination
+            renderPagination(total);
+        }
+
+        function renderPagination(total) {
+            const totalPages = Math.ceil(total / state.pageSize);
+            const container = $("pagination");
+
+            if (totalPages <= 1) {
+                container.innerHTML = "";
+                return;
+            }
+
+            let html = `<button class="pagination-btn" onclick="goToPage(0)" ${state.currentPage === 0 ? 'disabled' : ''}>⟨ Первая</button>`;
+
+            for (let i = Math.max(0, state.currentPage - 2); i <= Math.min(totalPages - 1, state.currentPage + 2); i++) {
+                html += `<button class="pagination-btn ${i === state.currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i + 1}</button>`;
+            }
+
+            html += `<button class="pagination-btn" onclick="goToPage(${totalPages - 1})" ${state.currentPage === totalPages - 1 ? 'disabled' : ''}>⟩ Последняя</button>`;
+
+            container.innerHTML = html;
+        }
+
+        function goToPage(page) {
+            state.currentPage = page;
+            renderLogs();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function updateTruncateInfo() {
+            const action = $("truncateAction").value;
+            let info = "При удалении все предыдущие записи будут потеряны.";
+
+            if (action === "delete_all") {
+                info = "✗ Удалить ВСЕ записи из журнала (невозможно отменить)";
+            } else if (action === "keep_7") {
+                info = "Оставить только записи за последние 7 дней";
+            } else if (action === "keep_30") {
+                info = "Оставить только записи за последние 30 дней";
+            } else if (action === "keep_90") {
+                info = "Оставить только записи за последние 90 дней";
+            }
+
+            $("truncateInfo").textContent = info;
+        }
+
+        async function performExport() {
+            const format = $("exportFormat").value;
+            const limit = parseInt($("exportLimit").value);
+
+            try {
+                if (format === "csv") {
+                    window.location.href = `/api/v1/sync-logs/${state.spreadsheetId}/export?format=csv&limit=${limit}`;
+                } else {
+                    const data = await api.fetch(`/sync-logs/${state.spreadsheetId}/export?format=json&limit=${limit}`);
+                    const json = JSON.stringify(data.items, null, 2);
+                    const blob = new Blob([json], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `sync_logs_${state.spreadsheetId}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }
+                notify("Экспорт начался");
+                closeModal("exportModal");
+            } catch (e) {
+                notify("Ошибка экспорта: " + e.message, "error");
+            }
+        }
+
+        async function performTruncate() {
+            const action = $("truncateAction").value;
+            let keepDays = 0;
+
+            if (action === "keep_7") keepDays = 7;
+            else if (action === "keep_30") keepDays = 30;
+            else if (action === "keep_90") keepDays = 90;
+
+            if (!confirm(`Вы уверены? Это действие невозможно отменить!`)) return;
+
+            const confirmBtn = $("confirmTruncateBtn");
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = "⏳ Удаление...";
+
+            try {
+                const result = await api.fetch(`/sync-logs/${state.spreadsheetId}/truncate`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ keep_days: keepDays })
+                });
+
+                notify(`Удалено ${result.deleted} записей. Осталось ${result.remaining}.`);
+                closeModal("truncateModal");
+                await refreshData();
+            } catch (e) {
+                notify("Ошибка очистки: " + e.message, "error");
+            } finally {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = "🗑️ Удалить";
+            }
+        }
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+
+</html>

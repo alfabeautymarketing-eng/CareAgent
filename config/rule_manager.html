@@ -4,27 +4,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AgentCare • Управление правилами синхронизации</title>
+    <title>AgentCare • Правила синхронизации (GAS-Native)</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #f6f1ea;
-            --bg-2: #f2efe8;
-            --ink: #1e2a2f;
-            --muted: #6b7280;
-            --accent: #0f766e;
-            --accent-2: #f59e0b;
-            --danger: #dc2626;
-            --card: #ffffff;
-            --card-border: rgba(15, 118, 110, 0.12);
-            --shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-            --shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.06);
-            --radius-xl: 28px;
-            --radius: 18px;
+            --bg: #0f172a;
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --card: #1e293b;
+            --card-hover: #2d3748;
+            --ink: #f8fafc;
+            --muted: #94a3b8;
+            --accent: #0d9488;
+            --accent-glow: rgba(13, 148, 136, 0.3);
+            --danger: #ef4444;
+            --danger-bg: rgba(239, 68, 68, 0.1);
+            --warning: #f59e0b;
+            --success: #10b981;
+            --radius-xl: 16px;
+            --radius: 12px;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --font: 'Inter', system-ui, sans-serif;
         }
 
         * {
@@ -33,363 +34,388 @@
 
         body {
             margin: 0;
-            font-family: "Space Grotesk", "Noto Sans", sans-serif;
-            background:
-                radial-gradient(circle at 10% 20%, rgba(15, 118, 110, 0.12), transparent 45%),
-                radial-gradient(circle at 90% 0%, rgba(245, 158, 11, 0.14), transparent 40%),
-                linear-gradient(180deg, var(--bg), var(--bg-2));
+            font-family: var(--font);
+            background: var(--bg);
             color: var(--ink);
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        body::after {
+        /* Glass Background Effect */
+        body::before {
             content: "";
             position: fixed;
-            inset: 0;
-            background-image: radial-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 0);
-            background-size: 22px 22px;
-            opacity: 0.35;
-            pointer-events: none;
-            z-index: 0;
+            top: -10%;
+            left: -10%;
+            width: 120%;
+            height: 120%;
+            background:
+                radial-gradient(circle at 10% 20%, rgba(13, 148, 136, 0.08), transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(245, 158, 11, 0.05), transparent 40%);
+            z-index: -1;
         }
 
         .app {
-            position: relative;
-            z-index: 1;
-            max-width: 1200px;
+            max-width: 1100px;
             margin: 0 auto;
-            padding: 32px 20px 80px;
+            padding: 40px 20px;
             display: flex;
             flex-direction: column;
             gap: 24px;
-            animation: fadeIn 0.8s ease-out;
+            animation: fadeIn 0.5s ease-out;
         }
 
-        header.hero {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            padding: 28px 32px;
+        /* --- Header & Stats Card --- */
+        .stats-panel {
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: var(--radius-xl);
-            background: rgba(255, 255, 255, 0.8);
+            padding: 32px;
             box-shadow: var(--shadow);
-            backdrop-filter: blur(12px);
-        }
-
-        .hero-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-
-        .brand {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 24px;
         }
 
-        .eyebrow {
-            text-transform: uppercase;
-            letter-spacing: 0.16em;
-            font-size: 12px;
-            color: var(--muted);
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
         }
 
-        h1 {
+        .header-row h1 {
             margin: 0;
-            font-family: "Fraunces", serif;
+            font-size: 28px;
             font-weight: 700;
-            font-size: clamp(28px, 4vw, 40px);
+            letter-spacing: -0.02em;
         }
 
-        .hero-subtitle {
-            margin: 0;
-            color: var(--muted);
-            max-width: 720px;
-        }
-
-        .hero-actions {
+        .header-actions {
             display: flex;
             gap: 12px;
             align-items: center;
         }
 
+        /* --- Buttons --- */
         .btn {
-            border: 1px solid transparent;
-            border-radius: 999px;
-            padding: 10px 18px;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 16px;
             font-family: inherit;
             font-weight: 600;
+            font-size: 14px;
             cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
             display: inline-flex;
             align-items: center;
             gap: 8px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .btn.primary {
             background: var(--accent);
             color: #fff;
-            box-shadow: 0 12px 24px rgba(15, 118, 110, 0.2);
+            box-shadow: 0 4px 12px var(--accent-glow);
         }
 
         .btn.primary:hover {
             transform: translateY(-1px);
-            box-shadow: 0 16px 32px rgba(15, 118, 110, 0.24);
+            background: #0f766e;
+            box-shadow: 0 6px 16px var(--accent-glow);
+        }
+
+        .btn.secondary {
+            background: rgba(148, 163, 184, 0.1);
+            color: var(--ink);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn.secondary:hover {
+            background: rgba(148, 163, 184, 0.2);
         }
 
         .btn.ghost {
-            background: rgba(255, 255, 255, 0.7);
+            background: transparent;
+            color: var(--muted);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn.ghost:hover {
             color: var(--ink);
-            border-color: rgba(15, 118, 110, 0.18);
+            background: rgba(255, 255, 255, 0.05);
         }
 
-        .panel {
-            background: rgba(255, 255, 255, 0.85);
-            border: 1px solid var(--card-border);
-            border-radius: var(--radius-xl);
-            padding: 22px 24px;
-            box-shadow: var(--shadow-soft);
-            backdrop-filter: blur(10px);
+        .btn.outline-teal {
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
         }
 
-        .controls {
-            display: grid;
-            gap: 18px;
+        .btn.outline-teal:hover {
+            background: var(--accent-glow);
         }
 
-        .field {
-            display: grid;
+        /* --- Filters & Search --- */
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            position: relative;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .search-box input {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px 12px 10px 36px;
+            color: var(--ink);
+            font-size: 14px;
+        }
+
+        .search-box::before {
+            content: "🔍";
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            opacity: 0.5;
+        }
+
+        .wizard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+            color: var(--primary);
+        }
+
+        .wizard-panel {
+            background: rgba(13, 148, 136, 0.05);
+            border: 1px solid rgba(13, 148, 136, 0.2);
+            border-radius: 8px;
+            padding: 12px;
+            margin: 16px 0;
+            display: none;
+        }
+
+        .wizard-panel.active {
+            display: block;
+        }
+
+        .wizard-content {
+            display: flex;
             gap: 8px;
+            align-items: center;
         }
 
-        .field label {
+        .toggle-mini {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             font-size: 13px;
             color: var(--muted);
+            cursor: pointer;
+            user-select: none;
         }
 
-        .input,
-        select {
-            padding: 10px 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(15, 118, 110, 0.2);
-            background: #fff;
-            font-family: inherit;
-            font-size: 14px;
+        /* --- Badges & Stats --- */
+        .stats-grid {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
-        .input:focus,
-        select:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
-        }
-
-        .controls-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            gap: 16px;
-            align-items: end;
-        }
-
-        .filters-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            gap: 16px;
-        }
-
-        .toggle {
+        .stat-badge {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 16px;
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 14px;
+            font-size: 13px;
         }
 
-        .toggle input {
-            accent-color: var(--accent);
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 12px;
-        }
-
-        .stat-card {
-            background: rgba(255, 255, 255, 0.85);
-            border-radius: 18px;
-            padding: 16px;
-            border: 1px solid rgba(15, 118, 110, 0.12);
-            display: grid;
-            gap: 6px;
-            box-shadow: var(--shadow-soft);
-        }
-
-        .stat-card span {
-            font-size: 12px;
+        .stat-badge .label {
             color: var(--muted);
         }
 
-        .stat-card strong {
-            font-size: 20px;
+        .stat-badge .value {
+            font-weight: 700;
+            color: var(--ink);
         }
 
-        .rules {
-            display: grid;
-            gap: 20px;
+        /* --- Rules List --- */
+        .group {
+            margin-bottom: 32px;
         }
 
-        .rules-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
-            transition: max-height 0.3s ease-out, opacity 0.3s ease, padding 0.3s ease;
-            overflow: hidden;
-        }
-
-        .group.collapsed .rules-grid {
-            max-height: 0;
-            opacity: 0;
-            padding-top: 0;
-            padding-bottom: 0;
-            pointer-events: none;
-        }
-
-        .group-title {
+        .group-header {
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 10px 18px;
-            background: rgba(15, 118, 110, 0.08);
-            border: 1px solid rgba(15, 118, 110, 0.1);
-            border-radius: 999px;
+            margin-bottom: 16px;
             cursor: pointer;
-            transition: all 0.2s ease;
-            user-select: none;
-            width: fit-content;
         }
 
-        .group-title:hover {
-            background: rgba(15, 118, 110, 0.12);
-            transform: translateY(-1px);
-        }
-
-        .group-title .chevron {
-            font-size: 18px;
-            color: var(--accent);
-            transition: transform 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 20px;
-            height: 20px;
-            background: rgba(255, 255, 255, 0.6);
-            border-radius: 50%;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        .group-header .chevron {
+            font-size: 12px;
+            color: var(--muted);
+            transition: transform 0.2s;
         }
 
         .group.collapsed .chevron {
             transform: rotate(-90deg);
         }
 
-        .rule-card {
-            background: var(--card);
-            border: 1px solid rgba(15, 118, 110, 0.15);
-            border-radius: var(--radius);
-            padding: 16px;
-            box-shadow: var(--shadow-soft);
-            display: grid;
-            gap: 12px;
-            position: relative;
-            animation: cardIn 0.6s ease both;
-            animation-delay: calc(var(--i) * 0.04s);
+        .group.collapsed .rules-grid {
+            display: none;
         }
 
-        .rule-card.disabled {
-            opacity: 0.6;
-        }
-
-        .rule-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .rule-id {
-            font-size: 12px;
-            color: var(--muted);
-            background: rgba(15, 118, 110, 0.08);
-            padding: 4px 8px;
-            border-radius: 8px;
-        }
-
-        .pill {
-            font-size: 11px;
-            padding: 4px 8px;
-            border-radius: 999px;
-            background: rgba(245, 158, 11, 0.14);
-            color: #b45309;
-            font-weight: 600;
-        }
-
-        .pill.mode {
-            background: rgba(15, 118, 110, 0.12);
-            color: var(--accent);
-        }
-
-        .path {
-            display: grid;
-            gap: 8px;
+        .group-title {
             font-size: 14px;
-        }
-
-        .node {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .node strong {
             font-weight: 600;
-        }
-
-        .arrow {
-            font-size: 18px;
             color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: var(--accent-glow);
+            padding: 4px 12px;
+            border-radius: 20px;
         }
 
-        .meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
+        .group-count {
             font-size: 12px;
             color: var(--muted);
-        }
-
-        .actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .btn.small {
-            padding: 6px 12px;
-            font-size: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2px 8px;
             border-radius: 10px;
         }
 
-        .btn.danger {
-            background: rgba(220, 38, 38, 0.12);
-            color: var(--danger);
-            border: 1px solid rgba(220, 38, 38, 0.2);
+        .rules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
         }
 
+        .rule-card {
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: var(---radius);
+            padding: 20px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            position: relative;
+        }
+
+        .rule-card:hover {
+            transform: translateY(-4px);
+            background: var(--card-hover);
+            border-color: rgba(13, 148, 136, 0.3);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+        }
+
+        .rule-card.disabled {
+            opacity: 0.5;
+        }
+
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .card-badges {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .pill {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 4px;
+            width: fit-content;
+        }
+
+        .pill.category {
+            background: rgba(13, 148, 136, 0.15);
+            color: #2dd4bf;
+        }
+
+        .pill.mode {
+            background: rgba(59, 130, 246, 0.1);
+            color: #60a5fa;
+        }
+
+        .pill.bidir {
+            background: rgba(139, 92, 246, 0.1);
+            color: #a78bfa;
+        }
+
+        .sync-flow {
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sync-flow span {
+            color: var(--muted);
+            font-weight: 400;
+        }
+
+        .col-info {
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .col-info strong {
+            color: var(--ink);
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: auto;
+        }
+
+        .card-actions .btn {
+            flex: 1;
+            justify-content: center;
+            padding: 8px;
+            font-size: 12px;
+        }
+
+        .btn-edit {
+            background: rgba(148, 163, 184, 0.1);
+            color: var(--ink);
+        }
+
+        .btn-delete {
+            background: var(--danger-bg);
+            color: var(--danger);
+        }
+
+        /* --- Toggles --- */
         .switch {
             position: relative;
-            width: 44px;
-            height: 24px;
+            display: inline-block;
+            width: 36px;
+            height: 20px;
         }
 
         .switch input {
@@ -401,51 +427,45 @@
         .slider {
             position: absolute;
             cursor: pointer;
-            inset: 0;
-            background: rgba(15, 118, 110, 0.15);
-            border-radius: 999px;
-            transition: 0.2s;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #334155;
+            transition: .3s;
+            border-radius: 34px;
         }
 
-        .slider::before {
-            content: "";
+        .slider:before {
             position: absolute;
-            height: 18px;
-            width: 18px;
+            content: "";
+            height: 14px;
+            width: 14px;
             left: 3px;
-            top: 3px;
-            background: #fff;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
             border-radius: 50%;
-            transition: 0.2s;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
         }
 
-        .switch input:checked+.slider {
-            background: var(--accent);
+        input:checked+.slider {
+            background-color: var(--accent);
         }
 
-        .switch input:checked+.slider::before {
-            transform: translateX(20px);
+        input:checked+.slider:before {
+            transform: translateX(16px);
         }
 
-        .empty {
-            padding: 24px;
-            border-radius: var(--radius);
-            background: rgba(255, 255, 255, 0.9);
-            text-align: center;
-            color: var(--muted);
-        }
-
+        /* --- Modals --- */
         .modal {
             position: fixed;
             inset: 0;
-            background: rgba(15, 23, 42, 0.35);
+            z-index: 100;
             display: none;
             align-items: center;
             justify-content: center;
-            padding: 20px;
-            z-index: 10;
-            backdrop-filter: blur(6px);
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
         }
 
         .modal.active {
@@ -453,20 +473,22 @@
             animation: fadeIn 0.2s ease;
         }
 
-        .modal-card {
-            background: #fff;
+        .modal-body {
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: var(--radius-xl);
-            padding: 24px;
-            width: min(720px, 96vw);
-            box-shadow: var(--shadow);
-            display: grid;
-            gap: 18px;
+            width: min(650px, 95vw);
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
         .modal-header {
             display: flex;
-            align-items: center;
             justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
         }
 
         .modal-header h2 {
@@ -474,74 +496,157 @@
             font-size: 22px;
         }
 
-        .close {
-            cursor: pointer;
-            font-size: 22px;
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .field label {
+            font-size: 13px;
+            font-weight: 500;
             color: var(--muted);
         }
 
-        .form-grid {
-            display: grid;
-            gap: 12px;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        .form-input,
+        .form-select {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: var(--ink);
+            font-size: 14px;
+            outline: none;
         }
 
-        .form-actions {
+        .form-input:focus,
+        .form-select:focus {
+            border-color: var(--accent);
+        }
+
+        .help-text {
+            font-size: 11px;
+            color: var(--muted);
+            font-style: italic;
+        }
+
+        .shared-column-wizard {
+            background: rgba(13, 148, 136, 0.05);
+            border: 1px dashed var(--accent);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .shared-column-wizard.active {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        .modal-footer {
             display: flex;
             justify-content: flex-end;
             gap: 12px;
+            margin-top: 24px;
         }
 
-        .help {
+        /* --- Logs View --- */
+        #logsModal .modal-body {
+            width: min(1000px, 98vw);
+        }
+
+        .log-table-container {
+            overflow-x: auto;
+            margin-top: 16px;
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
             font-size: 12px;
+        }
+
+        .log-table th {
+            text-align: left;
+            padding: 10px;
             color: var(--muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-table td {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .log-status.SUCCESS {
+            color: var(--success);
+        }
+
+        .log-status.ERROR {
+            color: var(--danger);
+        }
+
+        /* --- Notifications --- */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .toast {
-            position: fixed;
-            right: 24px;
-            bottom: 24px;
-            background: #fff;
-            color: var(--ink);
-            border-radius: 14px;
-            padding: 12px 16px;
-            box-shadow: var(--shadow);
-            opacity: 0;
-            transform: translateY(10px);
-            transition: 0.2s;
-            z-index: 20;
-            max-width: 300px;
-        }
-
-        .toast.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .toast.success {
+            background: #1e293b;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
             border-left: 4px solid var(--accent);
+            animation: slideIn 0.3s ease-out;
+            max-width: 350px;
+            font-size: 13px;
         }
 
         .toast.error {
-            border-left: 4px solid var(--danger);
+            border-left-color: var(--danger);
         }
 
         @keyframes fadeIn {
             from {
                 opacity: 0;
-                transform: translateY(8px);
             }
 
             to {
                 opacity: 1;
-                transform: translateY(0);
             }
         }
 
-        @keyframes cardIn {
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideDown {
             from {
                 opacity: 0;
-                transform: translateY(12px);
+                transform: translateY(-10px);
             }
 
             to {
@@ -550,639 +655,645 @@
             }
         }
 
-        @media (max-width: 900px) {
+        @media (max-width: 768px) {
 
-            .controls-grid,
-            .filters-grid {
+            .header-row,
+            .form-row {
                 grid-template-columns: 1fr;
-            }
-
-            .hero-top {
                 flex-direction: column;
-                align-items: flex-start;
+                align-items: stretch;
             }
 
-            .hero-actions {
-                width: 100%;
-                justify-content: flex-start;
-                flex-wrap: wrap;
+            .header-actions {
+                margin-top: 12px;
             }
         }
     </style>
 </head>
 
 <body>
-
-    <main class="app">
-        <header class="hero">
-            <div class="hero-top">
-                <div class="brand">
-                    <div class="eyebrow">AgentCare • Sync Rules</div>
-                    <h1>Управление правилами синхронизации</h1>
-                    <p class="hero-subtitle">Единый контроль правил на сервере: редактируйте, группируйте и включайте
-                        двустороннюю синхронизацию без обращения к листу «Правила синхро».</p>
-                </div>
-                <div class="hero-actions">
-                    <button class="btn ghost" onclick="reloadRules()">🔄 Перечитать</button>
-                    <button class="btn primary" onclick="openRuleModal()">＋ Новое правило</button>
+    <div class="app">
+        <section class="stats-panel">
+            <div class="header-row">
+                <h1>Правила синхронизации</h1>
+                <div class="header-actions">
+                    <button class="btn ghost outline-teal" onclick="openLogsModal()">📜 Журнал</button>
+                    <button class="btn secondary" onclick="reloadRules()">🔄</button>
+                    <button class="btn primary" onclick="openRuleModal()">＋ Правило</button>
                 </div>
             </div>
-        </header>
 
-        <section class="panel controls">
-            <div class="controls-grid">
-                <div class="field">
-                    <label for="spreadsheetId">Spreadsheet ID</label>
-                    <input class="input" id="spreadsheetId" placeholder="Введите ID таблицы" />
+            <div class="filter-bar">
+                <div class="search-box">
+                    <input type="text" id="search" placeholder="Поиск по правилам..." oninput="updateFilters()">
                 </div>
-                <div class="field">
-                    <label>&nbsp;</label>
-                    <button class="btn primary" onclick="loadRules()">Загрузить правила</button>
-                </div>
-                <div class="field">
-                    <label>&nbsp;</label>
-                    <button class="btn ghost" onclick="saveSpreadsheetId()">Сохранить ID</button>
-                </div>
+                <select class="form-control" id="sheetFilter" onchange="updateFilters()">
+                    <option value="">Все листы</option>
+                </select>
+                <select class="form-control" id="groupBy" onchange="updateFilters()">
+                    <option value="category">Группировка: По категории</option>
+                    <option value="target">Группировка: По цели</option>
+                    <option value="mode">Группировка: По режиму</option>
+                </select>
+                <label class="toggle-mini">
+                    <input type="checkbox" id="showDisabled" checked onchange="updateFilters()">
+                    Показывать откл.
+                </label>
             </div>
-            <div class="filters-grid">
-                <div class="field">
-                    <label for="search">Поиск</label>
-                    <input class="input" id="search" placeholder="ID, лист, заголовок, категория"
-                        oninput="updateFilters()" />
-                </div>
-                <div class="field">
-                    <label for="groupBy">Группировка</label>
-                    <select id="groupBy" onchange="updateFilters()">
-                        <option value="category">По категории</option>
-                        <option value="source">По источнику</option>
-                        <option value="target">По цели</option>
-                        <option value="mode">По режиму</option>
-                        <option value="external">По типу</option>
-                        <option value="none">Без группировки</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Отображение</label>
-                    <label class="toggle"><input type="checkbox" id="showDisabled" checked
-                            onchange="updateFilters()">Показывать отключённые</label>
-                </div>
+
+            <div class="stats-grid" id="stats">
+                <!-- Stats injected here -->
             </div>
         </section>
 
-        <section class="stats" id="stats"></section>
-
-        <section class="rules" id="rulesContainer">
-            <div class="empty">Введите Spreadsheet ID и нажмите «Загрузить правила».</div>
-        </section>
-    </main>
-
-    <div class="toast" id="toast"></div>
+        <main id="rulesContainer">
+            <!-- Rules groups injected here -->
+        </main>
+    </div>
 
     <div class="modal" id="ruleModal">
-        <div class="modal-card">
+        <div class="modal-body">
             <div class="modal-header">
                 <h2 id="modalTitle">Новое правило</h2>
-                <span class="close" onclick="closeRuleModal()">×</span>
+                <button class="btn ghost" onclick="closeRuleModal()">✕</button>
             </div>
             <form id="ruleForm" onsubmit="submitRule(event)">
-                <div class="form-grid">
-                    <div class="field">
-                        <label>Режим</label>
-                        <select id="ruleMode" onchange="toggleModeFields()">
-                            <option value="unidirectional">Одностороннее</option>
-                            <option value="bidirectional">Двустороннее</option>
+                <div class="form-row">
+                    <div class="field" style="grid-column: span 2;">
+                        <label>Режим работы</label>
+                        <select class="form-select" id="ruleMode" onchange="toggleModeFields()">
+                            <option value="unidirectional">Одностороннее (Источник ⟶ Потребитель)</option>
+                            <option value="bidirectional">Двустороннее (Синхронно в обе стороны)</option>
                         </select>
-                    </div>
-                    <div class="field">
-                        <label>Категория</label>
-                        <input class="input" id="ruleCategory" placeholder="Напр. Сертификация" />
-                    </div>
-                    <div class="field">
-                        <label>Хэштеги (опционально)</label>
-                        <input class="input" id="ruleTags" placeholder="#sync" />
                     </div>
                 </div>
 
-                <div class="form-grid" id="unidirectionalFields">
+                <div class="form-row">
                     <div class="field">
-                        <label>Источник (лист)</label>
-                        <input class="input" id="sourceSheet" placeholder="Главная" />
+                        <label class="toggle-mini"><input type="checkbox" id="ruleEnabled" checked> Правило
+                            активно</label>
                     </div>
                     <div class="field">
-                        <label>Источник (заголовок)</label>
-                        <input class="input" id="sourceHeader" placeholder="Статус" />
+                        <label class="toggle-mini"><input type="checkbox" id="isExternal" onchange="toggleExternal()">
+                            Внешний документ</label>
+                    </div>
+                </div>
+
+                <div class="form-row" id="externalRow" style="display:none">
+                    <div class="field" style="grid-column: span 2;">
+                        <label>ID внешнего документа</label>
+                        <input type="text" class="form-input" id="targetDocId" placeholder="1Abc..."
+                            onchange="onSheetsChanged()">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="field">
+                        <label>Источник (лист)</label>
+                        <select class="form-select" id="sourceSheet" onchange="onSheetsChanged()" required></select>
                     </div>
                     <div class="field">
                         <label>Цель (лист)</label>
-                        <input class="input" id="targetSheet" placeholder="Сертификация" />
-                    </div>
-                    <div class="field">
-                        <label>Цель (заголовок)</label>
-                        <input class="input" id="targetHeader" placeholder="Статус" />
-                    </div>
-                    <div class="field" style="grid-column: span 2;">
-                        <label>Список столбцов (для пакетного создания)</label>
-                        <input class="input" id="bulkHeaders" placeholder="Статус, Код в 1С, Категория" />
-                        <div class="help">Если заполнено, создаст правило на каждый заголовок с одинаковыми именами в
-                            источнике и цели.</div>
+                        <select class="form-select" id="targetSheet" onchange="onSheetsChanged()" required></select>
                     </div>
                 </div>
 
-                <div class="form-grid" id="bidirectionalFields" style="display:none;">
-                    <div class="field">
-                        <label>Лист A</label>
-                        <input class="input" id="sheetA" placeholder="Сертификация" />
+                <div id="sharedWizard" class="wizard-panel">
+                    <div class="wizard-header">
+                        <span>✨ Групповой подбор</span>
+                        <div class="wizard-actions">
+                            <button type="button" class="btn ghost small" onclick="runDiscovery()"
+                                title="Глобальный поиск">
+                                🚀 Найти везде
+                            </button>
+                        </div>
                     </div>
-                    <div class="field">
-                        <label>Заголовок A</label>
-                        <input class="input" id="headerA" placeholder="Код ТН ВЭД" />
-                    </div>
-                    <div class="field">
-                        <label>Лист B</label>
-                        <input class="input" id="sheetB" placeholder="Расчет цены" />
-                    </div>
-                    <div class="field">
-                        <label>Заголовок B</label>
-                        <input class="input" id="headerB" placeholder="Код ТН ВЭД" />
+                    <div id="wizardContainer" class="wizard-content">
+                        <!-- Wizard options will appear here -->
                     </div>
                 </div>
 
-                <div class="form-grid">
-                    <div class="field">
-                        <label class="toggle"><input type="checkbox" id="ruleEnabled" checked>Правило активно</label>
-                    </div>
-                    <div class="field">
-                        <label class="toggle"><input type="checkbox" id="isExternal" onchange="toggleExternal()">Внешний
-                            документ</label>
-                    </div>
-                    <div class="field" id="externalDocField" style="display:none;">
-                        <label>ID внешнего документа</label>
-                        <input class="input" id="targetDocId" placeholder="1Abc..." />
-                    </div>
-                </div>
+                <span class="help-text">Мы автоматически определим категорию по имени столбца.</span>
 
-                <div class="form-actions">
+                <div class="modal-footer">
+                    <button type="button" class="btn ghost" onclick="indexGlobal()" id="indexBtn">
+                        🔍 Индексация
+                    </button>
                     <button type="button" class="btn ghost" onclick="closeRuleModal()">Отмена</button>
-                    <button type="submit" class="btn primary" id="submitBtn">Сохранить</button>
+                    <button type="submit" class="btn primary">Сохранить</button>
                 </div>
             </form>
         </div>
     </div>
 
+    <!-- Logs Modal -->
+    <div class="modal" id="logsModal">
+        <div class="modal-body">
+            <div class="modal-header">
+                <h2>Журнал синхронизации (Сервер)</h2>
+                <button class="btn ghost" onclick="closeLogsModal()">✕</button>
+            </div>
+            <div class="filter-bar">
+                <input type="text" class="form-input" id="logSearch" placeholder="Поиск по ID/столбцу..."
+                    oninput="loadSyncLogs()">
+                <button class="btn secondary" onclick="loadSyncLogs()">Обновить</button>
+            </div>
+            <div class="log-table-container">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>Время</th>
+                            <th>Объект</th>
+                            <th>Поле</th>
+                            <th>Было</th>
+                            <th>Стало</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        <!-- Logs injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
     <script>
         const state = {
             rules: [],
-            search: "",
-            groupBy: "category",
-            showDisabled: true,
-            spreadsheetId: "",
-            editingId: null
+            localSheets: [],
+            cachedHeaders: {},
+            editingId: null,
+            spreadsheetId: "13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ" // Default or injected
         };
 
-        function apiBase() {
-            return "/api/v1";
-        }
+        const api = {
+            base: "/api/v1",
+            fetch: async (path, opts = {}) => {
+                const method = opts.method || "GET";
+                const payload = opts.body ? JSON.parse(opts.body) : null;
 
-        function $(id) {
-            return document.getElementById(id);
-        }
+                // GAS-Native Bridge
+                if (typeof google !== "undefined" && google.script && google.script.run) {
+                    return new Promise((resolve, reject) => {
+                        google.script.run
+                            .withSuccessHandler(res => {
+                                if (res.status >= 200 && res.status < 300) {
+                                    resolve(res.json || JSON.parse(res.content));
+                                } else {
+                                    const errorMsg = res.json?.detail || res.json?.error || res.content || "Server Error";
+                                    notify(errorMsg, "error");
+                                    reject(new Error(errorMsg));
+                                }
+                            })
+                            .withFailureHandler(err => {
+                                notify(err.message, "error");
+                                reject(err);
+                            })
+                            .apiProxy(path.replace(/^\/api\/v1/, ""), method, payload);
+                    });
+                }
 
-        function escapeHtml(value) {
-            return String(value || "")
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/\"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
-
-        function notify(message, kind = "success") {
-            const toast = $("toast");
-            toast.textContent = message;
-            toast.className = `toast show ${kind}`;
-            clearTimeout(window.__toastTimer);
-            window.__toastTimer = setTimeout(() => {
-                toast.className = "toast";
-            }, 2800);
-        }
-
-        function saveSpreadsheetId() {
-            const id = $("spreadsheetId").value.trim();
-            if (!id) {
-                notify("Введите Spreadsheet ID", "error");
-                return;
+                // Fallback for local development
+                try {
+                    const r = await fetch(`${api.base}${path}`, opts);
+                    if (!r.ok) throw new Error(await r.text());
+                    return await r.json();
+                } catch (e) {
+                    notify(e.message, "error");
+                    throw e;
+                }
             }
-            localStorage.setItem("agentcare_spreadsheet_id", id);
-            notify("ID сохранён", "success");
+        };
+
+        function $(id) { return document.getElementById(id); }
+
+        function notify(msg, type = "success") {
+            const container = $("toastContainer");
+            const t = document.createElement("div");
+            t.className = `toast ${type}`;
+            t.textContent = msg;
+            container.appendChild(t);
+            setTimeout(() => t.remove(), 4000);
         }
 
-        function getSpreadsheetId() {
-            const id = $("spreadsheetId").value.trim();
-            if (!id) {
-                throw new Error("Укажите Spreadsheet ID");
-            }
-            return id;
+        // --- Core Rules Logic ---
+
+        async function init() {
+            // Get ID from URL or Storage
+            const urlParams = new URLSearchParams(window.location.search);
+            const id = urlParams.get('id') || localStorage.getItem("last_ss_id") || state.spreadsheetId;
+            state.spreadsheetId = id;
+            localStorage.setItem("last_ss_id", id);
+
+            await loadSheets();
+            await loadRules();
         }
 
         async function loadRules() {
-            try {
-                const id = getSpreadsheetId();
-                const resp = await fetch(`${apiBase()}/rules/${id}?include_disabled=true`);
-                if (!resp.ok) throw new Error(await resp.text());
-                const data = await resp.json();
-                state.rules = data.rules || [];
-                updateFilters();
-                notify("Правила загружены", "success");
-            } catch (e) {
-                renderError(e.message);
-            }
+            const data = await api.fetch(`/rules/${state.spreadsheetId}?include_disabled=true`);
+            state.rules = data.rules || [];
+            updateFilters();
         }
 
         async function reloadRules() {
+            await api.fetch(`/rules/${state.spreadsheetId}/reload`, { method: "POST" });
+            notify("Кэш правил обновлен");
+            await loadRules();
+        }
+
+        async function loadSheets() {
             try {
-                const id = getSpreadsheetId();
-                const resp = await fetch(`${apiBase()}/rules/${id}/reload?include_disabled=true`, { method: "POST" });
-                if (!resp.ok) throw new Error(await resp.text());
-                const data = await resp.json();
-                state.rules = data.rules || [];
-                updateFilters();
-                notify("Кеш обновлён", "success");
-            } catch (e) {
-                renderError(e.message);
+                const data = await api.fetch(`/meta/${state.spreadsheetId}/sheets`);
+                state.localSheets = data.sheets || [];
+                const options = `<option value="">Выберите лист...</option>` +
+                    state.localSheets.map(s => `<option value="${s}">${s}</option>`).join("");
+                $("sheetFilter").innerHTML = `<option value="">Все листы</option>` + options;
+                updateModalDropdowns();
+            } catch (e) { console.error("Sheets load failed", e); }
+        }
+
+        function updateModalDropdowns() {
+            const options = `<option value="">Выберите лист...</option>` +
+                state.localSheets.map(s => `<option value="${s}">${s}</option>`).join("");
+            $("sourceSheet").innerHTML = options;
+            if (!$("isExternal").checked) {
+                $("targetSheet").innerHTML = options;
             }
         }
 
-        function updateFilters() {
-            state.search = $("search").value.trim().toLowerCase();
-            state.groupBy = $("groupBy").value;
-            state.showDisabled = $("showDisabled").checked;
-            render();
-        }
+        // --- Smart Selection Logic ---
 
-        function renderError(message) {
-            $("rulesContainer").innerHTML = `<div class="empty">Ошибка: ${escapeHtml(message)}</div>`;
-        }
+        async function onSheetsChanged() {
+            const src = $("sourceSheet").value;
+            const target = $("targetSheet").value;
+            const isExt = $("isExternal").checked;
+            const extId = $("targetDocId").value.trim();
 
-        function render() {
-            const filtered = state.rules.filter(rule => {
-                if (!state.showDisabled && !rule.enabled) {
-                    return false;
-                }
-                if (!state.search) {
-                    return true;
-                }
-                const haystack = [
-                    rule.id,
-                    rule.category,
-                    rule.mode,
-                    rule.source_sheet,
-                    rule.source_header,
-                    rule.target_sheet,
-                    rule.target_header,
-                    rule.sheet_a,
-                    rule.header_a,
-                    rule.sheet_b,
-                    rule.header_b,
-                    rule.target_doc_id
-                ].join(" ").toLowerCase();
-                return haystack.includes(state.search);
-            });
-
-            renderStats(filtered);
-            renderGroups(filtered);
-        }
-
-        function renderStats(list) {
-            const total = list.length;
-            const enabled = list.filter(r => r.enabled).length;
-            const disabled = total - enabled;
-            const bidirectional = list.filter(r => r.mode === "bidirectional").length;
-            const external = list.filter(r => r.is_external).length;
-
-            $("stats").innerHTML = `
-                <div class="stat-card"><span>Всего правил</span><strong>${total}</strong></div>
-                <div class="stat-card"><span>Активные</span><strong>${enabled}</strong></div>
-                <div class="stat-card"><span>Отключённые</span><strong>${disabled}</strong></div>
-                <div class="stat-card"><span>Двусторонние</span><strong>${bidirectional}</strong></div>
-                <div class="stat-card"><span>Внешние</span><strong>${external}</strong></div>
-            `;
-        }
-
-        function groupTitle(rule) {
-            switch (state.groupBy) {
-                case "category":
-                    return rule.category || "Без категории";
-                case "source":
-                    return rule.mode === "bidirectional"
-                        ? `${rule.sheet_a || "?"} ↔ ${rule.sheet_b || "?"}`
-                        : rule.source_sheet || "Без источника";
-                case "target":
-                    return rule.mode === "bidirectional"
-                        ? `${rule.sheet_a || "?"} ↔ ${rule.sheet_b || "?"}`
-                        : rule.target_sheet || "Без цели";
-                case "mode":
-                    return rule.mode === "bidirectional" ? "Двусторонние" : "Односторонние";
-                case "external":
-                    return rule.is_external ? "Внешние" : "Локальные";
-                default:
-                    return "Все правила";
-            }
-        }
-
-        function renderGroups(list) {
-            const container = $("rulesContainer");
-            if (!list.length) {
-                container.innerHTML = `<div class="empty">Нет правил по заданному фильтру.</div>`;
+            if (!src || (!target && (!isExt || !extId))) {
+                $("sharedWizard").classList.remove("active");
                 return;
             }
 
-            const groups = new Map();
-            list.forEach(rule => {
-                const key = groupTitle(rule);
-                if (!groups.has(key)) {
-                    groups.set(key, []);
+            $("sharedWizard").classList.add("active");
+            $("wizardContainer").innerHTML = `<span>⏳ Анализ заголовков...</span>`;
+
+            try {
+                const srcHeaders = await getHeaders(state.spreadsheetId, src);
+                let targetHeaders = [];
+
+                if (isExt && extId && target) {
+                    targetHeaders = await getHeaders(extId, target);
+                } else if (!isExt && target) {
+                    targetHeaders = await getHeaders(state.spreadsheetId, target);
                 }
-                groups.get(key).push(rule);
-            });
 
-            const groupBlocks = Array.from(groups.entries())
-                .sort((a, b) => a[0].localeCompare(b[0], "ru"))
-                .map(([title, rules], groupIndex) => {
-                    rules.sort((a, b) => String(a.id || "").localeCompare(String(b.id || ""), "ru"));
-                    const cards = rules.map((rule, index) => renderRuleCard(rule, index)).join("");
-                    const groupClass = rules.length > 0 ? "group collapsed" : "group";
-                    const groupId = `group-${groupIndex}`;
-                    return `
-                    <div class="${groupClass}" id="${groupId}">
-                        <div class="group-title" onclick="toggleGroup('${groupId}')">
-                            <div class="chevron">▾</div>
-                            <span>${escapeHtml(title)}</span>
-                            <span class="pill">${rules.length}</span>
-                        </div>
-                        <div class="rules-grid">${cards}</div>
-                    </div>
-                `;
-                }).join("");
-
-            container.innerHTML = groupBlocks;
-        }
-
-        function toggleGroup(groupId) {
-            const el = $(groupId);
-            if (el) {
-                el.classList.toggle("collapsed");
+                const common = srcHeaders.filter(h => targetHeaders.includes(h));
+                if (common.length) {
+                    $("wizardContainer").innerHTML = `
+                        <select class="form-select" id="sharedColumn">
+                            <option value="">Выберите общий столбец (${common.length} найдено)...</option>
+                            ${common.map(h => `<option value="${h}">${h}</option>`).join("")}
+                        </select>
+                    `;
+                } else {
+                    $("wizardContainer").innerHTML = `<span style="color:var(--danger)">Нет общих столбцов.</span>`;
+                }
+            } catch (e) {
+                $("wizardContainer").innerHTML = `<span style="color:var(--danger)">Ошибка загрузки.</span>`;
             }
         }
 
-        function renderRuleCard(rule, index) {
-            const isBidirectional = rule.mode === "bidirectional";
-            const badge = isBidirectional ? "двустороннее" : "одностороннее";
-            const extLabel = rule.is_external ? `Внешний документ: ${shorten(rule.target_doc_id)}` : "Локальная таблица";
-            const path = isBidirectional
-                ? `
-                    <div class="node"><strong>${escapeHtml(rule.sheet_a || "—")}</strong> / ${escapeHtml(rule.header_a || "—")}</div>
-                    <div class="arrow">↔</div>
-                    <div class="node"><strong>${escapeHtml(rule.sheet_b || "—")}</strong> / ${escapeHtml(rule.header_b || "—")}</div>
-                `
-                : `
-                    <div class="node"><strong>${escapeHtml(rule.source_sheet || "—")}</strong> / ${escapeHtml(rule.source_header || "—")}</div>
-                    <div class="arrow">→</div>
-                    <div class="node"><strong>${escapeHtml(rule.target_sheet || "—")}</strong> / ${escapeHtml(rule.target_header || "—")}</div>
+        async function getHeaders(ssId, sheet) {
+            if (state.cachedHeaders[ssId]?.[sheet]) return state.cachedHeaders[ssId][sheet];
+            const data = await api.fetch(`/meta/${ssId}/${encodeURIComponent(sheet)}/headers`);
+            if (!state.cachedHeaders[ssId]) state.cachedHeaders[ssId] = {};
+            state.cachedHeaders[ssId][sheet] = data.headers || [];
+            return data.headers;
+        }
+
+        // --- UI Rendering ---
+
+        function updateFilters() {
+            renderRules();
+            renderStats();
+        }
+
+        function renderStats() {
+            const total = state.rules.length;
+            const active = state.rules.filter(r => r.enabled).length;
+            const bi = state.rules.filter(r => r.mode === "bidirectional").length;
+            const ext = state.rules.filter(r => r.is_external).length;
+
+            $("stats").innerHTML = `
+                <div class="stat-badge"><span class="label">Всего:</span><span class="value">${total}</span></div>
+                <div class="stat-badge"><span class="label">Активных:</span><span class="value">${active}</span></div>
+                <div class="stat-badge"><span class="label">⟷:</span><span class="value">${bi}</span></div>
+                <div class="stat-badge"><span class="label">Внешних:</span><span class="value">${ext}</span></div>
+            `;
+        }
+
+        function renderRules() {
+            const container = $("rulesContainer");
+            const search = $("search").value.toLowerCase();
+            const sheetF = $("sheetFilter").value;
+            const groupKey = $("groupBy").value;
+            const showDisabled = $("showDisabled").checked;
+
+            const filtered = state.rules.filter(r => {
+                if (!showDisabled && !r.enabled) return false;
+                if (sheetF && r.source_sheet !== sheetF && r.target_sheet !== sheetF && r.sheet_a !== sheetF) return false;
+                const haystack = `${r.id} ${r.category} ${r.source_sheet} ${r.target_sheet} ${r.sheet_a} ${r.sheet_b}`.toLowerCase();
+                return haystack.includes(search);
+            });
+
+            if (!filtered.length) {
+                container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--muted)">Ничего не найдено</div>`;
+                return;
+            }
+
+            // Grouping
+            const groups = {};
+            filtered.forEach(r => {
+                let key = "Прочее";
+                if (groupKey === "category") key = r.category || "Без категории";
+                if (groupKey === "target") key = r.target_sheet || r.sheet_b || "Внешние/Прочее";
+                if (groupKey === "mode") key = r.mode === "bidirectional" ? "Двусторонние" : "Односторонние";
+
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(r);
+            });
+
+            container.innerHTML = Object.entries(groups).map(([title, items]) => {
+                return `
+                    <div class="group" id="grp-${title}">
+                        <div class="group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                            <span class="chevron">▼</span>
+                            <span class="group-title">${title}</span>
+                            <span class="group-count">${items.length}</span>
+                        </div>
+                        <div class="rules-grid">
+                            ${items.map(r => renderRuleCard(r)).join("")}
+                        </div>
+                    </div>
                 `;
+            }).join("");
+        }
+
+        function renderRuleCard(r) {
+            const isBi = r.mode === "bidirectional";
+            const src = isBi ? r.sheet_a : r.source_sheet;
+            const target = isBi ? r.sheet_b : r.target_sheet;
+            const flow = isBi ? "⟷" : "⟶";
 
             return `
-                <div class="rule-card ${rule.enabled ? "" : "disabled"}" style="--i:${index}">
-                    <div class="rule-head">
-                        <span class="rule-id">${escapeHtml(rule.id || "auto")}</span>
-                        <div class="meta">
-                            <span class="pill mode">${badge}</span>
-                            ${rule.category ? `<span class="pill">${escapeHtml(rule.category)}</span>` : ""}
+                <div class="rule-card ${r.enabled ? '' : 'disabled'}">
+                    <div class="card-top">
+                        <div class="card-badges">
+                            <span class="pill category">${r.category}</span>
+                            <span class="pill ${isBi ? 'bidir' : 'mode'}">${isBi ? 'Двустороннее' : 'Одностороннее'}</span>
                         </div>
                         <label class="switch">
-                            <input type="checkbox" ${rule.enabled ? "checked" : ""} data-id="${escapeHtml(rule.id)}" onchange="toggleRule(this.dataset.id, this.checked)">
+                            <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="toggleRule('${r.id}', this.checked)">
                             <span class="slider"></span>
                         </label>
                     </div>
-                    <div class="path">${path}</div>
-                    <div class="meta">
-                        <span>${escapeHtml(extLabel)}</span>
-                        ${rule.target_doc_id ? `<span title="${escapeHtml(rule.target_doc_id)}">${escapeHtml(shorten(rule.target_doc_id))}</span>` : ""}
+                    <div class="sync-flow">
+                        ${src} <span>${flow}</span> ${target}
                     </div>
-                    <div class="actions">
-                        <button class="btn ghost small" data-id="${escapeHtml(rule.id)}" onclick="openRuleModal(this.dataset.id)">Редактировать</button>
-                        <button class="btn danger small" data-id="${escapeHtml(rule.id)}" onclick="deleteRule(this.dataset.id)">Удалить</button>
+                    <div class="col-info">
+                        Столбец: <strong>${isBi ? r.header_a : r.source_header}</strong>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn btn-edit" onclick="openRuleModal('${r.id}')">Правка</button>
+                        <button class="btn btn-delete" onclick="deleteRule('${r.id}')">Удалить</button>
                     </div>
                 </div>
             `;
         }
 
-        function shorten(text) {
-            if (!text) return "";
-            if (text.length <= 10) return text;
-            return `${text.slice(0, 4)}…${text.slice(-4)}`;
-        }
+        // --- Actions ---
 
-        async function toggleRule(ruleId, enabled) {
-            try {
-                const id = getSpreadsheetId();
-                const safeId = encodeURIComponent(ruleId);
-                const resp = await fetch(`${apiBase()}/rules/${id}/${safeId}/toggle`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ enabled })
-                });
-                if (!resp.ok) throw new Error(await resp.text());
-                state.rules = state.rules.map(r => r.id === ruleId ? { ...r, enabled } : r);
-                render();
-            } catch (e) {
-                notify(`Ошибка обновления: ${e.message}`, "error");
-            }
-        }
+        function openRuleModal(id = null) {
+            state.editingId = id;
+            const form = $("ruleForm");
+            form.reset();
+            $("modalTitle").textContent = id ? "Редактировать правило" : "Новое правило";
+            $("sharedWizard").classList.remove("active");
 
-        async function deleteRule(ruleId) {
-            if (!confirm("Удалить правило?")) {
-                return;
-            }
-            try {
-                const id = getSpreadsheetId();
-                const safeId = encodeURIComponent(ruleId);
-                const resp = await fetch(`${apiBase()}/rules/${id}/${safeId}`, { method: "DELETE" });
-                if (!resp.ok) throw new Error(await resp.text());
-                state.rules = state.rules.filter(r => r.id !== ruleId);
-                render();
-                notify("Правило удалено", "success");
-            } catch (e) {
-                notify(`Ошибка удаления: ${e.message}`, "error");
-            }
-        }
+            if (id) {
+                const r = state.rules.find(x => x.id === id);
+                if (r) {
+                    $("ruleMode").value = r.mode;
+                    $("ruleEnabled").checked = r.enabled;
+                    $("isExternal").checked = !!r.is_external;
+                    if (r.is_external) {
+                        $("targetDocId").value = r.target_doc_id;
+                        toggleExternal();
+                    }
+                    $("sourceSheet").value = r.source_sheet || r.sheet_a;
 
-        function openRuleModal(ruleId = null) {
-            state.editingId = ruleId;
-            $("ruleForm").reset();
-            $("bulkHeaders").value = "";
-            $("bulkHeaders").disabled = !!ruleId;
-            $("ruleEnabled").checked = true;
-            $("isExternal").checked = false;
-            toggleExternal();
-
-            if (ruleId) {
-                const rule = state.rules.find(r => r.id === ruleId);
-                if (!rule) return;
-                $("modalTitle").textContent = `Правило ${rule.id}`;
-                $("ruleMode").value = rule.mode || "unidirectional";
-                $("ruleCategory").value = rule.category || "";
-                $("ruleTags").value = rule.hashtags || "";
-                $("ruleEnabled").checked = !!rule.enabled;
-                $("isExternal").checked = !!rule.is_external;
-                $("targetDocId").value = rule.target_doc_id || "";
-
-                $("sourceSheet").value = rule.source_sheet || "";
-                $("sourceHeader").value = rule.source_header || "";
-                $("targetSheet").value = rule.target_sheet || "";
-                $("targetHeader").value = rule.target_header || "";
-                $("sheetA").value = rule.sheet_a || "";
-                $("headerA").value = rule.header_a || "";
-                $("sheetB").value = rule.sheet_b || "";
-                $("headerB").value = rule.header_b || "";
-
-                toggleModeFields();
+                    // Delay target sheet set as it might need external load
+                    setTimeout(() => {
+                        $("targetSheet").value = r.target_sheet || r.sheet_b;
+                        onSheetsChanged().then(() => {
+                            if ($("sharedColumn")) $("sharedColumn").value = r.source_header || r.header_a;
+                        });
+                    }, 100);
+                }
             } else {
-                $("modalTitle").textContent = "Новое правило";
-                $("ruleMode").value = "unidirectional";
-                toggleModeFields();
-                $("bulkHeaders").disabled = false;
+                updateModalDropdowns();
             }
-
             $("ruleModal").classList.add("active");
         }
 
-        function closeRuleModal() {
-            $("ruleModal").classList.remove("active");
-        }
+        function closeRuleModal() { $("ruleModal").classList.remove("active"); }
 
-        function toggleModeFields() {
+        async function submitRule(e) {
+            e.preventDefault();
             const mode = $("ruleMode").value;
-            $("unidirectionalFields").style.display = mode === "unidirectional" ? "grid" : "none";
-            $("bidirectionalFields").style.display = mode === "bidirectional" ? "grid" : "none";
+            const col = $("sharedColumn")?.value;
+            if (!col) return notify("Выберите общий столбец", "error");
+
+            const payload = {
+                id: state.editingId,
+                enabled: $("ruleEnabled").checked,
+                mode,
+                category: col,
+                is_external: $("isExternal").checked,
+                target_doc_id: $("targetDocId").value.trim() || null
+            };
 
             if (mode === "bidirectional") {
-                $("isExternal").checked = false;
-                $("targetDocId").value = "";
+                payload.sheet_a = $("sourceSheet").value;
+                payload.header_a = col;
+                payload.sheet_b = $("targetSheet").value;
+                payload.header_b = col;
+            } else {
+                payload.source_sheet = $("sourceSheet").value;
+                payload.source_header = col;
+                payload.target_sheet = $("targetSheet").value;
+                payload.target_header = col;
             }
-            $("isExternal").disabled = mode === "bidirectional";
-            toggleExternal();
-        }
 
-        function toggleExternal() {
-            const mode = $("ruleMode").value;
-            const show = $("isExternal").checked && mode === "unidirectional";
-            $("externalDocField").style.display = show ? "block" : "none";
-        }
+            const path = state.editingId ? `/rules/${state.spreadsheetId}/${state.editingId}` : `/rules/${state.spreadsheetId}/create`;
+            const method = state.editingId ? "PATCH" : "POST";
 
-        async function submitRule(event) {
-            event.preventDefault();
-            try {
-                const id = getSpreadsheetId();
-                const mode = $("ruleMode").value;
-                const payload = {
-                    mode,
-                    enabled: $("ruleEnabled").checked,
-                    category: $("ruleCategory").value.trim(),
-                    hashtags: $("ruleTags").value.trim(),
-                    is_external: $("isExternal").checked,
-                    target_doc_id: $("targetDocId").value.trim()
-                };
-
-                if (mode === "bidirectional") {
-                    if (payload.is_external) {
-                        throw new Error("Bidirectional правила не поддерживают внешний документ");
-                    }
-                    payload.sheet_a = $("sheetA").value.trim();
-                    payload.header_a = $("headerA").value.trim();
-                    payload.sheet_b = $("sheetB").value.trim();
-                    payload.header_b = $("headerB").value.trim();
-
-                    if (!payload.sheet_a || !payload.header_a || !payload.sheet_b || !payload.header_b) {
-                        throw new Error("Заполните sheet_a/header_a и sheet_b/header_b");
-                    }
-                } else {
-                    payload.source_sheet = $("sourceSheet").value.trim();
-                    payload.source_header = $("sourceHeader").value.trim();
-                    payload.target_sheet = $("targetSheet").value.trim();
-                    payload.target_header = $("targetHeader").value.trim();
-
-                    if (!payload.source_sheet || !payload.source_header || !payload.target_sheet || !payload.target_header) {
-                        throw new Error("Заполните источник и цель для правила");
-                    }
-
-                    if (payload.is_external && !payload.target_doc_id) {
-                        throw new Error("Для внешнего правила нужен target_doc_id");
-                    }
-                }
-
-                if (state.editingId) {
-                    await updateRule(id, state.editingId, payload);
-                    notify("Правило обновлено", "success");
-                } else {
-                    const bulkHeaders = $("bulkHeaders").value
-                        .split(",")
-                        .map(h => h.trim())
-                        .filter(Boolean);
-
-                    if (bulkHeaders.length && mode === "unidirectional") {
-                        for (const header of bulkHeaders) {
-                            await createRule(id, {
-                                ...payload,
-                                source_header: header,
-                                target_header: header
-                            });
-                        }
-                        notify(`Создано правил: ${bulkHeaders.length}`, "success");
-                    } else {
-                        await createRule(id, payload);
-                        notify("Правило создано", "success");
-                    }
-                }
-
-                closeRuleModal();
-                await loadRules();
-            } catch (e) {
-                notify(e.message, "error");
-            }
-        }
-
-        async function createRule(spreadsheetId, payload) {
-            const resp = await fetch(`${apiBase()}/rules/${spreadsheetId}/create`, {
-                method: "POST",
+            await api.fetch(path, {
+                method,
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
             });
-            if (!resp.ok) throw new Error(await resp.text());
-        }
 
-        async function updateRule(spreadsheetId, ruleId, payload) {
-            const safeId = encodeURIComponent(ruleId);
-            const resp = await fetch(`${apiBase()}/rules/${spreadsheetId}/${safeId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-            if (!resp.ok) throw new Error(await resp.text());
-        }
-
-        window.addEventListener("click", (event) => {
-            if (event.target === $("ruleModal")) {
-                closeRuleModal();
-            }
-        });
-
-        const queryId = new URLSearchParams(window.location.search).get("spreadsheet_id");
-        const savedId = localStorage.getItem("agentcare_spreadsheet_id");
-        state.spreadsheetId = queryId || savedId || "";
-        if (state.spreadsheetId) {
-            $("spreadsheetId").value = state.spreadsheetId;
+            notify(state.editingId ? "Правило обновлено" : "Правило создано");
+            closeRuleModal();
             loadRules();
         }
+
+        async function toggleRule(id, enabled) {
+            await api.fetch(`/rules/${state.spreadsheetId}/${id}/toggle`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled })
+            });
+            state.rules = state.rules.map(r => r.id === id ? { ...r, enabled } : r);
+            renderStats();
+            renderRules();
+        }
+
+        async function deleteRule(id) {
+            if (!confirm("Удалить это правило?")) return;
+            await api.fetch(`/rules/${state.spreadsheetId}/${id}`, { method: "DELETE" });
+            notify("Правило удалено");
+            loadRules();
+        }
+
+        // --- Helpers ---
+
+        function toggleModeFields() {
+            const isBi = $("ruleMode").value === "bidirectional";
+            if (isBi) {
+                $("isExternal").checked = false;
+                $("isExternal").disabled = true;
+                toggleExternal();
+            } else {
+                $("isExternal").disabled = false;
+            }
+        }
+
+        async function toggleExternal() {
+            const isExt = $("isExternal").checked;
+            $("externalRow").style.display = isExt ? "grid" : "none";
+
+            if (isExt) {
+                const extId = $("targetDocId").value.trim();
+                if (extId) {
+                    $("targetSheet").innerHTML = `<option>Загрузка листов...</option>`;
+                    const data = await api.fetch(`/meta/${extId}/sheets`);
+                    $("targetSheet").innerHTML = `<option value="">Выберите лист...</option>` +
+                        data.sheets.map(s => `<option value="${s}">${s}</option>`).join("");
+                } else {
+                    $("targetSheet").innerHTML = `<option>Укажите ID документа</option>`;
+                }
+            } else {
+                updateModalDropdowns();
+            }
+        }
+
+        // --- Logs Logic ---
+
+        function openLogsModal() {
+            $("logsModal").classList.add("active");
+            loadSyncLogs();
+        }
+        function closeLogsModal() { $("logsModal").classList.remove("active"); }
+
+        async function loadSyncLogs() {
+            const search = $("logSearch").value;
+            const data = await api.fetch(`/sync-logs/${state.spreadsheetId}?limit=50&row_key=${search}`);
+            const body = $("logsTableBody");
+
+            if (!data.items?.length) {
+                body.innerHTML = `<tr><td colspan="6" style="text-align:center">Нет записей</td></tr>`;
+                return;
+            }
+
+            body.innerHTML = data.items.map(l => {
+                const time = new Date(l.timestamp).toLocaleTimeString();
+                return `
+                    <tr>
+                        <td title="${l.timestamp}">${time}</td>
+                        <td><strong>${l.row_key}</strong></td>
+                        <td>${l.category}</td>
+                        <td style="color:var(--muted)">${l.old_value || '-'}</td>
+                        <td style="font-weight:600">${l.new_value}</td>
+                        <td class="log-status ${l.status}">${l.status}</td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        // --- Metadata Cache Actions ---
+
+        async function indexGlobal() {
+            const btn = $("indexBtn");
+            const original = btn.innerHTML;
+            btn.innerHTML = "⏳ Индексация...";
+            btn.disabled = true;
+
+            try {
+                await api.fetch("/meta/index", { method: "POST" });
+                notify("Индексация запущена в фоновом режиме");
+
+                // Poll for status
+                const timer = setInterval(async () => {
+                    const status = await api.fetch("/meta/index/status");
+                    if (status.status !== "running") {
+                        clearInterval(timer);
+                        btn.innerHTML = original;
+                        btn.disabled = false;
+                        notify(`Индексация завершена: ${status.indexed_docs} док.`, "success");
+                    } else {
+                        btn.innerHTML = `⏳ ${status.progress_percent}%`;
+                    }
+                }, 2000);
+
+            } catch (e) {
+                btn.innerHTML = original;
+                btn.disabled = false;
+            }
+        }
+
+        async function runDiscovery() {
+            const src = $("sourceSheet").value;
+            const target = $("targetSheet").value;
+            if (!src || !target) return notify("Выберите оба листа", "error");
+
+            $("wizardContainer").innerHTML = `<span>🚀 Глобальный поиск соответствий...</span>`;
+            try {
+                const data = await api.fetch(`/meta/discovery?spreadsheet_id=${state.spreadsheetId}&sheet_name=${encodeURIComponent(src)}&target_spreadsheet_id=${state.spreadsheetId}&target_sheet_name=${encodeURIComponent(target)}`);
+
+                if (data.exact_matches?.length || data.fuzzy_matches?.length) {
+                    const all = [...data.exact_matches, ...data.fuzzy_matches];
+                    const unique = [...new Set(all)];
+
+                    $("wizardContainer").innerHTML = `
+                        <select class="form-select" id="sharedColumn">
+                            <option value="">Найдено соответствий: ${unique.length}</option>
+                            ${unique.map(h => `<option value="${h}">${h}</option>`).join("")}
+                        </select>
+                    `;
+                } else {
+                    $("wizardContainer").innerHTML = `<span style="color:var(--danger)">Ничего не найдено глобально.</span>`;
+                }
+            } catch (e) {
+                $("wizardContainer").innerHTML = `<span style="color:var(--danger)">Ошибка поиска.</span>`;
+            }
+        }
+
+        init();
     </script>
 </body>
 

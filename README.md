@@ -15,6 +15,25 @@ Google Sheets automation with AI - Python replacement for MyGoogleScripts.
 - Server-side sync rules support (`config/rules/<spreadsheet_id>.yaml`) to avoid лишних чтений листа правил
 - HTML-форма управления правилами: `docs/rules-form.html` (работает через API `/rules/{spreadsheet_id}`)
 
+## Documentation
+
+### For Developers
+- [Quick Start Guide](QUICKSTART.md)
+- [Production Deployment](PROD_DEPLOY.md)
+- [Logging System](LOGGING_README.md)
+- [API Documentation](docs/)
+
+### For AI Agents 🤖
+- **[AI Central Command](AI_CENTRAL_COMMAND.md)** - START HERE!
+- [AI Rules (Detailed)](AI_RULES.md)
+- [Agent Procedures](AGENTS.md)
+- [Beads Quickstart](BEADS_QUICKSTART.md)
+
+### System Documentation 📚
+- **[Architecture](ARCHITECTURE.md)** - Полная архитектура системы
+- **[Function Map](FUNCTION_MAP.md)** - Карта всех функций с зависимостями
+- **[API Reference](API_REFERENCE.md)** - Справочник по всем endpoints
+
 ## Quick Start
 
 ```bash

@@ -1,505 +1,798 @@
 - id: 001-Г-С(Арт. произв.)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. произв.
   target_sheet: Сертификация
   target_header: Арт. произв.
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 002-Г-С(Арт. Рус)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. Рус
   target_sheet: Сертификация
   target_header: Арт. Рус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 003-Г-С(Код база)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: Код база
   target_sheet: Сертификация
   target_header: Код база
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 004-Г-С(Код в 1С)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: Код в 1С
   target_sheet: Сертификация
   target_header: Код в 1С
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 005-Г-С(Наименования англ по ДС)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: Наименования англ по ДС
   target_sheet: Сертификация
   target_header: Наименования англ по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 006-Г-С(Наименования рус по ДС)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: Наименования рус по ДС
   target_sheet: Сертификация
   target_header: Наименования рус по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 007-Г-С(Объём)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: Объём
   target_sheet: Сертификация
   target_header: Объём
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 008-Г-С(Примечание/записная книжка)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: Примечание/записная книжка
   target_sheet: Сертификация
   target_header: Примечание/записная книжка
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 009-Г-С(Статус)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: Статус
   target_sheet: Сертификация
   target_header: Статус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 010-Г-С(BAR CODE)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Главная
   source_header: BAR CODE
   target_sheet: Сертификация
   target_header: BAR CODE
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 011-Г-Э(Арт. Рус)
   enabled: true
   category: Этикетки
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. Рус
   target_sheet: Этикетки
   target_header: Арт. Рус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 012-Г-Э(Арт. Рус)
   enabled: true
   category: Этикетки
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. Рус
   target_sheet: Этикетки
   target_header: Арт. Рус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 013-Г-Э(Категория товара)
   enabled: true
   category: Этикетки
+  mode: unidirectional
   source_sheet: Главная
   source_header: Категория товара
   target_sheet: Этикетки
   target_header: Категория товара
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 014-Г-Э(Объём)
   enabled: true
   category: Этикетки
+  mode: unidirectional
   source_sheet: Главная
   source_header: Объём
   target_sheet: Этикетки
   target_header: Объём
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 015-Г-Э(Наименования англ по ДС)
   enabled: true
   category: Этикетки
+  mode: unidirectional
   source_sheet: Главная
   source_header: Наименования англ по ДС
   target_sheet: Этикетки
   target_header: Наименования англ по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 016-Г-Э(Наименования рус по ДС)
   enabled: true
   category: Этикетки
+  mode: unidirectional
   source_sheet: Главная
   source_header: Наименования рус по ДС
   target_sheet: Этикетки
   target_header: Наименования рус по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 017-Г-Э(Статус)
   enabled: true
   category: Этикетки
+  mode: unidirectional
   source_sheet: Главная
   source_header: Статус
   target_sheet: Этикетки
   target_header: Статус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 018-Г-З(ID-P)
   enabled: true
   category: Заказ
+  mode: unidirectional
   source_sheet: Главная
   source_header: ID-P
   target_sheet: Заказ
   target_header: ID-P
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 019-Г<->З(Статус)
   enabled: true
   category: Заказ
   mode: bidirectional
+  source_sheet: ''
+  source_header: ''
+  target_sheet: ''
+  target_header: ''
   sheet_a: Главная
   header_a: Статус
   sheet_b: Заказ
   header_b: Статус
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 020-Г-З(Арт. Рус)
   enabled: true
   category: Заказ
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. Рус
   target_sheet: Заказ
   target_header: Арт. Рус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 021-Г-З(Арт. произв.)
   enabled: true
   category: Заказ
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. произв.
   target_sheet: Заказ
   target_header: Арт. произв.
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 022-Г-З(Название  ENG прайс произв)
   enabled: true
   category: Заказ
+  mode: unidirectional
   source_sheet: Главная
   source_header: Название  ENG прайс произв
   target_sheet: Заказ
   target_header: Название  ENG прайс произв
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 023-Г-З(Наименования рус по ДС)
   enabled: true
   category: Заказ
+  mode: unidirectional
   source_sheet: Главная
   source_header: Наименования рус по ДС
   target_sheet: Заказ
   target_header: Наименования рус по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 024-Г-З(Объём)
   enabled: true
   category: Заказ
+  mode: unidirectional
   source_sheet: Главная
   source_header: Объём
   target_sheet: Заказ
   target_header: Объём
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 025-Г-З(шт./уп.)
   enabled: true
   category: Заказ
+  mode: unidirectional
   source_sheet: Главная
   source_header: шт./уп.
   target_sheet: Заказ
   target_header: шт./уп.
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 026-Г-П(Код база)
   enabled: false
   category: Прайс
+  mode: unidirectional
   source_sheet: Главная
   source_header: Код база
   target_sheet: Прайс
   target_header: Код база
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 027-Г-П(Арт. Рус)
   enabled: false
   category: Прайс
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. Рус
   target_sheet: Прайс
   target_header: Арт. Рус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 028-Г-П(Статус)
   enabled: false
   category: Прайс
+  mode: unidirectional
   source_sheet: Главная
   source_header: Статус
   target_sheet: Прайс
   target_header: Статус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 029-Г-П(Категория товара)
   enabled: false
   category: Прайс
+  mode: unidirectional
   source_sheet: Главная
   source_header: Категория товара
   target_sheet: Прайс
   target_header: Категория товара
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 030-Г-П(Объём)
   enabled: false
   category: Прайс
+  mode: unidirectional
   source_sheet: Главная
   source_header: Объём
   target_sheet: Прайс
   target_header: Объём
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 031-Г-З(Категория товара)
   enabled: true
   category: Заказ
+  mode: unidirectional
   source_sheet: Главная
   source_header: Категория товара
   target_sheet: Заказ
   target_header: Категория товара
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 032-Г-Д(Статус)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Статус
   target_sheet: Динамика цены
   target_header: Статус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 033-Г-Р(Статус)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Статус
   target_sheet: Расчет цены
   target_header: Статус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 034-Г-Д(Арт. Рус)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. Рус
   target_sheet: Динамика цены
   target_header: Арт. Рус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 035-Г-Р(Арт. Рус)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. Рус
   target_sheet: Расчет цены
   target_header: Арт. Рус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 036-Г-Д(Арт. произв.)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. произв.
   target_sheet: Динамика цены
   target_header: Арт. произв.
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 037-Г-Р(Арт. произв.)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Арт. произв.
   target_sheet: Расчет цены
   target_header: Арт. произв.
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 038-Г-Д(Код база)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Код база
   target_sheet: Динамика цены
   target_header: Код база
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 039-Г-Р(Код база)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Код база
   target_sheet: Расчет цены
   target_header: Код база
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 040-Г-Д(Код в 1С)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Код в 1С
   target_sheet: Динамика цены
   target_header: Код в 1С
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 041-Г-Д(Название  ENG прайс произв)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Название  ENG прайс произв
   target_sheet: Динамика цены
   target_header: Название  ENG прайс произв
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 042-Г-Р(Код в 1С)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Код в 1С
   target_sheet: Расчет цены
   target_header: Код в 1С
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 043-Г-Р(Название  ENG прайс произв)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Название  ENG прайс произв
   target_sheet: Расчет цены
   target_header: Название  ENG прайс произв
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 044-Г-Д(Наименования англ по ДС)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Наименования англ по ДС
   target_sheet: Динамика цены
   target_header: Наименования англ по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 045-Г-Р(Наименования англ по ДС)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Наименования англ по ДС
   target_sheet: Расчет цены
   target_header: Наименования англ по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 046-Г-Д(Наименования рус по ДС)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Наименования рус по ДС
   target_sheet: Динамика цены
   target_header: Наименования рус по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 047-Г-Р(Наименования рус по ДС)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Наименования рус по ДС
   target_sheet: Расчет цены
   target_header: Наименования рус по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 048-Г-Д(Объём)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Объём
   target_sheet: Динамика цены
   target_header: Объём
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 049-Г-Р(Объём)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: Объём
   target_sheet: Расчет цены
   target_header: Объём
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 050-Г-Д(ID-P)
   enabled: true
   category: Динамика цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: ID-P
   target_sheet: Динамика цены
   target_header: ID-P
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 051-Г-Р(ID-P)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Главная
   source_header: ID-P
   target_sheet: Расчет цены
   target_header: ID-P
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 052-Г-А(ID-P)
   enabled: true
   category: ABC-Анализ
+  mode: unidirectional
   source_sheet: Главная
   source_header: ID-P
   target_sheet: ABC-Анализ
   target_header: ID-P
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 053-Д-Р(Комментарий)
   enabled: true
   category: Расчет цены
+  mode: unidirectional
   source_sheet: Динамика цены
   source_header: Комментарий
   target_sheet: Расчет цены
   target_header: Комментарий
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 055-З-С(Статус)
   enabled: true
   category: Сертификация
+  mode: unidirectional
   source_sheet: Заказ
   source_header: Статус
   target_sheet: Сертификация
   target_header: Статус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 056-З-Э(Статус)
   enabled: true
   category: Этикетки
+  mode: unidirectional
   source_sheet: Заказ
   source_header: Статус
   target_sheet: Этикетки
   target_header: Статус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
 - id: 057-С-З(ДС до)
   enabled: true
   category: Заказ
+  mode: unidirectional
   source_sheet: Сертификация
   source_header: ДС до
   target_sheet: Заказ
   target_header: ДС до
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
   is_external: false
-  target_doc_id: ''
+  target_doc_id: None
+- id: 057-S-T(H1)
+  enabled: true
+  category: Test
+  mode: unidirectional
+  source_sheet: S1
+  source_header: H1
+  target_sheet: T1
+  target_header: H1
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
