@@ -3215,3 +3215,57 @@ def get_sync_logs_stats_by_path(spreadsheet_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============== FUNCTION LOG ENDPOINTS ==============
+
+
+@api_router.get("/function-logs")
+def get_function_logs(
+    module: Optional[str] = None,
+    function_name: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """
+    Get function execution logs with filtering.
+    """
+    try:
+        executions, total = function_log_service.list_executions(
+            module=module,
+            function_name=function_name,
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "status": "success",
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "executions": executions,
+        }
+    except Exception as e:
+        logger.error("get_function_logs_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/function-logs/{execution_id}")
+def get_function_execution(execution_id: str):
+    """
+    Get a specific function execution by ID.
+    """
+    try:
+        execution = function_log_service.get_execution(execution_id)
+        if execution:
+            return {"status": "success", "execution": execution}
+        
+        # Try to find in stored executions
+        executions, _ = function_log_service.list_executions(limit=1000)
+        for exec_data in executions:
+            if exec_data.get("execution_id") == execution_id:
+                return {"status": "success", "execution": exec_data}
+        
+        raise HTTPException(status_code=404, detail="Execution not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("get_function_execution_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
