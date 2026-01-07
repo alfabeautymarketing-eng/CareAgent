@@ -3053,3 +3053,97 @@ async def reorder_sheets(request: ReorderSheetsRequest):
     except Exception as e:
         logger.error("reorder_sheets_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== SYNC LOG ENDPOINTS ==============
+
+
+class SyncLogQueryParams(BaseModel):
+    spreadsheet_id: str
+    limit: int = 200
+    offset: int = 0
+    order: str = "desc"
+    project: Optional[str] = None
+    category: Optional[str] = None
+    status: Optional[str] = None
+    row_key: Optional[str] = None
+    source: Optional[str] = None
+    target: Optional[str] = None
+    rule_id: Optional[str] = None
+
+
+@api_router.get("/sync-logs")
+def get_sync_logs(
+    spreadsheet_id: str,
+    limit: int = 200,
+    offset: int = 0,
+    order: str = "desc",
+    project: Optional[str] = None,
+    category: Optional[str] = None,
+    status: Optional[str] = None,
+    row_key: Optional[str] = None,
+    source: Optional[str] = None,
+    target: Optional[str] = None,
+    rule_id: Optional[str] = None,
+):
+    """
+    Get sync journal entries with filtering and pagination.
+    """
+    try:
+        entries, total = sync_log_service.list_entries(
+            spreadsheet_id=spreadsheet_id,
+            limit=limit,
+            offset=offset,
+            order=order,
+            project=project,
+            category=category,
+            status=status,
+            row_key=row_key,
+            source=source,
+            target=target,
+            rule_id=rule_id,
+        )
+        return {
+            "status": "success",
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "entries": entries,
+        }
+    except Exception as e:
+        logger.error("get_sync_logs_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/sync-logs/stats")
+def get_sync_logs_stats(spreadsheet_id: str):
+    """
+    Get summary statistics for sync logs.
+    """
+    try:
+        entries, total = sync_log_service.list_entries(
+            spreadsheet_id=spreadsheet_id,
+            limit=10000,
+            offset=0,
+        )
+        
+        # Calculate stats
+        categories = {}
+        statuses = {}
+        for entry in entries:
+            cat = entry.get("category", "unknown") or "unknown"
+            categories[cat] = categories.get(cat, 0) + 1
+            
+            st = entry.get("status", "unknown") or "unknown"
+            statuses[st] = statuses.get(st, 0) + 1
+        
+        return {
+            "status": "success",
+            "total_entries": total,
+            "categories": categories,
+            "statuses": statuses,
+        }
+    except Exception as e:
+        logger.error("get_sync_logs_stats_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
