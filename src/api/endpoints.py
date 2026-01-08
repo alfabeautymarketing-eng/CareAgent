@@ -1584,8 +1584,6 @@ async def create_news_sheet(request: CertificationNewsRequest):
 
     Equivalent to GAS createNewsSheetFromCertification().
     """
-    from src.services.certification_service import get_certification_service
-
     logger.info(
         "certification_news_sheet_requested",
         spreadsheet_id=request.spreadsheet_id,
@@ -1593,9 +1591,7 @@ async def create_news_sheet(request: CertificationNewsRequest):
     )
 
     try:
-        service = get_certification_service(sheets_service)
-
-        result = await service.create_news_sheet(
+        result = await certification_service.create_news_sheet(
             spreadsheet_id=request.spreadsheet_id,
             source_sheet=request.source_sheet,
             target_sheet=request.target_sheet,
@@ -1623,8 +1619,6 @@ async def calculate_spirits(request: CertificationSpiritsRequest):
 
     Equivalent to GAS calculateAndAssignSpiritNumbers().
     """
-    from src.services.certification_service import get_certification_service
-
     logger.info(
         "certification_spirits_calculate_requested",
         spreadsheet_id=request.spreadsheet_id,
@@ -1632,9 +1626,7 @@ async def calculate_spirits(request: CertificationSpiritsRequest):
     )
 
     try:
-        service = get_certification_service(sheets_service)
-
-        result = await service.calculate_spirit_numbers(
+        result = await certification_service.calculate_spirit_numbers(
             spreadsheet_id=request.spreadsheet_id,
             sheet_name=request.sheet_name,
             dry_run=request.dry_run
@@ -1662,8 +1654,6 @@ async def generate_protocols_353pp(request: CertificationProtocolsRequest):
 
     Equivalent to GAS generateProtocols_353pp().
     """
-    from src.services.certification_service import get_certification_service
-
     logger.info(
         "certification_protocols_requested",
         spreadsheet_id=request.spreadsheet_id,
@@ -1671,9 +1661,7 @@ async def generate_protocols_353pp(request: CertificationProtocolsRequest):
     )
 
     try:
-        service = get_certification_service(sheets_service)
-
-        result = await service.generate_protocols(
+        result = await certification_service.generate_protocols(
             spreadsheet_id=request.spreadsheet_id,
             protocol_type=request.protocol_type,
             dry_run=request.dry_run
@@ -1700,17 +1688,13 @@ async def generate_ds_layouts(request: CertificationProtocolsRequest):
 
     Equivalent to GAS generateDsLayouts_353pp().
     """
-    from src.services.certification_service import get_certification_service
-
     logger.info(
         "certification_ds_layouts_requested",
         spreadsheet_id=request.spreadsheet_id
     )
 
     try:
-        service = get_certification_service(sheets_service)
-
-        result = await service.generate_ds_layouts(
+        result = await certification_service.generate_ds_layouts(
             spreadsheet_id=request.spreadsheet_id,
             dry_run=request.dry_run
         )
@@ -2079,8 +2063,6 @@ async def archive_logs_daily(request: LogArchiveRequest):
 
     Equivalent to GAS archiveLogsDaily().
     """
-    from src.services.logging_service import get_logging_service
-
     logger.info(
         "log_archive_requested",
         spreadsheet_id=request.spreadsheet_id,
@@ -2089,9 +2071,7 @@ async def archive_logs_daily(request: LogArchiveRequest):
     )
 
     try:
-        service = get_logging_service(sheets_service)
-
-        result = await service.archive_logs_daily(
+        result = await logging_service.archive_logs_daily(
             spreadsheet_id=request.spreadsheet_id,
             archive_folder_id=request.archive_folder_id,
             project_code=request.project_code,
@@ -2120,8 +2100,6 @@ async def reset_log_sheet(request: LogResetRequest):
 
     Equivalent to GAS resetDailyLogSheet().
     """
-    from src.services.logging_service import get_logging_service
-
     logger.info(
         "log_reset_requested",
         spreadsheet_id=request.spreadsheet_id,
@@ -2130,9 +2108,7 @@ async def reset_log_sheet(request: LogResetRequest):
     )
 
     try:
-        service = get_logging_service(sheets_service)
-
-        result = await service.reset_daily_log_sheet(
+        result = await logging_service.reset_daily_log_sheet(
             spreadsheet_id=request.spreadsheet_id,
             sheet_name=request.sheet_name,
             dry_run=request.dry_run
@@ -2159,8 +2135,6 @@ async def midnight_log_rotation(request: LogRotationRequest):
 
     Equivalent to GAS midnightLogRotation().
     """
-    from src.services.logging_service import get_logging_service
-
     logger.info(
         "log_rotation_requested",
         spreadsheet_id=request.spreadsheet_id,
@@ -2170,9 +2144,7 @@ async def midnight_log_rotation(request: LogRotationRequest):
     )
 
     try:
-        service = get_logging_service(sheets_service)
-
-        result = await service.midnight_log_rotation(
+        result = await logging_service.midnight_log_rotation(
             spreadsheet_id=request.spreadsheet_id,
             archive_folder_id=request.archive_folder_id,
             project_code=request.project_code,
@@ -2203,8 +2175,6 @@ async def get_log_status(spreadsheet_id: str, project_code: str = "project"):
 
     Equivalent to GAS showArchiveStatus().
     """
-    from src.services.logging_service import get_logging_service
-
     logger.info(
         "log_status_requested",
         spreadsheet_id=spreadsheet_id,
@@ -2212,9 +2182,7 @@ async def get_log_status(spreadsheet_id: str, project_code: str = "project"):
     )
 
     try:
-        service = get_logging_service(sheets_service)
-
-        result = await service.get_archive_status(
+        result = await logging_service.get_archive_status(
             spreadsheet_id=spreadsheet_id,
             project_code=project_code
         )
@@ -2241,12 +2209,8 @@ async def write_log_entry(request: LogEntryRequest):
 
     Equivalent to GAS _logToSheet_().
     """
-    from src.services.logging_service import get_logging_service
-
     try:
-        service = get_logging_service(sheets_service)
-
-        result = await service.write_log_entry(
+        result = await logging_service.write_log_entry(
             spreadsheet_id=request.spreadsheet_id,
             sheet_name=request.sheet_name,
             category=request.category,
