@@ -881,6 +881,13 @@ class PriceProcessor:
             updates = []
             new_rows = []
 
+            # Fetch base products ONCE before loop (avoid N+1 API calls)
+            base_candidates = None
+            if product_matcher:
+                base_candidates = product_matcher.fetch_base_products()
+                if base_candidates:
+                    self._log(spreadsheet_id, "Smart Match", f"Loaded {len(base_candidates)} base products for matching", "", "📦")
+
             for parsed_row in processed.rows:
                 article = parsed_row.article
 
@@ -931,9 +938,9 @@ class PriceProcessor:
 
                     # 🎯 SMART MATCH for new article
                     match_info = None
-                    if product_matcher and parsed_row.name_eng:
+                    if product_matcher and parsed_row.name_eng and base_candidates:
                         self._log(spreadsheet_id, "Smart Match", f"Поиск для нового товара: {parsed_row.name_eng}", "", "🔍")
-                        match_res = product_matcher.find_best_match(parsed_row.name_eng)
+                        match_res = product_matcher.find_best_match(parsed_row.name_eng, candidates=base_candidates)
                         if match_res and match_res.get("match_found") and match_res.get("confidence", 0) >= 80:
                             match_info = match_res
                             self._log(spreadsheet_id, "Smart Match", f"Найдено соответствие ({match_res['confidence']}%): {match_res.get('best_match_id')}", f"Цель: {parsed_row.name_eng}", "✅")

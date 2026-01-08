@@ -6,6 +6,7 @@ using Gemini AI.
 """
 
 import json
+import time
 from typing import List, Dict, Optional, Any
 
 from src.services.gemini_client import get_gemini_client
@@ -21,11 +22,30 @@ class ProductMatcher:
         self.sheet_name = sheet_name
         self.sheets_service = SheetsService()
 
-    def fetch_base_products(self) -> List[Dict[str, str]]:
+        # Instance-level cache for base products (10 minutes TTL)
+        self._base_products_cache: Optional[List[Dict[str, str]]] = None
+        self._cache_timestamp: float = 0
+        self._cache_ttl: int = 600  # 10 minutes
+
+    def fetch_base_products(self, force_refresh: bool = False) -> List[Dict[str, str]]:
         """
         Fetches rows from the sheet where 'Базовый' is checked.
         Returns a list of simplified product dictionaries.
+        Uses instance-level cache with 10-minute TTL to avoid redundant API calls.
+
+        Args:
+            force_refresh: If True, bypasses cache and fetches from sheet
         """
+        # Check cache validity
+        now = time.time()
+        if (
+            not force_refresh
+            and self._base_products_cache is not None
+            and (now - self._cache_timestamp) < self._cache_ttl
+        ):
+            logger.info(f"Using cached base products (age: {now - self._cache_timestamp:.1f}s)")
+            return self._base_products_cache
+
         logger.info(f"Fetching base products from '{self.sheet_name}'...")
         try:
             ws = self.sheets_service.get_worksheet(self.spreadsheet_id, self.sheet_name)
@@ -98,6 +118,11 @@ class ProductMatcher:
                 base_products.append(product_info)
 
         logger.info(f"Loaded {len(base_products)} Base Products with extra fields.")
+
+        # Cache the results
+        self._base_products_cache = base_products
+        self._cache_timestamp = time.time()
+
         return base_products
 
     def find_best_match(self, new_product_name: str, candidates: Optional[List[Dict]] = None) -> Optional[Dict[str, Any]]:
@@ -182,3 +207,12 @@ JSON FORMAT:
         except Exception as e:
             logger.error(f"AI Matching Error: {e}")
             return None
+
+    def invalidate_cache(self) -> None:
+        """
+        Manually clears the cached base products.
+        Useful when the sheet is updated externally.
+        """
+        self._base_products_cache = None
+        self._cache_timestamp = 0
+        logger.info("Base products cache invalidated.")
