@@ -31,7 +31,10 @@ var Lib = Lib || {};
             };
             
             let finalEndpoint = endpoint;
-            if (!finalEndpoint.startsWith("/api/v1")) {
+            if (finalEndpoint.startsWith("//")) {
+                // Если начинается с //, считаем это путем от корня (без /api/v1)
+                finalEndpoint = finalEndpoint.substring(1);
+            } else if (!finalEndpoint.startsWith("/api/v1")) {
                 if (!finalEndpoint.startsWith("/")) finalEndpoint = "/" + finalEndpoint;
                 finalEndpoint = "/api/v1" + finalEndpoint;
             }
@@ -515,18 +518,18 @@ var Lib = Lib || {};
         SpreadsheetApp.getActive().toast("Проверка статуса всех сервисов...", "Экосистема", 5);
         
         try {
-            // 1. Проверка основного сервера
+            // 1. Проверка основного сервера (корневой эндпоинт)
             let serverStatus = "🔴 Ошибка";
             try {
-                const res = Lib.callServer("/health", {}, "GET");
-                if (res && res.status === "ok") serverStatus = "🟢 OK";
+                const res = Lib.callServer("//health", {}, "GET");
+                if (res && res.status === "healthy") serverStatus = "🟢 OK";
             } catch(e) { serverStatus = "🔴 " + e.message; }
             
-            // 2. Проверка Gemini/AI
+            // 2. Проверка Gemini/AI (через /api/v1/ai/status)
             let geminiStatus = "🔴 Ошибка";
             try {
-                const res = Lib.callServer("/ai/check-service", {}, "POST");
-                if (res && res.status === "success") geminiStatus = "🟢 OK";
+                const res = Lib.callServer("/ai/status", {}, "GET");
+                if (res && res.status === "online") geminiStatus = "🟢 OK";
             } catch(e) { geminiStatus = "🔴 " + e.message; }
             
             // 3. Проверка Google Drive

@@ -2971,7 +2971,15 @@ def _server_tools_menu() -> MenuGroupModel:
 def _build_menu_registry(project: str) -> List[MenuGroupModel]:
     """Assemble full menu registry similar to legacy GAS config."""
     registry: List[MenuGroupModel] = []
+    
+    # 1. Извлекаем ЭКОСИСТЕМУ из базовых групп и ставим первой
+    base_groups = [_clone_base_group(g) for g in BASE_MENU_GROUPS]
+    ecosystem_group = next((g for g in base_groups if "ЭКОСИСТЕМА" in g.title), None)
+    if ecosystem_group:
+        registry.append(ecosystem_group)
+        base_groups = [g for g in base_groups if g != ecosystem_group]
 
+    # 2. Добавляем динамические группы (Заказ, Стадии)
     primary_group = _build_primary_menu(project)
     if primary_group:
         registry.append(primary_group)
@@ -2980,9 +2988,10 @@ def _build_menu_registry(project: str) -> List[MenuGroupModel]:
     if stages_group:
         registry.append(stages_group)
 
-    for group in BASE_MENU_GROUPS:
-        registry.append(_clone_base_group(group))
+    # 3. Добавляем остальные базовые группы
+    registry.extend(base_groups)
 
+    # 4. Диагностика сервера
     registry.append(_server_tools_menu())
 
     return registry
