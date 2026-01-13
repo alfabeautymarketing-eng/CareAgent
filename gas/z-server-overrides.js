@@ -516,36 +516,86 @@ var Lib = Lib || {};
     Lib.showAllServicesStatus = function() {
         const ui = SpreadsheetApp.getUi();
         SpreadsheetApp.getActive().toast("Проверка статуса всех сервисов...", "Экосистема", 5);
-        
+
+        // Task 1.6: Логирование в LOG_DEBUG с новой сигнатурой
+        // START: инициализация
+        if (Lib.logWithEmoji) {
+            Lib.logWithEmoji("Начало проверки статуса всех сервисов", "INFO", "🚀", "showAllServicesStatus", "Проверка сервера, Gemini и Google Drive", "Settings", "START");
+        }
+
         try {
+            const checkResults = {};
+
             // 1. Проверка основного сервера (корневой эндпоинт)
             let serverStatus = "🔴 Ошибка";
             try {
                 const res = Lib.callServer("//health", {}, "GET");
-                if (res && res.status === "healthy") serverStatus = "🟢 OK";
-            } catch(e) { serverStatus = "🔴 " + e.message; }
-            
+                if (res && res.status === "healthy") {
+                    serverStatus = "🟢 OK";
+                    checkResults.server = { status: "OK", message: "Сервер здоров" };
+                } else {
+                    checkResults.server = { status: "OFFLINE", message: "Сервер не ответил" };
+                }
+            } catch(e) {
+                serverStatus = "🔴 " + e.message;
+                checkResults.server = { status: "ERROR", message: e.message };
+                // Task 1.6: Log server check error
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Ошибка при проверке сервера: " + e.message, "WARN", "⚠️", "showAllServicesStatus", "Проверка сервера", "Settings", "WARNING", { endpoint: "//health" }, { error: e.message });
+                }
+            }
+
             // 2. Проверка Gemini/AI (через /api/v1/ai/status)
             let geminiStatus = "🔴 Ошибка";
             try {
                 const res = Lib.callServer("/ai/status", {}, "GET");
-                if (res && res.status === "online") geminiStatus = "🟢 OK";
-            } catch(e) { geminiStatus = "🔴 " + e.message; }
-            
+                if (res && res.status === "online") {
+                    geminiStatus = "🟢 OK";
+                    checkResults.gemini = { status: "OK", message: "Gemini AI онлайн" };
+                } else {
+                    checkResults.gemini = { status: "OFFLINE", message: "Gemini AI оффлайн" };
+                }
+            } catch(e) {
+                geminiStatus = "🔴 " + e.message;
+                checkResults.gemini = { status: "ERROR", message: e.message };
+                // Task 1.6: Log Gemini check error
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Ошибка при проверке Gemini: " + e.message, "WARN", "⚠️", "showAllServicesStatus", "Проверка Gemini", "Settings", "WARNING", { endpoint: "/ai/status" }, { error: e.message });
+                }
+            }
+
             // 3. Проверка Google Drive
             let driveStatus = "🟢 OK";
             try {
                 DriveApp.getRootFolder();
-            } catch(e) { driveStatus = "🔴 " + e.message; }
-            
+                checkResults.drive = { status: "OK", message: "Google Drive доступен" };
+            } catch(e) {
+                driveStatus = "🔴 " + e.message;
+                checkResults.drive = { status: "ERROR", message: e.message };
+                // Task 1.6: Log Drive check error
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Ошибка при проверке Google Drive: " + e.message, "WARN", "⚠️", "showAllServicesStatus", "Проверка Google Drive", "Settings", "WARNING", { service: "DriveApp" }, { error: e.message });
+                }
+            }
+
             const results = `Основной сервер: ${serverStatus}\nGemini AI: ${geminiStatus}\nGoogle Drive: ${driveStatus}`;
             ui.alert("Статус сервисов", results, ui.ButtonSet.OK);
-            
+
+            // Task 1.6: SUCCESS log with all results
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Проверка статуса завершена успешно", "INFO", "✅", "showAllServicesStatus", results.replace(/\n/g, ", "), "Settings", "SUCCESS", { services: ["server", "gemini", "drive"] }, checkResults);
+            }
+
             if (Lib.logStep) {
                 Lib.logStep("Settings", "Проверка статуса завершена: " + results.replace(/\n/g, ", "));
             }
         } catch(e) {
             ui.alert("Ошибка при проверке", e.message, ui.ButtonSet.OK);
+
+            // Task 1.6: ERROR log
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Критическая ошибка при проверке статуса: " + e.message, "ERROR", "❌", "showAllServicesStatus", "Проверка не удалась", "Settings", "ERROR", { action: "checkAllServices" }, { error: e.message, stack: e.stack });
+            }
         }
     };
 
