@@ -206,7 +206,8 @@ function handleOnEdit(e) {
 // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЛОГИРОВАНИЯ ============
 
 /**
- * Универсальная функция записи в лист "Логи"
+ * Универсальная функция записи в лист логов
+ * ОБНОВЛЕНО: Использует новую систему LOG_DEBUG вместо старого листа "Логи"
  * @param {string} category - Категория (FUNCTION, MENU, SYSTEM и т.д.)
  * @param {string} action - Действие
  * @param {string} details - Детали
@@ -214,23 +215,15 @@ function handleOnEdit(e) {
  */
 function _writeToLogSheet_(category, action, details, status) {
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) return;
-
-    var logSheetName = "Логи";
-    var sh = ss.getSheetByName(logSheetName);
-
-    if (!sh) {
-      // Создаём лист если его нет
-      sh = ss.insertSheet(logSheetName);
-      var headers = ["🕒 Время", "🏷️ Категория", "💬 Действие", "📝 Детали", "🔘 Статус"];
-      sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
-      sh.setFrozenRows(1);
-      sh.getRange(1, 1, 1, headers.length).setBackground("#e8eaf6");
+    // Используем новую систему логирования через Lib.logWithEmoji
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      const message = action + (details ? ": " + details : "");
+      const level = status && status.includes("ОШИБКА") ? "ERROR" : "INFO";
+      Lib.logWithEmoji(message, level, "", category, details || "");
+    } else {
+      // Fallback: просто логируем в консоль если Lib недоступен
+      console.log(`[${category}] ${action}: ${details || ""}`);
     }
-
-    var timestamp = Utilities.formatDate(new Date(), "Europe/Moscow", "dd.MM.yyyy HH:mm:ss");
-    sh.appendRow([timestamp, category, action, details || "", status || "✅ OK"]);
   } catch (e) {
     console.error("_writeToLogSheet_ error:", e);
   }
