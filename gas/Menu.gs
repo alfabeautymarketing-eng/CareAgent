@@ -12,26 +12,20 @@
  */
 
 /**
- * Логирует шаг в лист "Логи"
+ * Логирует шаг меню
+ * ОБНОВЛЕНО: Использует новую систему LOG_DEBUG вместо старого листа "Логи"
  */
 function _logMenuStep_(action, details, status) {
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) return;
-
-    var logSheetName = "Логи";
-    var sh = ss.getSheetByName(logSheetName);
-
-    if (!sh) {
-      // Создаём лист если его нет
-      sh = ss.insertSheet(logSheetName);
-      var headers = ["🕒 Время", "🏷️ Категория", "💬 Действие", "📝 Детали", "🔘 Статус"];
-      sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
-      sh.setFrozenRows(1);
+    // Используем новую систему логирования через Lib.logWithEmoji
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      const message = action + (details ? ": " + details : "");
+      const level = status && (status.includes("ОШИБКА") || status.includes("❌")) ? "ERROR" : "INFO";
+      Lib.logWithEmoji(message, level, "", "Menu", details || "");
+    } else {
+      // Fallback: просто логируем в консоль если Lib недоступен
+      console.log(`[Menu] ${action}: ${details || ""}`);
     }
-
-    var timestamp = Utilities.formatDate(new Date(), "Europe/Moscow", "dd.MM.yyyy HH:mm:ss");
-    sh.appendRow([timestamp, "MENU", action, details || "", status || "✅ OK"]);
   } catch (e) {
     console.error("_logMenuStep_ error:", e);
   }
