@@ -769,7 +769,7 @@ async def truncate_sync_logs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-<<<<<<< HEAD
+
 
 # --- Log Management Endpoints ---
 
@@ -858,6 +858,7 @@ async def get_archive_status_endpoint(spreadsheet_id: str):
 class CollectDocumentsRequest(BaseModel):
     spreadsheet_id: str
     target_sheet: str = "Для инвойса"
+    brand_prefix: str = "MT"
 
 @api_router.post("/documents/structure-353pp")
 async def structure_documents_353pp_endpoint(request: CollectDocumentsRequest):
@@ -880,15 +881,14 @@ async def collect_documents_endpoint(request: CollectDocumentsRequest):
         
         result = await inv_service.collect_and_copy_documents(
             spreadsheet_id=request.spreadsheet_id,
-            target_sheet=request.target_sheet
+            target_sheet=request.target_sheet,
+            brand_prefix=request.brand_prefix
         )
         return {"status": "success", "data": result}
     except Exception as e:
         logger.error("collect_documents_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-=======
->>>>>>> 048296b (Autosave: 2026-01-13 15:11:46)
 # --- Function Logs Endpoints ---
 
 @api_router.get("/function-logs/executions")

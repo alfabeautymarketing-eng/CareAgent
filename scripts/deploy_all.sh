@@ -21,7 +21,9 @@ echo ""
 echo "📦 [1/3] Syncing project files to server..."
 
 # Sync entire project except git, caches, venv and .env (to preserve server-side .env)
+# Set permissions explicitly to allow container to read files
 rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '.venv' --exclude '.env' \
+    --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r \
     -e "ssh -o StrictHostKeyChecking=no" \
     ./ ${SERVER_USER}@${SERVER_IP}:~/AgentCare/
 

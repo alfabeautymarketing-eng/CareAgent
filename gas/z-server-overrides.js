@@ -418,4 +418,66 @@ var Lib = Lib || {};
         }
     };
 
+    // --- OVERRIDE: Collect Documents ---
+    Lib.collectAndCopyDocuments = function() {
+        const ui = SpreadsheetApp.getUi();
+        const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+        const brandPrefix = (Lib.CONFIG && Lib.CONFIG.SETTINGS && Lib.CONFIG.SETTINGS.BRAND_PREFIX) || "MT";
+        
+        try {
+            ui.toast("Сбор документов на сервере...", "Агент", 30);
+            const res = Lib.callServer("/documents/collect", {
+                spreadsheet_id: ssId,
+                target_sheet: "Для инвойса",
+                brand_prefix: brandPrefix
+            });
+            
+            ui.alert("Операция завершена!", res.data.message, ui.ButtonSet.OK);
+        } catch (e) {
+            ui.alert("Ошибка сбора документов", e.message, ui.ButtonSet.OK);
+        }
+    };
+
+    // --- OVERRIDE: Archive Logs ---
+    Lib.manualArchiveLogs_proxy = function() {
+        const ui = SpreadsheetApp.getUi();
+        const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+        
+        try {
+            ui.toast("Архивация логов на сервере...", "Агент", 30);
+            const res = Lib.callServer("/logs/archive", {
+                spreadsheet_id: ssId
+            });
+            
+            ui.alert("Архивация завершена!", `Записано ${res.data.total_rows} строк в ${res.data.archive_name}`, ui.ButtonSet.OK);
+        } catch (e) {
+            ui.alert("Ошибка архивации", e.message, ui.ButtonSet.OK);
+        }
+    };
+
+    // --- OVERRIDE: Archive Status ---
+    Lib.showArchiveStatus_proxy = function() {
+        const ui = SpreadsheetApp.getUi();
+        const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+        
+        try {
+            const res = Lib.callServer("/logs/archive/status", {
+                spreadsheet_id: ssId
+            }, "GET");
+            
+            if (!res || !res.data) throw new Error("Нет данных от сервера");
+            
+            const data = res.data;
+            let status = `Архив: ${data.archive_name}\n`;
+            status += `Существует: ${data.exists ? "✅ Да" : "❌ Нет"}\n`;
+            if (data.exists && data.last_modified) {
+                status += `Изменен: ${data.last_modified}`;
+            }
+            
+            ui.alert("Статус архива", status, ui.ButtonSet.OK);
+        } catch (e) {
+            ui.alert("Ошибка статуса", e.message, ui.ButtonSet.OK);
+        }
+    };
+
 })(Lib);

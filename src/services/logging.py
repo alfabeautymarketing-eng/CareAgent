@@ -157,19 +157,19 @@ class LoggingService:
             if found_files:
                 archive_ss_id = found_files[0]['id']
             else:
-                # Create new spreadsheet
-                # Note: SheetsService create_spreadsheet usually creates in root, we need to move it or create via Drive API
-                # Using Sheets API to create
-                ss_body = {'properties': {'title': archive_name}}
-                new_ss = self.sheets_service.service.spreadsheets().create(body=ss_body, fields='spreadsheetId').execute()
-                archive_ss_id = new_ss.get('spreadsheetId')
+                # Create and move new spreadsheet using gspread
+                new_ss = self.sheets_service.gc.create(archive_name)
+                archive_ss_id = new_ss.id
+                
                 # Move to archive folder
-                drive.copy_file(archive_ss_id, self.archive_folder_id, None) # This copies? No wait, we need to move. 
-                # Drive API move is update parents.
-                # Let's use drive.service directly for move as copy_file creates a copy
+                # We need to use Drive API via drive service singleton
                 file = drive.service.files().get(fileId=archive_ss_id, fields='parents').execute()
                 previous_parents = ",".join(file.get('parents'))
-                drive.service.files().update(fileId=archive_ss_id, addParents=self.archive_folder_id, removeParents=previous_parents).execute()
+                drive.service.files().update(
+                    fileId=archive_ss_id, 
+                    addParents=self.archive_folder_id, 
+                    removeParents=previous_parents
+                ).execute()
                 
             # 2. Archive Data
             for sheet_name in sheets_to_archive:
