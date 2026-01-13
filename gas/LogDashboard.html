@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>📊 Dashboard Логов</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    .container {
+      padding: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      background: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn.primary {
+      background: #366092;
+      color: white;
+    }
+
+    .btn.primary:hover {
+      background: #2a4a72;
+    }
+
+    .btn.secondary {
+      background: #f5f5f5;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+
+    .btn.secondary:hover {
+      background: #eee;
+    }
+
+    .btn.danger {
+      background: #f44336;
+      color: white;
+    }
+
+    .btn.danger:hover {
+      background: #d32f2f;
+    }
+
+    /* ===== FILTERS ===== */
+    .filters-section {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .filter-group {
+      margin-bottom: 15px;
+    }
+
+    .filter-label {
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: block;
+      font-size: 13px;
+      text-transform: uppercase;
+      color: #666;
+    }
+
+    .filter-controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+    }
+
+    .period-buttons, .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .period-btn, .check-item {
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      background: white;
+      transition: all 0.2s;
+    }
+
+    .period-btn.active, .check-item.active {
+      background: #366092;
+      color: white;
+      border-color: #366092;
+    }
+
+    .period-btn:hover, .check-item:hover {
+      border-color: #366092;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #366092;
+      box-shadow: 0 0 0 3px rgba(54, 96, 146, 0.1);
+    }
+
+    .filter-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    /* ===== METRICS ===== */
+    .metrics-section {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .metric-card {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+
+    .metric-label {
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 5px;
+    }
+
+    .metric-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #366092;
+    }
+
+    /* ===== TABLE ===== */
+    .table-section {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead {
+      background: #366092;
+      color: white;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    th {
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+    }
+
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #eee;
+    }
+
+    tbody tr {
+      transition: background 0.2s;
+    }
+
+    tbody tr:hover {
+      background: #f9f9f9;
+    }
+
+    /* Status row coloring */
+    tr.status-SUCCESS { background-color: #e8f5e9; }
+    tr.status-START { background-color: #e3f2fd; }
+    tr.status-PROGRESS { background-color: #fffde7; }
+    tr.status-WARNING { background-color: #fff3e0; }
+    tr.status-ERROR { background-color: #ffebee; }
+
+    .truncate {
+      max-width: 300px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .status-SUCCESS { background: #4CAF50; color: white; }
+    .status-START { background: #2196F3; color: white; }
+    .status-PROGRESS { background: #FFC107; color: #333; }
+    .status-WARNING { background: #FF9800; color: white; }
+    .status-ERROR { background: #F44336; color: white; }
+
+    .action-buttons {
+      display: flex;
+      gap: 5px;
+    }
+
+    .action-btn {
+      padding: 4px 8px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+      background: #f0f0f0;
+    }
+
+    /* ===== PAGINATION ===== */
+    .pagination-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      background: white;
+      border-radius: 0 0 8px 8px;
+    }
+
+    .pagination {
+      display: flex;
+      gap: 5px;
+    }
+
+    .page-btn {
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .page-btn.active {
+      background: #366092;
+      color: white;
+      border-color: #366092;
+    }
+
+    .page-btn:hover {
+      border-color: #366092;
+    }
+
+    .page-info {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .page-size-select {
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* ===== MODAL ===== */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.4);
+      overflow: auto;
+    }
+
+    .modal.active {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-content {
+      background-color: white;
+      margin: auto;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      width: 90%;
+    }
+
+    .modal-header {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #999;
+    }
+
+    .close-btn:hover {
+      color: #333;
+    }
+
+    .modal-field {
+      margin-bottom: 15px;
+    }
+
+    .modal-label {
+      font-weight: 600;
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 5px;
+      display: block;
+      text-transform: uppercase;
+    }
+
+    .modal-value {
+      font-size: 13px;
+      word-break: break-word;
+      font-family: 'Courier New', monospace;
+      background: #f5f5f5;
+      padding: 8px 12px;
+      border-radius: 4px;
+    }
+
+    /* ===== LOADING ===== */
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #366092;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 10px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* ===== UTILITIES ===== */
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    .error-message {
+      background: #ffebee;
+      border: 1px solid #ef5350;
+      color: #c62828;
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+
+    .success-message {
+      background: #e8f5e9;
+      border: 1px solid #66bb6a;
+      color: #2e7d32;
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>📊 ДАШБОРД ЛОГОВ</h1>
+      <div class="actions">
+        <button class="btn primary" onclick="refreshLogs()">🔄 Обновить</button>
+        <button class="btn primary" onclick="exportToCSV()">📥 Скачать CSV</button>
+        <button class="btn secondary" onclick="clearFilters()">🧹 Очистить</button>
+        <button class="btn danger" onclick="closeDashboard()">❌ Закрыть</button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div id="messageContainer"></div>
+
+    <!-- Filters -->
+    <div class="filters-section">
+      <div class="filter-group">
+        <label class="filter-label">⏰ Период</label>
+        <div class="filter-controls">
+          <div class="period-buttons">
+            <button class="period-btn active" onclick="setPeriod('today')">📅 Сегодня</button>
+            <button class="period-btn" onclick="setPeriod('24h')">📅 24ч</button>
+            <button class="period-btn" onclick="setPeriod('7d')">📅 7 дней</button>
+            <button class="period-btn" onclick="setPeriod('all')">📅 Все</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">🏷️ Категория</label>
+        <div id="categoriesContainer" class="checkbox-group"></div>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">📊 Статус</label>
+        <div id="statusesContainer" class="checkbox-group"></div>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">📌 Уровень</label>
+        <div class="checkbox-group">
+          <button class="check-item active" onclick="toggleLevel('DEBUG')">DEBUG</button>
+          <button class="check-item active" onclick="toggleLevel('INFO')">INFO</button>
+          <button class="check-item active" onclick="toggleLevel('WARN')">WARN</button>
+          <button class="check-item active" onclick="toggleLevel('ERROR')">ERROR</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">🔍 Поиск</label>
+        <input type="text" id="searchInput" class="search-input" placeholder="Поиск по сообщению, функции или деталям..." onkeyup="applyFilters()">
+      </div>
+
+      <div class="filter-buttons">
+        <button class="btn primary" onclick="applyFilters()">🔍 Применить фильтры</button>
+        <button class="btn secondary" onclick="resetFilters()">🧹 Сброс</button>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics-section">
+      <div class="metric-card">
+        <div class="metric-label">✅ Успешно</div>
+        <div class="metric-value" id="metricSuccess">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">⚠️ Предупреждений</div>
+        <div class="metric-value" id="metricWarning">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">❌ Ошибок</div>
+        <div class="metric-value" id="metricError">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">📊 Всего</div>
+        <div class="metric-value" id="metricTotal">0</div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-section">
+      <div class="table-wrapper">
+        <table id="logsTable">
+          <thead>
+            <tr>
+              <th style="width: 5%;">№</th>
+              <th style="width: 15%;">Время</th>
+              <th style="width: 12%;">Категория</th>
+              <th style="width: 10%;">Статус</th>
+              <th style="width: 30%;">Сообщение</th>
+              <th style="width: 15%;">Функция</th>
+              <th style="width: 13%;">Действия</th>
+            </tr>
+          </thead>
+          <tbody id="logsBody">
+            <tr>
+              <td colspan="7" class="loading">
+                <span class="spinner"></span>Загрузка логов...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination-section">
+        <div class="pagination">
+          <button class="page-btn" onclick="previousPage()">⬅️</button>
+          <div id="pageNumbers"></div>
+          <button class="page-btn" onclick="nextPage()">➡️</button>
+        </div>
+        <div class="page-info">
+          <span id="pageInfo">0 / 0</span>
+        </div>
+        <select class="page-size-select" id="pageSizeSelect" onchange="changePageSize()">
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <div id="detailsModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        📋 Детали логирования
+        <button class="close-btn" onclick="closeModal('detailsModal')">×</button>
+      </div>
+      <div id="detailsContent"></div>
+    </div>
+  </div>
+
+  <div id="jsonModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        📝 JSON Данные
+        <button class="close-btn" onclick="closeModal('jsonModal')">×</button>
+      </div>
+      <div id="jsonContent"></div>
+    </div>
+  </div>
+
+  <script>
+    // Global state
+    const state = {
+      allLogs: [],
+      filteredLogs: [],
+      period: 'today',
+      categories: new Set(),
+      statuses: new Set(),
+      levels: new Set(['DEBUG', 'INFO', 'WARN', 'ERROR']),
+      search: '',
+      currentPage: 1,
+      pageSize: 50,
+      categoryEmojis: {},
+      statusEmojis: {}
+    };
+
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeDashboard();
+    });
+
+    function initializeDashboard() {
+      // Load categories and statuses from server
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.categoryEmojis = result.categories || {};
+          state.statusEmojis = result.statuses || {};
+
+          // Initialize category buttons
+          const categoriesContainer = document.getElementById('categoriesContainer');
+          Object.keys(state.categoryEmojis).forEach(cat => {
+            const btn = document.createElement('button');
+            btn.className = 'check-item active';
+            btn.textContent = state.categoryEmojis[cat] + ' ' + cat;
+            btn.onclick = () => toggleCategory(cat);
+            categoriesContainer.appendChild(btn);
+            state.categories.add(cat);
+          });
+
+          // Initialize status buttons
+          const statusesContainer = document.getElementById('statusesContainer');
+          Object.keys(state.statusEmojis).forEach(status => {
+            const btn = document.createElement('button');
+            btn.className = 'check-item active';
+            btn.textContent = state.statusEmojis[status] + ' ' + status;
+            btn.onclick = () => toggleStatus(status);
+            statusesContainer.appendChild(btn);
+            state.statuses.add(status);
+          });
+
+          // Load initial data
+          loadLogs();
+        })
+        .getCategoriesWithEmojis();
+    }
+
+    function loadLogs() {
+      showMessage('⏳ Загрузка логов...', 'info');
+
+      google.script.run
+        .withSuccessHandler(function(logs) {
+          state.allLogs = logs;
+          applyFilters();
+        })
+        .withFailureHandler(function(err) {
+          showMessage('❌ Ошибка при загрузке логов: ' + err, 'error');
+        })
+        .loadLogs({ maxRows: 500, hoursBack: 24 });
+    }
+
+    function applyFilters() {
+      const filters = {
+        period: state.period,
+        categories: Array.from(state.categories),
+        statuses: Array.from(state.statuses),
+        levels: Array.from(state.levels),
+        search: document.getElementById('searchInput').value
+      };
+
+      google.script.run
+        .withSuccessHandler(function(filtered) {
+          state.filteredLogs = filtered;
+          state.currentPage = 1;
+          renderTable();
+          updateMetrics();
+          showMessage('✅ Фильтры применены (' + filtered.length + ' логов)', 'success');
+        })
+        .filterLogs(state.allLogs, filters);
+    }
+
+    function renderTable() {
+      const pageSize = parseInt(document.getElementById('pageSizeSelect').value);
+      const startIdx = (state.currentPage - 1) * pageSize;
+      const pageLogsData = state.filteredLogs.slice(startIdx, startIdx + pageSize);
+
+      const tbody = document.getElementById('logsBody');
+      tbody.innerHTML = '';
+
+      if (pageLogsData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Нет логов, соответствующих фильтрам</td></tr>';
+        updatePagination();
+        return;
+      }
+
+      pageLogsData.forEach((log, index) => {
+        const rowNum = startIdx + index + 1;
+        const row = document.createElement('tr');
+        row.className = 'status-' + log.status;
+
+        const categoryEmoji = state.categoryEmojis[log.category] || '❓';
+        const statusEmoji = state.statusEmojis[log.status] || '❓';
+
+        row.innerHTML = `
+          <td>${rowNum}</td>
+          <td>${log.time}</td>
+          <td>${categoryEmoji} ${log.category}</td>
+          <td><span class="status-badge status-${log.status}">${statusEmoji} ${log.status}</span></td>
+          <td><span class="truncate" title="${log.message}">${log.message}</span></td>
+          <td><code>${log.function}</code></td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn" onclick="showDetails(${JSON.stringify(log).replace(/"/g, '&quot;')})">📋</button>
+              ${log.variables || log.result ? `<button class="action-btn" onclick="showJSON(${JSON.stringify({variables: log.variables, result: log.result}).replace(/"/g, '&quot;')})">📝</button>` : ''}
+            </div>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      updatePagination();
+    }
+
+    function updatePagination() {
+      const pageSize = parseInt(document.getElementById('pageSizeSelect').value);
+      const totalPages = Math.ceil(state.filteredLogs.length / pageSize);
+
+      document.getElementById('pageInfo').textContent =
+        `Показано ${Math.min(state.currentPage * pageSize, state.filteredLogs.length)} из ${state.filteredLogs.length}`;
+
+      // Page buttons
+      const pageNumbers = document.getElementById('pageNumbers');
+      pageNumbers.innerHTML = '';
+      for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+        const btn = document.createElement('button');
+        btn.className = 'page-btn' + (i === state.currentPage ? ' active' : '');
+        btn.textContent = i;
+        btn.onclick = () => goToPage(i);
+        pageNumbers.appendChild(btn);
+      }
+    }
+
+    function updateMetrics() {
+      google.script.run
+        .withSuccessHandler(function(metrics) {
+          document.getElementById('metricSuccess').textContent = metrics.success;
+          document.getElementById('metricWarning').textContent = metrics.warning;
+          document.getElementById('metricError').textContent = metrics.error;
+          document.getElementById('metricTotal').textContent = metrics.total;
+        })
+        .calculateMetrics(state.filteredLogs);
+    }
+
+    function showDetails(log) {
+      const content = document.getElementById('detailsContent');
+      content.innerHTML = `
+        <div class="modal-field">
+          <label class="modal-label">Время</label>
+          <div class="modal-value">${log.time}</div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Категория</label>
+          <div class="modal-value">${state.categoryEmojis[log.category]} ${log.category}</div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Статус</label>
+          <div class="modal-value">${state.statusEmojis[log.status]} ${log.status}</div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Сообщение</label>
+          <div class="modal-value">${log.message}</div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Функция</label>
+          <div class="modal-value">${log.function}</div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Детали</label>
+          <div class="modal-value">${log.details}</div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Источник</label>
+          <div class="modal-value">${log.source}</div>
+        </div>
+      `;
+      document.getElementById('detailsModal').classList.add('active');
+    }
+
+    function showJSON(data) {
+      const content = document.getElementById('jsonContent');
+      const html = [];
+
+      if (data.variables) {
+        html.push('<div class="modal-field"><label class="modal-label">Параметры</label><div class="modal-value"><pre>' + JSON.stringify(JSON.parse(data.variables || '{}'), null, 2) + '</pre></div></div>');
+      }
+      if (data.result) {
+        html.push('<div class="modal-field"><label class="modal-label">Результаты</label><div class="modal-value"><pre>' + JSON.stringify(JSON.parse(data.result || '{}'), null, 2) + '</pre></div></div>');
+      }
+
+      content.innerHTML = html.join('');
+      document.getElementById('jsonModal').classList.add('active');
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.remove('active');
+    }
+
+    function setPeriod(period) {
+      state.period = period;
+      document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      applyFilters();
+    }
+
+    function toggleCategory(cat) {
+      if (state.categories.has(cat)) {
+        state.categories.delete(cat);
+        event.target.classList.remove('active');
+      } else {
+        state.categories.add(cat);
+        event.target.classList.add('active');
+      }
+    }
+
+    function toggleStatus(status) {
+      if (state.statuses.has(status)) {
+        state.statuses.delete(status);
+        event.target.classList.remove('active');
+      } else {
+        state.statuses.add(status);
+        event.target.classList.add('active');
+      }
+    }
+
+    function toggleLevel(level) {
+      if (state.levels.has(level)) {
+        state.levels.delete(level);
+        event.target.classList.remove('active');
+      } else {
+        state.levels.add(level);
+        event.target.classList.add('active');
+      }
+    }
+
+    function clearFilters() {
+      if (confirm('Вы уверены, что хотите очистить все фильтры?')) {
+        resetFilters();
+      }
+    }
+
+    function resetFilters() {
+      state.period = 'today';
+      state.categories = new Set(Object.keys(state.categoryEmojis));
+      state.statuses = new Set(Object.keys(state.statusEmojis));
+      state.levels = new Set(['DEBUG', 'INFO', 'WARN', 'ERROR']);
+      document.getElementById('searchInput').value = '';
+
+      document.querySelectorAll('.period-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i === 0);
+      });
+      document.querySelectorAll('.check-item').forEach(btn => btn.classList.add('active'));
+
+      applyFilters();
+    }
+
+    function changePageSize() {
+      state.currentPage = 1;
+      renderTable();
+    }
+
+    function goToPage(page) {
+      state.currentPage = page;
+      renderTable();
+    }
+
+    function previousPage() {
+      if (state.currentPage > 1) {
+        state.currentPage--;
+        renderTable();
+      }
+    }
+
+    function nextPage() {
+      const pageSize = parseInt(document.getElementById('pageSizeSelect').value);
+      const totalPages = Math.ceil(state.filteredLogs.length / pageSize);
+      if (state.currentPage < totalPages) {
+        state.currentPage++;
+        renderTable();
+      }
+    }
+
+    function refreshLogs() {
+      loadLogs();
+    }
+
+    function exportToCSV() {
+      if (state.filteredLogs.length === 0) {
+        showMessage('⚠️ Нет логов для экспорта', 'info');
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(csv) {
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          const url = URL.createObjectURL(blob);
+          link.setAttribute('href', url);
+          link.setAttribute('download', 'logs_' + new Date().toISOString().slice(0,10) + '.csv');
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          showMessage('🧹 Данные экспортированы в CSV', 'success');
+        })
+        .exportLogsToCSV(state.filteredLogs);
+    }
+
+    function closeDashboard() {
+      google.script.host.close();
+    }
+
+    function showMessage(text, type) {
+      const container = document.getElementById('messageContainer');
+      const msg = document.createElement('div');
+      msg.className = type === 'error' ? 'error-message' : (type === 'success' ? 'success-message' : 'info-message');
+      msg.textContent = text;
+      container.appendChild(msg);
+
+      setTimeout(() => msg.remove(), 3000);
+    }
+  </script>
+</body>
+</html>
