@@ -1280,11 +1280,61 @@
    * @param {string} functionName - Имя функции (опционально)
    * @param {string} details - Дополнительные детали (опционально)
    */
-  function logWithEmoji(message, level, emoji, functionName, details) {
+  /**
+   * Обновленная функция логирования с поддержкой категорий, статусов и параметров
+   *
+   * Сигнатура (Task 1.3):
+   * @param {string} message - Текст сообщения
+   * @param {string} level - Уровень логирования (DEBUG, INFO, WARN, ERROR)
+   * @param {string} emoji - Эмодзи для сообщения (опционально)
+   * @param {string} functionName - Имя функции (опционально)
+   * @param {string} details - Детали/комментарий (опционально)
+   * @param {string} category - Категория (Article, Sync, Price и т.д.) (опционально - используется из functionName если не указано)
+   * @param {string} status - Статус (START, PROGRESS, SUCCESS, WARNING, ERROR) (опционально - преобразуется из level если не указано)
+   * @param {object|string} variables - Входные параметры в формате JSON (опционально)
+   * @param {object|string} result - Результаты выполнения в формате JSON (опционально)
+   *
+   * Примеры вызовов:
+   * 1. Старый формат (обратная совместимость):
+   *    Lib.logWithEmoji('Начало синхронизации', 'INFO', '🔄', 'syncSelectedRow', 'Синхро выбранной строки')
+   *
+   * 2. Новый формат с категорией и статусом:
+   *    Lib.logWithEmoji('Начало синхронизации', 'INFO', '🔄', 'syncSelectedRow', 'Синхро выбранной строки', 'Sync', 'START')
+   *
+   * 3. Полный формат с параметрами и результатом:
+   *    Lib.logWithEmoji('Успешно добавлен артикул', 'INFO', '✅', 'addArticle', 'Артикул добавлен',
+   *                     'Article', 'SUCCESS', {id: 123, name: 'Test'}, {rowsAdded: 1, success: true})
+   */
+  function logWithEmoji(message, level, emoji, functionName, details, category, status, variables, result) {
     level = level || 'INFO';
     emoji = emoji || _getEmojiForMessage(message, level);
     functionName = functionName || '';
     details = details || '';
+
+    // Task 1.3: Новые параметры
+    // Если категория не передана, автоматически определяем из functionName
+    if (!category) {
+      category = functionName ? functionName.split('_')[0] : 'General';
+    }
+
+    // Если статус не передан, преобразуем уровень в статус
+    if (!status) {
+      status = _mapLevelToStatus(level);
+    }
+
+    // Преобразуем параметры в JSON если нужно
+    if (variables && typeof variables === 'object') {
+      variables = JSON.stringify(variables);
+    } else {
+      variables = variables || '';
+    }
+
+    // Преобразуем результат в JSON если нужно
+    if (result && typeof result === 'object') {
+      result = JSON.stringify(result);
+    } else {
+      result = result || '';
+    }
 
     // Проверка уровня логирования
     const currentLevel = SETTINGS.CURRENT_LOG_LEVEL;
@@ -1320,16 +1370,9 @@
       if (SHEETS.LOG_DEBUG) {
         const debugSheet = ss.getSheetByName(SHEETS.LOG_DEBUG);
         if (debugSheet) {
-          // Новая структура: [время, категория, статус, сообщение, функция, детали, параметры, результаты]
-          // Маппируем старый формат на новый:
-          // - category: берём из functionName (первая часть до точки) или "General"
-          // - status: преобразуем уровень в статус (ERROR->ERROR, WARNING->WARNING, INFO->SUCCESS, DEBUG->PROGRESS)
-          const category = functionName ? functionName.split('_')[0] : 'General';
-          const status = _mapLevelToStatus(level);
-          const parameters = ''; // Заполняется в Task 1.3+
-          const results = ''; // Заполняется в Task 1.3+
-
-          debugSheet.appendRow([timestamp, category, status, fullMessage, functionName, details, parameters, results]);
+          // Структура LOG_DEBUG (Task 1.2): [время, категория, статус, сообщение, функция, детали, параметры, результаты]
+          // Task 1.3: Теперь используем явные параметры категории, статуса, переменных и результатов
+          debugSheet.appendRow([timestamp, category, status, fullMessage, functionName, details, variables, result]);
         }
       }
 
@@ -1417,11 +1460,59 @@
     return statusMap[level] || 'PROGRESS';
   }
 
+  /**
+   * Task 1.3: Возвращает эмодзи для статуса
+   * Используется для визуализации статусов в LOG_DEBUG листе
+   *
+   * @param {string} status - Статус (START, PROGRESS, SUCCESS, WARNING, ERROR)
+   * @returns {string} Эмодзи для статуса
+   */
+  function _getEmojiForStatus(status) {
+    const statusEmojis = {
+      'START': '🚀',
+      'PROGRESS': '⏳',
+      'SUCCESS': '✅',
+      'WARNING': '⚠️',
+      'ERROR': '❌'
+    };
+    return statusEmojis[status] || '❓';
+  }
+
+  /**
+   * Task 1.3: Возвращает эмодзи для категории
+   * Используется для визуализации категорий в LOG_DEBUG листе
+   *
+   * @param {string} category - Категория (Article, Sync, Price, Menu, UI, API, Storage, Archive, Settings, System, Error, Performance, Security, Other, General)
+   * @returns {string} Эмодзи для категории
+   */
+  function _getEmojiForCategory(category) {
+    const categoryEmojis = {
+      'Article': '📄',
+      'Sync': '🔄',
+      'Price': '💰',
+      'Menu': '📋',
+      'UI': '🖥️',
+      'API': '🔌',
+      'Storage': '💾',
+      'Archive': '📦',
+      'Settings': '⚙️',
+      'System': '🖲️',
+      'Error': '❌',
+      'Performance': '⚡',
+      'Security': '🔒',
+      'Other': '❓',
+      'General': 'ℹ️'
+    };
+    return categoryEmojis[category] || '❓';
+  }
+
   // Делаем CONFIG доступным глобально
   global.Lib = global.Lib || {};
   global.Lib.CONFIG = CONFIG;
   global.Lib.onOpen = _onOpen;
   global.Lib.logWithEmoji = logWithEmoji; // Экспортируем функцию логирования
+  global.Lib._getEmojiForStatus = _getEmojiForStatus; // Task 1.3: Эмодзи для статуса
+  global.Lib._getEmojiForCategory = _getEmojiForCategory; // Task 1.3: Эмодзи для категории
   global.CONFIG = CONFIG;
   global.logWithEmoji = logWithEmoji; // Глобальный доступ для удобства
 })(this);
