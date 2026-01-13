@@ -769,6 +769,7 @@ async def truncate_sync_logs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+<<<<<<< HEAD
 
 # --- Log Management Endpoints ---
 
@@ -886,6 +887,8 @@ async def collect_documents_endpoint(request: CollectDocumentsRequest):
         logger.error("collect_documents_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+=======
+>>>>>>> 048296b (Autosave: 2026-01-13 15:11:46)
 # --- Function Logs Endpoints ---
 
 @api_router.get("/function-logs/executions")
