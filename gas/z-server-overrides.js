@@ -953,3 +953,83 @@ var Lib = Lib || {};
     };
 
 })(Lib);
+
+// ============= GLOBAL PROXY FUNCTIONS FOR MENU =============
+
+/**
+ * Глобальная прокси функция для управления листом LOG
+ * Вызывается из GlobalApiBridge.js функциями quickCleanLogSheet() и recreateLogSheet()
+ * @param {boolean} isClean - true: очистить лист (quickCleanLogSheet), false: пересоздать (recreateLogSheet)
+ */
+function callServerLogCommand(isClean) {
+  try {
+    if (typeof Lib !== 'undefined' && Lib.logWithEmoji) {
+      if (isClean) {
+        Lib.logWithEmoji("Очистка листа LOG...", "DEBUG", "🧹", "callServerLogCommand", "Удаление данных", "System", "START");
+        if (typeof Lib.quickCleanLogSheet === 'function') {
+          return Lib.quickCleanLogSheet();
+        }
+      } else {
+        Lib.logWithEmoji("Пересоздание листа LOG...", "DEBUG", "🔄", "callServerLogCommand", "Удаление и создание нового", "System", "START");
+        if (typeof Lib.recreateLogSheet === 'function') {
+          return Lib.recreateLogSheet();
+        }
+      }
+    }
+    throw new Error('Lib.logWithEmoji или необходимая функция не определена');
+  } catch (e) {
+    console.error('Error in callServerLogCommand:', e);
+    SpreadsheetApp.getUi().alert('Ошибка: ' + e.message);
+    throw e;
+  }
+}
+
+/**
+ * Глобальная прокси функция для пересоздания листа LOG_DEBUG
+ * Вызывается из GlobalApiBridge.js функцией recreateDebugLogSheet()
+ */
+function callServerRecreateDebugLog() {
+  try {
+    if (typeof Lib !== 'undefined' && Lib.logWithEmoji) {
+      Lib.logWithEmoji("Пересоздание листа LOG_DEBUG...", "DEBUG", "🔄", "callServerRecreateDebugLog", "Восстановление структуры", "System", "START");
+      if (typeof Lib.recreateDebugLogSheet === 'function') {
+        return Lib.recreateDebugLogSheet();
+      }
+    }
+    throw new Error('Lib.logWithEmoji или Lib.recreateDebugLogSheet не определена');
+  } catch (e) {
+    console.error('Error in callServerRecreateDebugLog:', e);
+    SpreadsheetApp.getUi().alert('Ошибка: ' + e.message);
+    throw e;
+  }
+}
+
+/**
+ * Обновляет и показывает логи (для меню)
+ * Перезагружает логи из LOG_DEBUG листа
+ */
+(function() {
+  // Добавляем функцию в Lib
+  Lib.refreshLogs = function() {
+    try {
+      const ui = SpreadsheetApp.getUi();
+      ui.toast("Обновление логов...", "Прогресс", 3);
+
+      // Убедиться, что лист LOG_DEBUG существует с правильной структурой
+      if (typeof Lib !== 'undefined' && Lib.ensureLogDebugSheetStructure) {
+        Lib.ensureLogDebugSheetStructure();
+      }
+
+      if (typeof Lib !== 'undefined' && Lib.logWithEmoji) {
+        Lib.logWithEmoji("Логи обновлены", "INFO", "✅", "refreshLogs", "Перезагрузка данных", "System", "SUCCESS");
+      }
+
+      ui.alert("Готово", "Логи обновлены из листа LOG_DEBUG", ui.ButtonSet.OK);
+      return true;
+    } catch (e) {
+      console.error('Error in refreshLogs:', e);
+      SpreadsheetApp.getUi().alert('Ошибка обновления логов: ' + e.message);
+      return false;
+    }
+  };
+})();

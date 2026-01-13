@@ -36,44 +36,39 @@ function onOpen(e) {
 function handleOnOpen(e) {
   console.log("🚀 Running Installable handleOnOpen...");
 
-  // 0. Гарантируем, что лог-листы первыми в порядке вкладок
-  try {
-    if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
-      Lib.ensureLogSheetsFirst();
-    }
-  } catch (err) {
-    console.error("Ошибка при переносе лог-листов: " + err);
-  }
 
   // 1. Инициализация сессии логов на сервере (Логи)
   try {
     if (typeof Lib !== 'undefined' && typeof Lib.initSessionLogs === 'function') {
-      Lib.initSessionLogs();
-      if (typeof Lib.ensureLogSheetsFirst === 'function') {
-        Lib.ensureLogSheetsFirst();
+      if (typeof Lib.logWithEmoji === 'function') {
+         Lib.logWithEmoji("Инициализация сессии логов...", "DEBUG", "⏳", "handleOnOpen", "Вызов Lib.initSessionLogs", "System", "PROGRESS");
       }
-    }
-    if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-      Lib.logStep("Startup", "Инициализация логов сессии завершена");
+      Lib.initSessionLogs();
+      if (typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Сессия логов инициализирована", "INFO", "✅", "handleOnOpen", "Session ID created", "System", "SUCCESS");
+      }
     }
   } catch (err) {
     console.error("Ошибка при инициализации логов: " + err);
-    if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
-      Lib.logWarn("Startup: не удалось инициализировать логи", err);
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+       Lib.logWithEmoji("Ошибка инициализации логов", "ERROR", "❌", "handleOnOpen", err.toString(), "System", "ERROR", null, {error: err.toString()});
     }
   }
 
   // 2. Загрузка меню (требует полного доступа, поэтому делаем после логов)
   if (typeof createAgentMenu === 'function') {
     try {
-      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-        Lib.logStep("Startup", "Загрузка динамического меню");
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Загрузка динамического меню...", "DEBUG", "⏳", "handleOnOpen", "Вызов createAgentMenu", "Menu", "PROGRESS");
       }
       createAgentMenu();
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+         Lib.logWithEmoji("Меню загружено", "INFO", "✅", "handleOnOpen", "Menu structure updated", "Menu", "SUCCESS");
+      }
     } catch (err) {
       console.error("Ошибка при загрузке меню: " + err);
-      if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
-        Lib.logWarn("Startup: ошибка загрузки меню", err);
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка загрузки меню", "ERROR", "❌", "handleOnOpen", err.toString(), "Menu", "ERROR", null, {error: err.toString()});
       }
     }
   }
@@ -81,19 +76,41 @@ function handleOnOpen(e) {
   // 3. Автоматическое упорядочивание листов через Python сервер
   if (typeof reorderSheetsSilent === 'function') {
     try {
-      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-        Lib.logStep("Startup", "Выстраиваем листы по порядку (сервер)");
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Упорядочивание листов...", "DEBUG", "⏳", "handleOnOpen", "Вызов reorderSheetsSilent", "UI", "PROGRESS");
       }
       reorderSheetsSilent();
       if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
         Lib.ensureLogSheetsFirst();
       }
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+         Lib.logWithEmoji("Листы упорядочены", "INFO", "✅", "handleOnOpen", "Sheet order verified", "UI", "SUCCESS");
+      }
     } catch (err) {
       console.error("Ошибка при упорядочивании листов: " + err);
-      if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
-        Lib.logWarn("Startup: ошибка упорядочивания листов", err);
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+         Lib.logWithEmoji("Ошибка упорядочивания листов", "ERROR", "❌", "handleOnOpen", err.toString(), "UI", "ERROR", null, {error: err.toString()});
       }
     }
+  }
+
+  // 4. Обновление формул на листах цен (Silent Mode)
+  try {
+    if (typeof Lib !== 'undefined' && typeof Lib.updatePriceCalculationFormulas === 'function') {
+      if (typeof Lib.logWithEmoji === 'function') {
+         Lib.logWithEmoji("Обновление формул цен...", "DEBUG", "⏳", "handleOnOpen", "Вызов updatePriceCalculationFormulas", "Price", "PROGRESS");
+      }
+      Lib.updatePriceCalculationFormulas(true); // silent = true
+      // Успешный лог пишется внутри самой функции, но мы можем добавить общий success тут
+      if (typeof Lib.logWithEmoji === 'function') {
+         Lib.logWithEmoji("Формулы цен проверены", "INFO", "✅", "handleOnOpen", "Price formulas sync complete", "Price", "SUCCESS");
+      }
+    }
+  } catch (err) {
+      console.error("Ошибка при обновлении формул: " + err);
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+         Lib.logWithEmoji("Ошибка обновления формул", "ERROR", "❌", "handleOnOpen", err.toString(), "Price", "ERROR", null, {error: err.toString()});
+      }
   }
 
   // 3.5. Инициализация Gemini API из Script Properties
