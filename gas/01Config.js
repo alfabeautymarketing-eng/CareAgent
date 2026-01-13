@@ -70,7 +70,6 @@
     LOG: "Журнал синхро",
     LOG_DEBUG: "Журнал логов",
     EXTERNAL_DOCS: "Внешние документы",
-    SESSION_LOG: "Логи",
   };
 
   // =======================================================================================
@@ -437,7 +436,46 @@
   const MENU_REGISTRY_BLUEPRINT = [
     // Группа "🧾 Заказ" формируется динамически из PRIMARY_DATA_MENU_ACTIONS
     // и добавляется первой через _buildPrimaryDataMenuGroup()
-
+    {
+      title: "⚙️ ЭКОСИСТЕМА",
+      items: [
+        {
+          submenu: "🔍 Проверки систем",
+          items: [
+            { label: "📊 Показать статус всех сервисов", fn: "showAllServicesStatus_proxy" },
+          ],
+        },
+        {
+          submenu: "🤖 Агент",
+          items: [
+            { label: "Проверить сервис агента", fn: "menuCheckService" },
+            { label: "⚙️ Настройки Gemini", fn: "setupGeminiComplete" },
+            { label: "📋 Показать текущие настройки", fn: "showGeminiSettings" },
+          ],
+        },
+        {
+          submenu: "📊 Логи",
+          items: [
+            { label: "📈 Дашборд логов", fn: "openLogDashboard_proxy" },
+            { separator: true },
+            { label: "📑 Показать журнал синхро", fn: "showSyncJournal_proxy" },
+            { label: "📑 Показать журнал логов", fn: "showLogJournal_proxy" },
+            { separator: true },
+            { label: "📦 Архивировать логи", fn: "manualArchiveLogs_proxy" },
+            { label: "📊 Статус архива", fn: "showArchiveStatus_proxy" },
+            { separator: true },
+            { label: "🔄 Пересоздать журнал синхро", fn: "recreateLogSheet" },
+            { label: "🔄 Пересоздать журнал логов", fn: "recreateDebugLogSheet" },
+            { label: "🧹 Очистить журнал (быстро)", fn: "quickCleanLogSheet" },
+          ],
+        },
+        { separator: true },
+        { label: "Добавить артикул", fn: "addArticleManually" },
+        { label: "Удалить выбранные строки (с синхронизацией)", fn: "deleteSelectedRowsWithSync" },
+        { label: "Синхронизировать выбранную строку", fn: "syncSelectedRow" },
+        { label: "Проверить и синхронизировать ВСЮ таблицу", fn: "runFullSync" },
+      ],
+    },
     {
       title: "📦 Выгрузка",
       items: [
@@ -451,7 +489,7 @@
         { label: "Форматировать лист 'Ордер'", fn: "formatOrderSheet" },
         { separator: true },
         { label: "1. Создать лист 'Для инвойса'", fn: "createFullInvoice" },
-        { label: "2. Собрать документы", fn: "collectAndCopyDocuments" },
+        { label: "2. Собрать документы", fn: "collectAndCopyDocuments_proxy" },
       ],
     },
     {
@@ -479,7 +517,7 @@
       ],
     },
     {
-      title: "⚙️ Синхронизация",
+      title: "⚙️ СИНХРОНИЗАЦИЯ",
       items: [
         { label: "Настроить правила", fn: "showSyncRulesManagerDialog" },
         { label: "🧹 Очистить уведомления", fn: "clearAllToasts" },
@@ -490,64 +528,23 @@
           submenu: "Операции с артикулами",
           items: [
             { label: "Добавить артикул", fn: "addArticleManually" },
-            {
-              label: "Удалить выбранные строки (с синхронизацией)",
-              fn: "deleteSelectedRowsWithSync",
-            },
-            { separator: true },
-            {
-              label: "Синхронизировать ДАННЫЕ выбранной строки",
-              fn: "syncSelectedRow",
-            },
-            {
-              label: "Проверить и синхронизировать ВСЮ таблицу",
-              fn: "runFullSync",
-            },
+            { label: "Удалить артикул", fn: "deleteSelectedRowsWithSync" },
+            { label: "Синхронизировать строку", fn: "syncSelectedRow" },
+            { label: "Синхронизировать ВСЮ таблицу", fn: "runFullSync" },
           ],
         },
         { separator: true },
         { label: "Установить/Переустановить триггеры", fn: "setupTriggers" },
-        { separator: true },
-        {
-          submenu: "📋 Журнал",
-          items: [
-            {
-              label: "📦 Архивировать логи",
-              fn: "manualArchiveLogs_proxy",
-            },
-            {
-              label: "📊 Статус архива",
-              fn: "showArchiveStatus_proxy",
-            },
-            { separator: true },
-            {
-              label: "Пересоздать журнал синхро",
-              fn: "recreateLogSheet",
-            },
-            {
-              label: "Пересоздать журнал логов",
-              fn: "recreateDebugLogSheet",
-            },
-            {
-              label: "Очистить журнал (быстро)",
-              fn: "quickCleanLogSheet",
-            },
-          ],
-        },
       ],
     },
     {
-      title: "🤖 Агент",
+      title: "🤖 АГЕНТ",
       items: [
-        { label: "Проверить сервис", fn: "menuCheckService" },
-        { label: "⚙️ Настройки Gemini", fn: "setupGeminiComplete" },
-        { label: "📋 Показать настройки", fn: "showGeminiSettings" },
-        { separator: true },
         { label: "🎯 Smart Match для строки", fn: "menuSmartMatch" },
-        { label: "Анализировать выбранную строку", fn: "menuAnalyzeSelected" },
-        { label: "Анализировать пустые строки", fn: "menuAnalyzeEmpty" },
+        { label: "🤖 Анализировать выбранную строку", fn: "menuAnalyzeSelected" },
+        { label: "📊 Анализировать пустые строки", fn: "menuAnalyzeEmpty" },
         { separator: true },
-        { label: "Показать категории", fn: "menuShowCategories" },
+        { label: "📦 Показать категории ТН ВЭД", fn: "menuShowCategories" },
       ],
     },
   ];

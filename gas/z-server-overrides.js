@@ -423,7 +423,7 @@ var Lib = Lib || {};
         const ui = SpreadsheetApp.getUi();
         const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
         const brandPrefix = (Lib.CONFIG && Lib.CONFIG.SETTINGS && Lib.CONFIG.SETTINGS.BRAND_PREFIX) || "MT";
-        
+
         try {
             ui.toast("Сбор документов на сервере...", "Агент", 30);
             const res = Lib.callServer("/documents/collect", {
@@ -431,11 +431,15 @@ var Lib = Lib || {};
                 target_sheet: "Для инвойса",
                 brand_prefix: brandPrefix
             });
-            
+
             ui.alert("Операция завершена!", res.data.message, ui.ButtonSet.OK);
         } catch (e) {
             ui.alert("Ошибка сбора документов", e.message, ui.ButtonSet.OK);
         }
+    };
+
+    Lib.collectAndCopyDocuments_proxy = function() {
+        return Lib.collectAndCopyDocuments();
     };
 
     // --- OVERRIDE: Archive Logs ---
@@ -478,6 +482,103 @@ var Lib = Lib || {};
         } catch (e) {
             ui.alert("Ошибка статуса", e.message, ui.ButtonSet.OK);
         }
+    };
+
+    // --- OVERRIDE: Show Log Sheets ---
+    Lib.showLogJournal = function() {
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+        const sheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.LOG_DEBUG) || "Журнал логов";
+        const sheet = ss.getSheetByName(sheetName);
+        if (sheet) {
+            ss.setActiveSheet(sheet);
+        } else {
+            SpreadsheetApp.getUi().alert("Лист '" + sheetName + "' не найден");
+        }
+    };
+
+    Lib.showSyncJournal = function() {
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+        const sheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.LOG) || "Журнал синхро";
+        const sheet = ss.getSheetByName(sheetName);
+        if (sheet) {
+            ss.setActiveSheet(sheet);
+        } else {
+            SpreadsheetApp.getUi().alert("Лист '" + sheetName + "' не найден");
+        }
+    };
+
+    /**
+     * Проверка статуса всех внешних сервисов.
+     */
+    Lib.showAllServicesStatus = function() {
+        const ui = SpreadsheetApp.getUi();
+        ui.toast("Проверка статуса всех сервисов...", "Экосистема", 5);
+        
+        try {
+            // 1. Проверка основного сервера
+            let serverStatus = "🔴 Ошибка";
+            try {
+                const res = Lib.callServer("/health", {}, "GET");
+                if (res && res.status === "ok") serverStatus = "🟢 OK";
+            } catch(e) { serverStatus = "🔴 " + e.message; }
+            
+            // 2. Проверка Gemini/AI
+            let geminiStatus = "🔴 Ошибка";
+            try {
+                const res = Lib.callServer("/ai/check-service", {}, "POST");
+                if (res && res.status === "success") geminiStatus = "🟢 OK";
+            } catch(e) { geminiStatus = "🔴 " + e.message; }
+            
+            // 3. Проверка Google Drive
+            let driveStatus = "🟢 OK";
+            try {
+                DriveApp.getRootFolder();
+            } catch(e) { driveStatus = "🔴 " + e.message; }
+            
+            const results = `Основной сервер: ${serverStatus}\nGemini AI: ${geminiStatus}\nGoogle Drive: ${driveStatus}`;
+            ui.alert("Статус сервисов", results, ui.ButtonSet.OK);
+            
+            if (Lib.logStep) {
+                Lib.logStep("Settings", "Проверка статуса завершена: " + results.replace(/\n/g, ", "));
+            }
+        } catch(e) {
+            ui.alert("Ошибка при проверке", e.message, ui.ButtonSet.OK);
+        }
+    };
+
+    /**
+     * Переход на лист Дашборда (создание-заглушка).
+     */
+    Lib.openLogDashboard = function() {
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+        const sheetName = "📊 Дашборд";
+        const sheet = ss.getSheetByName(sheetName);
+        if (sheet) {
+            ss.setActiveSheet(sheet);
+        } else {
+            const ui = SpreadsheetApp.getUi();
+            const confirm = ui.alert("Дашборд не найден", "Лист '📊 Дашборд' еще не создан. Создать его сейчас?", ui.ButtonSet.YES_NO);
+            if (confirm === ui.Button.YES) {
+                ui.toast("Функция создания дашборда будет реализована в следующей фазе.", "Инфо", 10);
+            }
+        }
+    };
+
+    // --- PROXY FUNCTIONS FOR MENU ---
+    Lib.showAllServicesStatus_proxy = function() {
+        return Lib.showAllServicesStatus();
+    };
+
+    Lib.openLogDashboard_proxy = function() {
+        return Lib.openLogDashboard();
+    };
+
+    Lib.showLogJournal_proxy = function() {
+        return Lib.showLogJournal();
+    };
+
+    Lib.showSyncJournal_proxy = function() {
+        return Lib.showSyncJournal();
     };
 
 })(Lib);

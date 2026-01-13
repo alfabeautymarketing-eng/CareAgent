@@ -2782,6 +2782,46 @@ PRIMARY_DATA_MENU_ACTIONS = {
 # Static menu groups from legacy GAS config (without project-specific items)
 BASE_MENU_GROUPS: List[dict] = [
     {
+        "title": "⚙️ ЭКОСИСТЕМА",
+        "items": [
+            {
+                "submenu": "🔍 Проверки систем",
+                "items": [
+                    {"label": "📊 Показать статус всех сервисов", "function_name": "showAllServicesStatus_proxy"},
+                ],
+            },
+            {
+                "submenu": "🤖 Агент",
+                "items": [
+                    {"label": "Проверить сервис агента", "function_name": "menuCheckService"},
+                    {"label": "⚙️ Настройки Gemini", "function_name": "setupGeminiComplete"},
+                    {"label": "📋 Показать текущие настройки", "function_name": "showGeminiSettings"},
+                ],
+            },
+            {
+                "submenu": "📊 Логи",
+                "items": [
+                    {"label": "📈 Дашборд логов", "function_name": "openLogDashboard_proxy"},
+                    {"separator": True},
+                    {"label": "📑 Показать журнал синхро", "function_name": "showSyncJournal_proxy"},
+                    {"label": "📑 Показать журнал логов", "function_name": "showLogJournal_proxy"},
+                    {"separator": True},
+                    {"label": "📦 Архивировать логи", "function_name": "manualArchiveLogs_proxy"},
+                    {"label": "📊 Статус архива", "function_name": "showArchiveStatus_proxy"},
+                    {"separator": True},
+                    {"label": "🔄 Пересоздать журнал синхро", "function_name": "recreateLogSheet"},
+                    {"label": "🔄 Пересоздать журнал логов", "function_name": "recreateDebugLogSheet"},
+                    {"label": "🧹 Очистить журнал (быстро)", "function_name": "quickCleanLogSheet"},
+                ],
+            },
+            {"separator": True},
+            {"label": "➕ Добавить артикул", "function_name": "addArticleManually"},
+            {"label": "❌ Удалить артикул", "function_name": "deleteSelectedRowsWithSync"},
+            {"label": "🔄 Синхронизировать строку", "function_name": "syncSelectedRow"},
+            {"label": "🔄 Синхронизировать всю таблицу", "function_name": "runFullSync"},
+        ],
+    },
+    {
         "title": "📦 Выгрузка",
         "items": [
             {"label": "Выгрузить Акции", "function_name": "serverExportPromotions"},
@@ -2794,7 +2834,7 @@ BASE_MENU_GROUPS: List[dict] = [
             {"label": "Форматировать лист 'Ордер'", "function_name": "serverFormatOrderSheet"},
             {"separator": True},
             {"label": "1. Создать лист 'Для инвойса'", "function_name": "serverCreateFullInvoice"},
-            {"label": "2. Собрать документы", "function_name": "collectAndCopyDocuments"},
+            {"label": "2. Собрать документы", "function_name": "collectAndCopyDocuments_proxy"},
         ],
     },
     {
@@ -2813,49 +2853,34 @@ BASE_MENU_GROUPS: List[dict] = [
         ],
     },
     {
-        "title": "⚙️ Синхронизация",
+        "title": "⚙️ СИНХРОНИЗАЦИЯ",
         "items": [
+            {"label": "📝 Настроить правила", "function_name": "showSyncRulesManagerDialog"},
+            {"label": "🧹 Очистить уведомления", "function_name": "clearAllToasts"},
+            {"label": "🚀 Миграция правил", "function_name": "migrateLegacyRules"},
+            {"label": "🗑️ Удалить лист 'Правила синхро'", "function_name": "deleteLegacyRulesSheet"},
+            {"separator": True},
             {
-                "submenu": "⚙️ Настройки",
+                "submenu": "Операции с артикулами",
                 "items": [
-                    {"label": "🔄 Обновить триггеры", "function_name": "setupTriggers"},
-                    {"label": "📝 Настроить правила", "function_name": "showSyncRulesManagerDialog"},
+                    {"label": "Добавить артикул", "function_name": "addArticleManually"},
+                    {"label": "Удалить артикул", "function_name": "deleteSelectedRowsWithSync"},
+                    {"label": "Синхронизировать строку", "function_name": "syncSelectedRow"},
+                    {"label": "Синхронизировать ВСЮ таблицу", "function_name": "runFullSync"},
                 ],
             },
             {"separator": True},
-            {"label": "➕ Добавить артикул", "function_name": "addArticleManually"},
-            {"label": "❌ Удалить артикул", "function_name": "deleteSelectedRowsWithSync"},
-            {"separator": True},
-            {"label": "🔄 Синхронизировать строку", "function_name": "syncSelectedRow"},
-            {"label": "🔄 Синхронизировать всю таблицу", "function_name": "runFullSync"},
+            {"label": "🔄 Обновить триггеры", "function_name": "setupTriggers"},
         ],
     },
     {
-        "title": "🤖 Агент",
+        "title": "🤖 АГЕНТ",
         "items": [
-            {"label": "🔑 Ввести API ключ", "function_name": "setupGeminiComplete"},
-            {"label": "📋 Показать настройки", "function_name": "showGeminiSettings"},
-            {"label": "🟢 Проверить сервис", "function_name": "menuCheckService"},
-            {"separator": True},
-            {"label": "🧪 Тест AI (быстрый анализ)", "function_name": "menuSimpleAnalyze"},
+            {"label": "🎯 Smart Match для строки", "function_name": "menuSmartMatch"},
             {"label": "🤖 Анализировать выбранную строку", "function_name": "menuAnalyzeSelected"},
             {"label": "📊 Анализировать пустые строки", "function_name": "menuAnalyzeEmpty"},
             {"separator": True},
             {"label": "📦 Показать категории ТН ВЭД", "function_name": "menuShowCategories"},
-        ],
-    },
-    {
-        "title": "📋 Логи",
-        "items": [
-            {"label": "📊 Статус архивирования", "function_name": "showArchiveStatus_proxy"},
-            {"separator": True},
-            {"label": "📁 Архивировать логи сейчас", "function_name": "manualArchiveLogs_proxy"},
-            {"separator": True},
-            {"label": "⏰ Установить триггер (полночь)", "function_name": "setupMidnightLogTrigger_proxy"},
-            {"label": "🗑️ Удалить триггер", "function_name": "removeMidnightLogTrigger_proxy"},
-            {"separator": True},
-            {"label": "📝 Пересоздать Журнал синхро", "function_name": "recreateLogSheet"},
-            {"label": "🧹 Очистить Журнал синхро", "function_name": "quickCleanLogSheet"},
         ],
     },
 ]

@@ -392,6 +392,41 @@ function recreateDebugLogSheet() {
   throw new Error('callServerRecreateDebugLog не определена');
 }
 
+function manualArchiveLogs_proxy() {
+  if (typeof Lib !== 'undefined' && Lib.manualArchiveLogs_proxy) {
+    return Lib.manualArchiveLogs_proxy();
+  }
+  throw new Error('Lib.manualArchiveLogs_proxy не определена');
+}
+
+function showArchiveStatus_proxy() {
+  if (typeof Lib !== 'undefined' && Lib.showArchiveStatus_proxy) {
+    return Lib.showArchiveStatus_proxy();
+  }
+  throw new Error('Lib.showArchiveStatus_proxy не определена');
+}
+
+function showLogJournal_proxy() {
+  if (typeof Lib !== 'undefined' && Lib.showLogJournal) {
+    return Lib.showLogJournal();
+  }
+  throw new Error('Lib.showLogJournal не определена');
+}
+
+function showSyncJournal_proxy() {
+  if (typeof Lib !== 'undefined' && Lib.showSyncJournal) {
+    return Lib.showSyncJournal();
+  }
+  throw new Error('Lib.showSyncJournal не определена');
+}
+
+function collectAndCopyDocuments_proxy() {
+  if (typeof Lib !== 'undefined' && Lib.collectAndCopyDocuments) {
+    return Lib.collectAndCopyDocuments();
+  }
+  throw new Error('Lib.collectAndCopyDocuments не определена');
+}
+
 // ============ ОБРАБОТКА ПРАЙСОВ (SK) ============
 
 function processSkPriceSheet() {
@@ -1990,5 +2025,23 @@ function serverGetLogStatus(projectCode) {
     console.error('Log status request failed: ' + err.message);
     ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
     return { status: 'error', message: err.message };
+  }
+}
+
+/**
+ * Прокси для показа статуса всех сервисов.
+ */
+function showAllServicesStatus_proxy() {
+  if (typeof Lib !== 'undefined' && typeof Lib.showAllServicesStatus === 'function') {
+    return Lib.showAllServicesStatus();
+  }
+}
+
+/**
+ * Прокси для открытия дашборда логов.
+ */
+function openLogDashboard_proxy() {
+  if (typeof Lib !== 'undefined' && typeof Lib.openLogDashboard === 'function') {
+    return Lib.openLogDashboard();
   }
 }

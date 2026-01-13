@@ -120,8 +120,7 @@ var Lib = Lib || {};
       const active = ss.getActiveSheet();
       const names = [];
       if (Lib.CONFIG && Lib.CONFIG.SHEETS) {
-        // Strict priority: Логи first, then others
-        if (Lib.CONFIG.SHEETS.SESSION_LOG) names.push(Lib.CONFIG.SHEETS.SESSION_LOG);
+        // Strict priority: LOG_DEBUG first, then LOG
         if (Lib.CONFIG.SHEETS.LOG_DEBUG) names.push(Lib.CONFIG.SHEETS.LOG_DEBUG);
         if (Lib.CONFIG.SHEETS.LOG) names.push(Lib.CONFIG.SHEETS.LOG);
       }
