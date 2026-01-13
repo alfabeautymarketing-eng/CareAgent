@@ -1638,6 +1638,20 @@ if (ss) {
     );
     if (resp !== ui.Button.YES) return;
 
+    // START: Log function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Начало синхронизации выбранных строк",
+        "INFO",
+        "",
+        "syncSelectedRow",
+        `Пользователь инициировал синхронизацию ${range.getNumRows()} строк на листе "${sheet.getName()}"`,
+        "Sync",
+        "START",
+        { sheetName: sheet.getName(), rowCount: range.getNumRows(), startRow: range.getRow(), endRow: range.getLastRow() }
+      );
+    }
+
     try {
       SpreadsheetApp.getActiveSpreadsheet().toast(
         `Синхронизация...`,
@@ -1645,7 +1659,35 @@ if (ss) {
         2
       );
       const rules = _loadSyncRules(true);
+
+      // PROGRESS: Log rules loaded
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Правила синхронизации загружены",
+          "DEBUG",
+          "",
+          "syncSelectedRow",
+          `Загружено ${rules.length} правил синхронизации`,
+          "Sync",
+          "PROGRESS",
+          null,
+          { rulesCount: rules.length }
+        );
+      }
+
       if (rules.length === 0) {
+        // WARNING: No rules found
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Нет активных правил синхронизации",
+            "WARN",
+            "",
+            "syncSelectedRow",
+            "В системе не найдено активных правил для выполнения синхронизации",
+            "Sync",
+            "WARNING"
+          );
+        }
         ui.alert("Нет активных правил");
         return;
       }
@@ -1660,6 +1702,21 @@ if (ss) {
       const rows = [];
       for (let r = range.getRow(); r <= range.getLastRow(); r++)
         if (r > 1) rows.push(r);
+
+      // PROGRESS: Log before sync loop
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Начало обработки строк",
+          "DEBUG",
+          "",
+          "syncSelectedRow",
+          `Обработка ${rows.length} строк по ${rules.length} правилам`,
+          "Sync",
+          "PROGRESS",
+          null,
+          { rowsCount: rows.length, rulesCount: rules.length }
+        );
+      }
 
       let counter = 0;
       rows.forEach((row) => {
@@ -1694,6 +1751,21 @@ if (ss) {
         });
       });
 
+      // SUCCESS: Log completion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Синхронизация выбранных строк завершена успешно",
+          "INFO",
+          "",
+          "syncSelectedRow",
+          `Обработано ${counter} полей на ${rows.length} строках`,
+          "Sync",
+          "SUCCESS",
+          { sheetName: sheet.getName(), rowCount: rows.length },
+          { fieldsProcessed: counter, rowsProcessed: rows.length, rulesApplied: rules.length }
+        );
+      }
+
       SpreadsheetApp.getActiveSpreadsheet().toast(
         `Готово. Обработано ${counter} полей.`,
         "Готово",
@@ -1701,6 +1773,20 @@ if (ss) {
       );
       ui.alert(`Синхронизация завершена. Полей: ${counter}`);
     } catch (err) {
+      // ERROR: Log failure with full context
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при синхронизации выбранных строк",
+          "ERROR",
+          "",
+          "syncSelectedRow",
+          err && err.message ? err.message : String(err),
+          "Sync",
+          "ERROR",
+          { sheetName: sheet.getName(), rowCount: range.getNumRows() },
+          { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null }
+        );
+      }
       Lib.logError("syncSelectedRow: ошибка", err);
       ui.alert(`Ошибка: ${err.message}`);
       SpreadsheetApp.getActiveSpreadsheet().toast('Ошибка синхронизации', 'Ошибка', 3);
@@ -2884,8 +2970,33 @@ if (ss) {
       );
       if (resp !== ui.Button.YES) return;
 
+      // START: Log function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Запуск полной синхронизации",
+          "INFO",
+          "",
+          "runFullSync",
+          "Пользователь инициировал полную синхронизацию всех правил",
+          "Sync",
+          "START"
+        );
+      }
+
       const lock = LockService.getScriptLock();
       if (!lock.tryLock(15000)) {
+        // WARNING: Lock acquisition failed
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Процесс синхронизации уже выполняется",
+            "WARN",
+            "",
+            "runFullSync",
+            "Не удалось получить блокировку - другой процесс ещё работает",
+            "Sync",
+            "WARNING"
+          );
+        }
         ui.alert("Процесс уже выполняется.");
         return;
       }
@@ -2923,7 +3034,35 @@ if (ss) {
             (!r.isExternal ||
               (typeof r.targetDocId === "string" && r.targetDocId))
         );
+
+        // PROGRESS: Log rules loaded
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Правила синхронизации загружены",
+            "DEBUG",
+            "",
+            "runFullSync",
+            `Всего правил загружено: ${allRulesRaw.length}, из них валидных: ${allRules.length}`,
+            "Sync",
+            "PROGRESS",
+            null,
+            { totalLoaded: allRulesRaw.length, validRules: allRules.length }
+          );
+        }
+
         if (allRules.length === 0) {
+          // WARNING: No valid rules found
+          if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+            Lib.logWithEmoji(
+              "Активные валидные правила не найдены",
+              "WARN",
+              "",
+              "runFullSync",
+              "В системе нет активных правил синхронизации для обработки",
+              "Sync",
+              "WARNING"
+            );
+          }
           ui.alert("Активные валидные правила не найдены.");
           return;
         }
@@ -2935,6 +3074,18 @@ if (ss) {
         }, {});
         const sheetsToProcess = Object.keys(rulesBySourceSheet);
         if (sheetsToProcess.length === 0) {
+          // WARNING: No source sheets to process
+          if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+            Lib.logWithEmoji(
+              "Нет листов-источников для проверки",
+              "WARN",
+              "",
+              "runFullSync",
+              "После фильтрации правил не осталось листов-источников",
+              "Sync",
+              "WARNING"
+            );
+          }
           ui.alert("Нет листов-источников для проверки.");
           return;
         }
@@ -2954,15 +3105,57 @@ if (ss) {
           JSON.stringify(state)
         );
 
+        // PROGRESS: Log state initialization
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Инициализация полной синхронизации",
+            "DEBUG",
+            "",
+            "runFullSync",
+            `К обработке ${sheetsToProcess.length} листов-источников`,
+            "Sync",
+            "PROGRESS",
+            null,
+            { sheetsCount: sheetsToProcess.length, totalRules: allRules.length, startedAt: state.startedAtUtc }
+          );
+        }
+
         ss.toast(
           `Старт полной синхронизации… (${sheetsToProcess.length} листов)`,
           "Full Sync",
           8
         );
 
+        // PROGRESS: Before first iteration
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Начало обработки листов",
+            "DEBUG",
+            "",
+            "runFullSync",
+            `Запуск обработки ${sheetsToProcess.length} листов по ${allRules.length} правилам`,
+            "Sync",
+            "PROGRESS"
+          );
+        }
+
         // 5) Первая итерация (дальше _continueFullSync сама поставит таймер, если надо)
         Lib._continueFullSync();
       } catch (e) {
+        // ERROR: Log failure with full context
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Ошибка запуска полной синхронизации",
+            "ERROR",
+            "",
+            "runFullSync",
+            e && e.message ? e.message : String(e),
+            "Sync",
+            "ERROR",
+            null,
+            { error: e ? e.toString() : "Unknown error", stack: e && e.stack ? e.stack : null }
+          );
+        }
         Lib.logError("[FullSync] Ошибка запуска runFullSync", e);
         ui.alert(`Ошибка запуска: ${e && e.message ? e.message : e}`);
       } finally {
@@ -3204,6 +3397,24 @@ if (ss) {
 
       // всё готово
       props.deleteProperty(STATE_KEY);
+
+      // SUCCESS: Log completion with full statistics
+      const totalCorrections = state.totalCorrections || 0;
+      const processingTimeMs = new Date().getTime() - new Date(state.startedAtUtc).getTime();
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Полная синхронизация завершена успешно",
+          "INFO",
+          "",
+          "_continueFullSync",
+          `Обработано ${state.sheetIndex} листов, выполнено ${totalCorrections} исправлений`,
+          "Sync",
+          "SUCCESS",
+          null,
+          { sheetsProcessed: state.sheetIndex, totalCorrections: totalCorrections, processingTimeMs: processingTimeMs, startedAt: state.startedAtUtc }
+        );
+      }
+
       SpreadsheetApp.getActiveSpreadsheet().toast(
         `Полная синхронизация завершена. Исправлений: ${
           state.totalCorrections || 0
