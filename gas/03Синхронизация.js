@@ -1500,10 +1500,37 @@ if (ss) {
   Lib.addArticleManually = function () {
     let ui = null;
     try { ui = SpreadsheetApp.getUi(); } catch (e) { console.warn("UI not available"); }
+
+    // START: Log function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Начало создания артикула вручную",
+        "INFO",
+        "",
+        "addArticleManually",
+        "Пользователь инициировал создание нового артикула",
+        "Article",
+        "START"
+      );
+    }
+
     try {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const sh = ss.getSheetByName(Lib.CONFIG.SHEETS.PRIMARY);
       if (!sh) throw new Error(`Лист "${Lib.CONFIG.SHEETS.PRIMARY}" не найден`);
+
+      // PROGRESS: Starting article generation logic
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Поиск максимального номера артикула",
+          "DEBUG",
+          "",
+          "addArticleManually",
+          "Анализ существующих артикулов для определения следующего номера",
+          "Article",
+          "PROGRESS"
+        );
+      }
 
       // найти максимальный номер по префиксу бренда
       const prefix = Lib.CONFIG.SETTINGS.BRAND_PREFIX;
@@ -1526,8 +1553,36 @@ if (ss) {
       const next = String(maxNum + 1).padStart(3, "0");
       const newId = `${prefix}${next}`;
 
+      // PROGRESS: Creating article row
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Добавление нового артикула в основной лист",
+          "DEBUG",
+          "",
+          "addArticleManually",
+          `Создание новой строки с ID: ${newId}`,
+          "Article",
+          "PROGRESS",
+          { newId: newId, prefix: prefix, number: maxNum + 1 }
+        );
+      }
+
       sh.appendRow([newId]);
       Lib.deleteKeyCacheForSheet(Lib.CONFIG.SHEETS.PRIMARY);
+
+      // PROGRESS: Triggering cascade and sync
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Запуск автосоздания и синхронизации",
+          "DEBUG",
+          "",
+          "addArticleManually",
+          `Имитирование события onEdit для артикула ${newId}`,
+          "Article",
+          "PROGRESS",
+          { newId: newId }
+        );
+      }
 
       // имитируем onEdit для автосоздания и синхронизации
       const e = {
@@ -1540,9 +1595,38 @@ if (ss) {
           Lib.onEdit_internal_(e);
       }
 
+      // SUCCESS: Log completion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Артикул создан и синхронизирован успешно",
+          "INFO",
+          "",
+          "addArticleManually",
+          `Новый артикул ${newId} создан и запущена синхронизация`,
+          "Article",
+          "SUCCESS",
+          { newId: newId },
+          { articleId: newId, cascadeTriggered: true, syncInitiated: !!Lib.onEdit_internal_ }
+        );
+      }
+
       if (ui) ui.alert(`Новый артикул ${newId} создан.`);
       console.log(`Новый артикул ${newId} создан.`);
     } catch (err) {
+      // ERROR: Log failure with full context
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при создании артикула",
+          "ERROR",
+          "",
+          "addArticleManually",
+          err && err.message ? err.message : String(err),
+          "Article",
+          "ERROR",
+          null,
+          { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null }
+        );
+      }
       console.error("addArticleManually error: " + err.message);
       if (ui) ui.alert(`Ошибка: ${err.message}`);
       Lib.logError("addArticleManually: ошибка", err);
@@ -1565,52 +1649,172 @@ if (ss) {
 
     const sheet = ss.getActiveSheet();
     const sheetName = sheet.getName();
-    const sheetsConfig = (Lib.CONFIG && Lib.CONFIG.SHEETS) || {};
-    if (!sheetsConfig || Object.keys(sheetsConfig).length === 0) {
-      ui.alert("Конфигурация проекта не загружена. Обновите библиотеку.");
-      return;
-    }
-    const service = [
-      sheetsConfig.RULES,
-      sheetsConfig.LOG,
-      sheetsConfig.EXTERNAL_DOCS,
-    ].filter(Boolean);
-    if (service.includes(sheetName)) {
-      ui.alert("Нельзя удалять строки на служебных листах.");
-      return;
-    }
 
-    const rows = new Set();
-    sel.getRanges().forEach((r) => {
-      for (let i = r.getRow(); i <= r.getLastRow(); i++) if (i > 1) rows.add(i);
-    });
-    const rowsSorted = Array.from(rows).sort((a, b) => b - a);
-    if (rowsSorted.length === 0) {
-      ui.alert("Нет строк данных для удаления");
-      return;
+    // START: Log function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Начало удаления выбранных строк с синхронизацией",
+        "INFO",
+        "",
+        "deleteSelectedRowsWithSync",
+        `Пользователь инициировал удаление строк на листе "${sheetName}"`,
+        "Delete",
+        "START",
+        { sheetName: sheetName, selection: "active" }
+      );
     }
 
-    const confirm = ui.alert(
-      "Подтверждение",
-      `Удалить ${rowsSorted.length} строк(и) на листе "${sheetName}" и синхронно в связанных?`,
-      ui.ButtonSet.YES_NO
-    );
-    if (confirm !== ui.Button.YES) return;
+    try {
+      const sheetsConfig = (Lib.CONFIG && Lib.CONFIG.SHEETS) || {};
+      if (!sheetsConfig || Object.keys(sheetsConfig).length === 0) {
+        ui.alert("Конфигурация проекта не загружена. Обновите библиотеку.");
+        return;
+      }
+      const service = [
+        sheetsConfig.RULES,
+        sheetsConfig.LOG,
+        sheetsConfig.EXTERNAL_DOCS,
+      ].filter(Boolean);
 
-    // собираем ID и удаляем локально
-    const ids = [];
-    rowsSorted.forEach((r) => {
-      const id = String(sheet.getRange(r, 1).getValue() || "").trim();
-      if (id) ids.push(id);
-      sheet.deleteRow(r);
-    });
-    Lib.deleteKeyCacheForSheet(sheetName);
+      // WARNING: If trying to delete from service sheets
+      if (service.includes(sheetName)) {
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Попытка удаления из служебного листа",
+            "WARN",
+            "",
+            "deleteSelectedRowsWithSync",
+            `Попытка удаления строк из служебного листа: ${sheetName}`,
+            "Delete",
+            "WARNING"
+          );
+        }
+        ui.alert("Нельзя удалять строки на служебных листах.");
+        return;
+      }
 
-    if (ids.length > 0) {
-      const res = Lib.processBatchDeletion_(ids);
-      ui.alert(res.message);
-    } else {
-      ui.alert(`Удалено ${rowsSorted.length} строк(и).`);
+      const rows = new Set();
+      sel.getRanges().forEach((r) => {
+        for (let i = r.getRow(); i <= r.getLastRow(); i++) if (i > 1) rows.add(i);
+      });
+      const rowsSorted = Array.from(rows).sort((a, b) => b - a);
+      if (rowsSorted.length === 0) {
+        ui.alert("Нет строк данных для удаления");
+        return;
+      }
+
+      // PROGRESS: Before confirmation
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Подготовка к удалению строк",
+          "DEBUG",
+          "",
+          "deleteSelectedRowsWithSync",
+          `Выбрано ${rowsSorted.length} строк для удаления`,
+          "Delete",
+          "PROGRESS",
+          null,
+          { rowsToDelete: rowsSorted.length, sheetName: sheetName }
+        );
+      }
+
+      const confirm = ui.alert(
+        "Подтверждение",
+        `Удалить ${rowsSorted.length} строк(и) на листе "${sheetName}" и синхронно в связанных?`,
+        ui.ButtonSet.YES_NO
+      );
+      if (confirm !== ui.Button.YES) return;
+
+      // PROGRESS: Before actual deletion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Выполнение удаления строк",
+          "DEBUG",
+          "",
+          "deleteSelectedRowsWithSync",
+          `Удаление ${rowsSorted.length} строк из листа ${sheetName}`,
+          "Delete",
+          "PROGRESS"
+        );
+      }
+
+      // собираем ID и удаляем локально
+      const ids = [];
+      rowsSorted.forEach((r) => {
+        const id = String(sheet.getRange(r, 1).getValue() || "").trim();
+        if (id) ids.push(id);
+        sheet.deleteRow(r);
+      });
+      Lib.deleteKeyCacheForSheet(sheetName);
+
+      // PROGRESS: Before batch deletion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Синхронизация удаления в связанных листах",
+          "DEBUG",
+          "",
+          "deleteSelectedRowsWithSync",
+          `Синхронизация удаления ${ids.length} ID в целевых листах`,
+          "Delete",
+          "PROGRESS",
+          null,
+          { deletedIds: ids }
+        );
+      }
+
+      let resultMessage = `Удалено ${rowsSorted.length} строк(и).`;
+      if (ids.length > 0) {
+        const res = Lib.processBatchDeletion_(ids);
+        resultMessage = res.message;
+
+        // SUCCESS: Log completion with results
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Удаление строк с синхронизацией завершено успешно",
+            "INFO",
+            "",
+            "deleteSelectedRowsWithSync",
+            `Удалено ${rowsSorted.length} строк, синхронизировано ${ids.length} записей`,
+            "Delete",
+            "SUCCESS",
+            { sheetName: sheetName, rowCount: rowsSorted.length },
+            { deletedRows: rowsSorted.length, deletedIds: ids.length }
+          );
+        }
+      } else {
+        // SUCCESS: Log completion without batch sync
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Удаление строк завершено",
+            "INFO",
+            "",
+            "deleteSelectedRowsWithSync",
+            `Удалено ${rowsSorted.length} строк без ID для синхронизации`,
+            "Delete",
+            "SUCCESS",
+            { sheetName: sheetName, rowCount: rowsSorted.length },
+            { deletedRows: rowsSorted.length }
+          );
+        }
+      }
+      ui.alert(resultMessage);
+
+    } catch (err) {
+      // ERROR: Log failure with full context
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при удалении строк с синхронизацией",
+          "ERROR",
+          "",
+          "deleteSelectedRowsWithSync",
+          err && err.message ? err.message : String(err),
+          "Delete",
+          "ERROR",
+          { sheetName: sheetName },
+          { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null }
+        );
+      }
+      ui.alert(`Ошибка: ${err.message}`);
     }
   };
 
