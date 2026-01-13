@@ -445,6 +445,99 @@ var Lib = Lib || {};
         return Lib.collectAndCopyDocuments();
     };
 
+    // --- LOG SHEET FUNCTIONS ---
+
+    /**
+     * Быстро очищает журнал логов (удаляет все данные, оставляя заголовки)
+     */
+    Lib.quickCleanLogSheet = function() {
+        const ui = SpreadsheetApp.getUi();
+        const confirm = ui.alert("Очистка логов", "Удалить все логи из журнала? Это действие необратимо!", ui.ButtonSet.YES_NO);
+        if (confirm !== ui.Button.YES) return;
+
+        try {
+            const ss = SpreadsheetApp.getActiveSpreadsheet();
+            const sheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.LOG_DEBUG) || "Журнал логов";
+            const sheet = ss.getSheetByName(sheetName);
+
+            if (sheet) {
+                const lastRow = sheet.getLastRow();
+                if (lastRow > 1) {
+                    sheet.deleteRows(2, lastRow - 1);
+                }
+                ui.alert("✅ Успешно", "Логи удалены. Остались только заголовки.", ui.ButtonSet.OK);
+
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Журнал логов очищен", "INFO", "🧹", "quickCleanLogSheet", "Все данные удалены, заголовки сохранены", "System", "SUCCESS");
+                }
+            } else {
+                ui.alert("❌ Ошибка", "Лист '" + sheetName + "' не найден", ui.ButtonSet.OK);
+            }
+        } catch(e) {
+            ui.alert("❌ Ошибка", e.message, ui.ButtonSet.OK);
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Ошибка очистки логов", "ERROR", "❌", "quickCleanLogSheet", e.message, "System", "ERROR");
+            }
+        }
+    };
+
+    /**
+     * Пересоздаёт лист LOG (Журнал синхро)
+     */
+    Lib.recreateLogSheet = function() {
+        try {
+            const ss = SpreadsheetApp.getActiveSpreadsheet();
+            const sheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.LOG) || "Журнал синхро";
+
+            // Удаляем старый лист
+            let sheet = ss.getSheetByName(sheetName);
+            if (sheet) {
+                ss.deleteSheet(sheet);
+            }
+
+            // Создаём новый лист с заголовками
+            sheet = ss.insertSheet(sheetName, 1);
+            sheet.appendRow(["Время", "Детали", "Статус", "Сообщение", "Функция"]);
+
+            const ui = SpreadsheetApp.getUi();
+            ui.alert("✅ Готово", "Лист '" + sheetName + "' пересоздан", ui.ButtonSet.OK);
+
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Лист LOG пересоздан", "INFO", "🔄", "recreateLogSheet", sheetName, "System", "SUCCESS");
+            }
+        } catch(e) {
+            const ui = SpreadsheetApp.getUi();
+            ui.alert("❌ Ошибка", e.message, ui.ButtonSet.OK);
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Ошибка пересоздания LOG", "ERROR", "❌", "recreateLogSheet", e.message, "System", "ERROR");
+            }
+        }
+    };
+
+    /**
+     * Пересоздаёт лист LOG_DEBUG (Журнал логов) с полной структурой
+     */
+    Lib.recreateDebugLogSheet = function() {
+        const ui = SpreadsheetApp.getUi();
+        try {
+            if (Lib.ensureLogDebugSheetStructure) {
+                Lib.ensureLogDebugSheetStructure();
+                ui.alert("✅ Готово", "Лист LOG_DEBUG пересоздан с полной структурой", ui.ButtonSet.OK);
+
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Лист LOG_DEBUG пересоздан", "INFO", "🔄", "recreateDebugLogSheet", "Структура восстановлена", "System", "SUCCESS");
+                }
+            } else {
+                throw new Error("Функция ensureLogDebugSheetStructure не найдена");
+            }
+        } catch(e) {
+            ui.alert("❌ Ошибка", e.message, ui.ButtonSet.OK);
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Ошибка пересоздания LOG_DEBUG", "ERROR", "❌", "recreateDebugLogSheet", e.message, "System", "ERROR");
+            }
+        }
+    };
+
     // --- OVERRIDE: Archive Logs ---
     Lib.manualArchiveLogs_proxy = function() {
         const ui = SpreadsheetApp.getUi();
@@ -501,100 +594,152 @@ var Lib = Lib || {};
 
     Lib.showSyncJournal = function() {
         const ss = SpreadsheetApp.getActiveSpreadsheet();
+        const ui = SpreadsheetApp.getUi();
         const sheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.LOG) || "Журнал синхро";
         const sheet = ss.getSheetByName(sheetName);
         if (sheet) {
             ss.setActiveSheet(sheet);
         } else {
-            SpreadsheetApp.getUi().alert("Лист '" + sheetName + "' не найден");
+            ui.alert("Лист '" + sheetName + "' не найден");
         }
     };
 
     /**
-     * Проверка статуса всех внешних сервисов.
+     * Проверка статуса всех внешних сервисов с детальным логированием.
      */
     Lib.showAllServicesStatus = function() {
         const ui = SpreadsheetApp.getUi();
         SpreadsheetApp.getActive().toast("Проверка статуса всех сервисов...", "Экосистема", 5);
 
-        // Task 1.6: Логирование в LOG_DEBUG с новой сигнатурой
-        // START: инициализация
+        // START: Логируем начало процесса
         if (Lib.logWithEmoji) {
-            Lib.logWithEmoji("Начало проверки статуса всех сервисов", "INFO", "🚀", "showAllServicesStatus", "Проверка сервера, Gemini и Google Drive", "Settings", "START");
+            Lib.logWithEmoji(
+                "Запуск полной диагностики системы", 
+                "INFO", 
+                "🚀", 
+                "showAllServicesStatus", 
+                "Начата проверка всех внешних сервисов", 
+                "System", 
+                "START"
+            );
         }
 
         try {
-            const checkResults = {};
+            const checkResults = {
+                server: { status: "PENDING", message: "" },
+                gemini: { status: "PENDING", message: "" },
+                drive: { status: "PENDING", message: "" }
+            };
 
-            // 1. Проверка основного сервера (корневой эндпоинт)
+            // 1. Проверка основного сервера
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Проверка связи с основным сервером...", "DEBUG", "⏳", "showAllServicesStatus", "Вызов //health", "API", "PROGRESS");
+            }
+
             let serverStatus = "🔴 Ошибка";
             try {
                 const res = Lib.callServer("//health", {}, "GET");
                 if (res && res.status === "healthy") {
                     serverStatus = "🟢 OK";
-                    checkResults.server = { status: "OK", message: "Сервер здоров" };
+                    checkResults.server = { status: "OK", message: "Healthy", details: res };
+                    if (Lib.logWithEmoji) {
+                        Lib.logWithEmoji("Сервер доступен", "INFO", "✅", "showAllServicesStatus", "Ответ HEALTHY получен", "API", "SUCCESS", null, res);
+                    }
                 } else {
-                    checkResults.server = { status: "OFFLINE", message: "Сервер не ответил" };
+                    checkResults.server = { status: "ERROR", message: "Invalid Response", details: res };
+                    if (Lib.logWithEmoji) {
+                        Lib.logWithEmoji("Некорректный ответ сервера", "WARN", "⚠️", "showAllServicesStatus", "Статус не healthy", "API", "WARNING", null, res);
+                    }
                 }
-            } catch(e) {
+            } catch(e) { 
                 serverStatus = "🔴 " + e.message;
                 checkResults.server = { status: "ERROR", message: e.message };
-                // Task 1.6: Log server check error
                 if (Lib.logWithEmoji) {
-                    Lib.logWithEmoji("Ошибка при проверке сервера: " + e.message, "WARN", "⚠️", "showAllServicesStatus", "Проверка сервера", "Settings", "WARNING", { endpoint: "//health" }, { error: e.message });
+                    Lib.logWithEmoji("Ошибка связи с сервером", "ERROR", "❌", "showAllServicesStatus", e.message, "API", "ERROR", null, {error: e.toString()});
                 }
             }
+            
+            // 2. Проверка Gemini/AI
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Проверка статуса Gemini AI...", "DEBUG", "⏳", "showAllServicesStatus", "Вызов /ai/status", "API", "PROGRESS");
+            }
 
-            // 2. Проверка Gemini/AI (через /api/v1/ai/status)
             let geminiStatus = "🔴 Ошибка";
             try {
                 const res = Lib.callServer("/ai/status", {}, "GET");
                 if (res && res.status === "online") {
                     geminiStatus = "🟢 OK";
-                    checkResults.gemini = { status: "OK", message: "Gemini AI онлайн" };
+                    checkResults.gemini = { status: "OK", message: "Online", model: res.model };
+                    if (Lib.logWithEmoji) {
+                        Lib.logWithEmoji("Gemini AI доступен", "INFO", "✅", "showAllServicesStatus", `Модель: ${res.model}`, "API", "SUCCESS", null, res);
+                    }
                 } else {
-                    checkResults.gemini = { status: "OFFLINE", message: "Gemini AI оффлайн" };
+                    checkResults.gemini = { status: "ERROR", message: "Offline/Error", details: res };
+                    if (Lib.logWithEmoji) {
+                        Lib.logWithEmoji("Gemini AI вернул ошибку", "WARN", "⚠️", "showAllServicesStatus", `Статус: ${res.status}, Ошибка: ${res.error}`, "API", "WARNING", null, res);
+                    }
                 }
-            } catch(e) {
+            } catch(e) { 
                 geminiStatus = "🔴 " + e.message;
                 checkResults.gemini = { status: "ERROR", message: e.message };
-                // Task 1.6: Log Gemini check error
                 if (Lib.logWithEmoji) {
-                    Lib.logWithEmoji("Ошибка при проверке Gemini: " + e.message, "WARN", "⚠️", "showAllServicesStatus", "Проверка Gemini", "Settings", "WARNING", { endpoint: "/ai/status" }, { error: e.message });
+                    Lib.logWithEmoji("Ошибка проверки Gemini AI", "ERROR", "❌", "showAllServicesStatus", e.message, "API", "ERROR", null, {error: e.toString()});
                 }
             }
-
+            
             // 3. Проверка Google Drive
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Проверка доступа к Google Drive...", "DEBUG", "⏳", "showAllServicesStatus", "Получение корневой папки", "Storage", "PROGRESS");
+            }
+
             let driveStatus = "🟢 OK";
             try {
-                DriveApp.getRootFolder();
-                checkResults.drive = { status: "OK", message: "Google Drive доступен" };
-            } catch(e) {
+                const root = DriveApp.getRootFolder();
+                checkResults.drive = { status: "OK", message: "Access Granted", name: root.getName() };
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Google Drive доступен", "INFO", "✅", "showAllServicesStatus", "Корневая папка получена", "Storage", "SUCCESS");
+                }
+            } catch(e) { 
                 driveStatus = "🔴 " + e.message;
                 checkResults.drive = { status: "ERROR", message: e.message };
-                // Task 1.6: Log Drive check error
                 if (Lib.logWithEmoji) {
-                    Lib.logWithEmoji("Ошибка при проверке Google Drive: " + e.message, "WARN", "⚠️", "showAllServicesStatus", "Проверка Google Drive", "Settings", "WARNING", { service: "DriveApp" }, { error: e.message });
+                    Lib.logWithEmoji("Ошибка доступа к Google Drive", "ERROR", "❌", "showAllServicesStatus", e.message, "Storage", "ERROR", null, {error: e.toString()});
                 }
             }
-
-            const results = `Основной сервер: ${serverStatus}\nGemini AI: ${geminiStatus}\nGoogle Drive: ${driveStatus}`;
-            ui.alert("Статус сервисов", results, ui.ButtonSet.OK);
-
-            // Task 1.6: SUCCESS log with all results
+            
+            const resultsSummary = `Основной сервер: ${serverStatus}\nGemini AI: ${geminiStatus}\nGoogle Drive: ${driveStatus}`;
+            ui.alert("Статус сервисов", resultsSummary, ui.ButtonSet.OK);
+            
+            // SUCCESS: Итоговый лог
             if (Lib.logWithEmoji) {
-                Lib.logWithEmoji("Проверка статуса завершена успешно", "INFO", "✅", "showAllServicesStatus", results.replace(/\n/g, ", "), "Settings", "SUCCESS", { services: ["server", "gemini", "drive"] }, checkResults);
+                Lib.logWithEmoji(
+                    "Диагностика завершена", 
+                    "INFO", 
+                    "🏁", 
+                    "showAllServicesStatus", 
+                    resultsSummary.replace(/\n/g, ", "), 
+                    "System", 
+                    "SUCCESS", 
+                    null, 
+                    checkResults
+                );
             }
 
-            if (Lib.logStep) {
-                Lib.logStep("Settings", "Проверка статуса завершена: " + results.replace(/\n/g, ", "));
-            }
         } catch(e) {
             ui.alert("Ошибка при проверке", e.message, ui.ButtonSet.OK);
-
-            // Task 1.6: ERROR log
+            // ERROR: Итоговый лог
             if (Lib.logWithEmoji) {
-                Lib.logWithEmoji("Критическая ошибка при проверке статуса: " + e.message, "ERROR", "❌", "showAllServicesStatus", "Проверка не удалась", "Settings", "ERROR", { action: "checkAllServices" }, { error: e.message, stack: e.stack });
+                Lib.logWithEmoji(
+                    "Критическая ошибка диагностики", 
+                    "ERROR", 
+                    "📛", 
+                    "showAllServicesStatus", 
+                    e.message, 
+                    "System", 
+                    "ERROR", 
+                    null, 
+                    {error: e.toString()}
+                );
             }
         }
     };
