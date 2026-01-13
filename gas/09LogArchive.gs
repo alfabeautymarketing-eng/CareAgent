@@ -283,33 +283,29 @@
   };
 
   /**
-   * ПУБЛИЧНАЯ: Пересоздаёт лист "Логи" после архивирования.
+   * ПУБЛИЧНАЯ: Очищает LOG_DEBUG лист после архивирования.
+   * ОБНОВЛЕНО: Использует новую систему LOG_DEBUG вместо старого листа "Логи"
    * Вызывается после archiveLogsDaily.
    */
   Lib.resetDailyLogSheet = function () {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) return false;
+    if (!ss || !Lib.CONFIG || !Lib.CONFIG.SHEETS || !Lib.CONFIG.SHEETS.LOG_DEBUG) {
+      return false;
+    }
 
     try {
-      const logSheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.SESSION_LOG) || "Логи";
+      const logSheetName = Lib.CONFIG.SHEETS.LOG_DEBUG;
       let sh = ss.getSheetByName(logSheetName);
 
       if (sh) {
-        // Очищаем лист, сохраняя заголовки
+        // Очищаем данные лист, сохраняя заголовки
         const lastRow = sh.getLastRow();
         if (lastRow > 1) {
           sh.deleteRows(2, lastRow - 1);
         }
-      } else {
-        // Создаём новый лист
-        sh = ss.insertSheet(logSheetName);
-        const headers = ["🕒 Время", "🏷️ Категория", "💬 Действие", "📝 Детали", "🔘 Статус"];
-        sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
-        sh.setFrozenRows(1);
-        sh.getRange(1, 1, 1, headers.length).setBackground("#e8eaf6");
       }
 
-      _logToSheet_("SYSTEM", "Лист логов очищен после архивации", "INFO");
+      _logToSheet_("SYSTEM", "Лист LOG_DEBUG очищен после архивации", "INFO");
       return true;
     } catch (e) {
       console.error("resetDailyLogSheet error:", e);
@@ -404,7 +400,8 @@
   // =======================================================================================
 
   /**
-   * Универсальная функция логирования в лист "Логи"
+   * Универсальная функция логирования
+   * ОБНОВЛЕНО: Использует новую систему LOG_DEBUG вместо старого листа "Логи"
    * @param {string} category - Категория действия
    * @param {string} action - Описание действия
    * @param {string} level - Уровень (INFO, WARN, ERROR, DEBUG)
@@ -412,37 +409,14 @@
    */
   function _logToSheet_(category, action, level, details) {
     try {
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      if (!ss) return;
-
-      const logSheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.SESSION_LOG) || "Логи";
-      let sh = ss.getSheetByName(logSheetName);
-
-      if (!sh) {
-        // Создаём лист если его нет
-        sh = ss.insertSheet(logSheetName);
-        const headers = ["🕒 Время", "🏷️ Категория", "💬 Действие", "📝 Детали", "🔘 Статус"];
-        sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
-        sh.setFrozenRows(1);
+      // Используем новую систему логирования через Lib.logWithEmoji
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        const message = action + (details ? ": " + details : "");
+        Lib.logWithEmoji(message, level, "", category, details || "");
+      } else {
+        // Fallback: просто логируем в консоль если Lib недоступен
+        console.log(`[${category}] ${action}: ${details || ""}`);
       }
-
-      const timestamp = Utilities.formatDate(new Date(), "Europe/Moscow", "dd.MM.yyyy HH:mm:ss");
-      const statusMap = {
-        "INFO": "✅ OK",
-        "WARN": "⚠️ ВНИМАНИЕ",
-        "ERROR": "❌ ОШИБКА",
-        "DEBUG": "🔍 DEBUG"
-      };
-
-      const row = [
-        timestamp,
-        category,
-        action,
-        details || "",
-        statusMap[level] || statusMap.INFO
-      ];
-
-      sh.appendRow(row);
     } catch (e) {
       console.error("_logToSheet_ error:", e);
     }
