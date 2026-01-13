@@ -512,7 +512,7 @@ var Lib = Lib || {};
      */
     Lib.showAllServicesStatus = function() {
         const ui = SpreadsheetApp.getUi();
-        ui.toast("Проверка статуса всех сервисов...", "Экосистема", 5);
+        SpreadsheetApp.getActive().toast("Проверка статуса всех сервисов...", "Экосистема", 5);
         
         try {
             // 1. Проверка основного сервера
@@ -559,7 +559,7 @@ var Lib = Lib || {};
             const ui = SpreadsheetApp.getUi();
             const confirm = ui.alert("Дашборд не найден", "Лист '📊 Дашборд' еще не создан. Создать его сейчас?", ui.ButtonSet.YES_NO);
             if (confirm === ui.Button.YES) {
-                ui.toast("Функция создания дашборда будет реализована в следующей фазе.", "Инфо", 10);
+                SpreadsheetApp.getActive().toast("Функция создания дашборда будет реализована в следующей фазе.", "Инфо", 10);
             }
         }
     };
@@ -579,6 +579,179 @@ var Lib = Lib || {};
 
     Lib.showSyncJournal_proxy = function() {
         return Lib.showSyncJournal();
+    };
+
+    // --- TASK 1.2: LOG_DEBUG Sheet Structure Update ---
+
+    /**
+     * Заголовки для листа LOG_DEBUG (Журнал логов) с новой расширенной структурой
+     */
+    Lib.__LOG_DEBUG_HEADERS__ = [
+        "Время",                    // A: Дата/время логирования
+        "Категория",                // B: Категория (Article, Sync, Price, etc.)
+        "Статус",                   // C: Статус (START, PROGRESS, SUCCESS, WARNING, ERROR)
+        "Сообщение",                // D: Текст сообщения
+        "Функция",                  // E: Имя функции/модуля
+        "Детали",                   // F: Дополнительные детали
+        "Параметры (JSON)",         // G: Входные параметры
+        "Результаты (JSON)"         // H: Результаты выполнения
+    ];
+
+    /**
+     * Категории логирования (справочник для выпадающего списка)
+     */
+    Lib.__LOG_CATEGORIES__ = [
+        "Article",      // Работа с артикулами
+        "Sync",         // Синхронизация
+        "Delete",       // Удаление
+        "Network",      // Сетевые операции
+        "Price",        // Работа с ценами
+        "Certificate",  // Сертификация
+        "Invoice",      // Счета-фактуры
+        "Order",        // Заказы
+        "Label",        // Этикетки
+        "Spirit",       // Спирт
+        "Dashboard",    // Дашборд
+        "Menu",         // Меню
+        "Cache",        // Кэширование
+        "Lock",         // Блокировки
+        "Settings"      // Настройки
+    ];
+
+    /**
+     * Статусы логирования
+     */
+    Lib.__LOG_STATUSES__ = [
+        "START",        // 🔵 Начало операции
+        "PROGRESS",     // 🟡 Процесс выполнения
+        "SUCCESS",      // 🟢 Успешное завершение
+        "WARNING",      // 🟠 Предупреждение
+        "ERROR"         // 🔴 Ошибка
+    ];
+
+    /**
+     * Создает или обновляет структуру листа LOG_DEBUG с новыми колонками и форматированием
+     */
+    Lib.ensureLogDebugSheetStructure = function() {
+        try {
+            const ss = SpreadsheetApp.getActiveSpreadsheet();
+            if (!ss || !Lib.CONFIG || !Lib.CONFIG.SHEETS || !Lib.CONFIG.SHEETS.LOG_DEBUG) {
+                return false;
+            }
+
+            const sheetName = Lib.CONFIG.SHEETS.LOG_DEBUG;
+            let sheet = ss.getSheetByName(sheetName);
+
+            // Если листа нет, создаем его
+            if (!sheet) {
+                sheet = ss.insertSheet(sheetName);
+            }
+
+            // Очищаем валидацию данных
+            try {
+                const dataRange = sheet.getDataRange();
+                if (dataRange) {
+                    dataRange.clearDataValidations();
+                }
+                const maxRows = sheet.getMaxRows();
+                const maxCols = sheet.getMaxColumns();
+                if (maxRows > 0 && maxCols > 0) {
+                    sheet.getRange(1, 1, maxRows, maxCols).clearDataValidations();
+                }
+            } catch (e) {
+                Lib.logWarn("[LOG_DEBUG] Не удалось очистить валидацию: " + e.message);
+            }
+
+            // Убеждаемся, что достаточно столбцов
+            const neededCols = Lib.__LOG_DEBUG_HEADERS__.length;
+            if (sheet.getMaxColumns() < neededCols) {
+                sheet.insertColumnsAfter(sheet.getMaxColumns(), neededCols - sheet.getMaxColumns());
+            }
+
+            // Устанавливаем заголовки
+            sheet.getRange(1, 1, 1, neededCols)
+                .setValues([Lib.__LOG_DEBUG_HEADERS__])
+                .setFontWeight("bold")
+                .setWrap(true)
+                .setFontColor("#FFFFFF")
+                .setBackground("#366092");
+
+            // Замораживаем шапку
+            sheet.setFrozenRows(1);
+
+            // Форматируем колонки
+            try {
+                sheet.setColumnWidth(1, 160);  // Время
+                sheet.setColumnWidth(2, 120);  // Категория
+                sheet.setColumnWidth(3, 100);  // Статус
+                sheet.setColumnWidth(4, 250);  // Сообщение
+                sheet.setColumnWidth(5, 150);  // Функция
+                sheet.setColumnWidth(6, 150);  // Детали
+                sheet.setColumnWidth(7, 200);  // Параметры JSON
+                sheet.setColumnWidth(8, 200);  // Результаты JSON
+            } catch (e) {
+                Lib.logWarn("[LOG_DEBUG] Ошибка при форматировании колонок: " + e.message);
+            }
+
+            // Добавляем валидацию для Категории (столбец B)
+            try {
+                const rule = SpreadsheetApp.newDataValidation()
+                    .requireValueInList(Lib.__LOG_CATEGORIES__, true)
+                    .setAllowInvalid(true)
+                    .setHelpText("Выберите категорию из списка или введите новую")
+                    .build();
+                sheet.getRange("B:B").setDataValidation(rule);
+            } catch (e) {
+                Lib.logWarn("[LOG_DEBUG] Ошибка при создании валидации Категории: " + e.message);
+            }
+
+            // Добавляем валидацию для Статуса (столбец C)
+            try {
+                const rule = SpreadsheetApp.newDataValidation()
+                    .requireValueInList(Lib.__LOG_STATUSES__, true)
+                    .setAllowInvalid(true)
+                    .setHelpText("Выберите статус из списка")
+                    .build();
+                sheet.getRange("C:C").setDataValidation(rule);
+            } catch (e) {
+                Lib.logWarn("[LOG_DEBUG] Ошибка при создании валидации Статуса: " + e.message);
+            }
+
+            // Форматируем столбец A (Время) как дата-время
+            try {
+                const maxRows = sheet.getMaxRows();
+                if (maxRows > 1) {
+                    sheet.getRange(2, 1, maxRows - 1, 1).setNumberFormat("dd.MM.yyyy HH:mm:ss");
+                }
+            } catch (e) {
+                Lib.logWarn("[LOG_DEBUG] Ошибка при форматировании времени: " + e.message);
+            }
+
+            return true;
+        } catch (e) {
+            Lib.logError("[LOG_DEBUG] Ошибка при создании структуры листа: " + e.message);
+            return false;
+        }
+    };
+
+    /**
+     * Публичная функция для вручного обновления структуры LOG_DEBUG листа (вызывается из меню)
+     */
+    Lib.recreateDebugLogSheet = function() {
+        const ui = SpreadsheetApp.getUi();
+        try {
+            ui.toast("Обновление структуры листа LOG_DEBUG...", "Прогресс", 5);
+            if (Lib.ensureLogDebugSheetStructure()) {
+                ui.alert("Успешно", "Лист 'Журнал логов' обновлён с новой структурой", ui.ButtonSet.OK);
+                if (Lib.logStep) {
+                    Lib.logStep("Menu", "Структура LOG_DEBUG обновлена", "SUCCESS");
+                }
+            } else {
+                ui.alert("Ошибка", "Не удалось обновить структуру листа", ui.ButtonSet.OK);
+            }
+        } catch (e) {
+            ui.alert("Ошибка", e.message, ui.ButtonSet.OK);
+        }
     };
 
 })(Lib);

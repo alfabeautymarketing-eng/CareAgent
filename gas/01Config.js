@@ -1008,15 +1008,15 @@
 
     var primaryDataGroup = _buildPrimaryDataMenuGroup(projectKey, projectConfig);
     if (primaryDataGroup) {
-      // Добавляем группу "Заказ" в НАЧАЛО меню (первой)
-      registry.unshift(primaryDataGroup);
+      // Добавляем группу "Заказ" ПОСЛЕ "ЭКОСИСТЕМА" (индекс 1)
+      registry.splice(1, 0, primaryDataGroup);
     }
 
     // Добавляем группу "Стадии по заказ" для проекта SK
     var orderStagesGroup = _buildOrderStagesMenuGroup(projectKey, projectConfig);
     if (orderStagesGroup) {
       // Добавляем после группы "Заказ"
-      registry.splice(1, 0, orderStagesGroup);
+      registry.splice(2, 0, orderStagesGroup);
     }
 
     return registry;
@@ -1320,7 +1320,16 @@
       if (SHEETS.LOG_DEBUG) {
         const debugSheet = ss.getSheetByName(SHEETS.LOG_DEBUG);
         if (debugSheet) {
-          debugSheet.appendRow([timestamp, level, fullMessage, functionName, details]);
+          // Новая структура: [время, категория, статус, сообщение, функция, детали, параметры, результаты]
+          // Маппируем старый формат на новый:
+          // - category: берём из functionName (первая часть до точки) или "General"
+          // - status: преобразуем уровень в статус (ERROR->ERROR, WARNING->WARNING, INFO->SUCCESS, DEBUG->PROGRESS)
+          const category = functionName ? functionName.split('_')[0] : 'General';
+          const status = _mapLevelToStatus(level);
+          const parameters = ''; // Заполняется в Task 1.3+
+          const results = ''; // Заполняется в Task 1.3+
+
+          debugSheet.appendRow([timestamp, category, status, fullMessage, functionName, details, parameters, results]);
         }
       }
 
@@ -1392,6 +1401,20 @@
     };
 
     return levelEmojis[level] || 'ℹ️';
+  }
+
+  /**
+   * Преобразует уровень логирования в статус для LOG_DEBUG листа
+   * Используется в Task 1.2 для заполнения колонки Статус
+   */
+  function _mapLevelToStatus(level) {
+    const statusMap = {
+      'ERROR': 'ERROR',
+      'WARN': 'WARNING',
+      'INFO': 'SUCCESS',
+      'DEBUG': 'PROGRESS'
+    };
+    return statusMap[level] || 'PROGRESS';
   }
 
   // Делаем CONFIG доступным глобально
