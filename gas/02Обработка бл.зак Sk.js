@@ -42,6 +42,19 @@ var Lib = Lib || {};
     }
 
     try {
+      // START: Function entry with comprehensive logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка основного прайс-листа SK начата",
+          "INFO",
+          "",
+          "processSkPriceSheet",
+          "Пользователь инициировал обработку основного прайс-листа для проекта SK",
+          "Price",
+          "START"
+        );
+      }
+
       Lib.logInfo("[SK] Обработка основной: старт");
       var source = _getSourceData_(config, "MAIN");
       if (!source.values || !source.values.length) {
@@ -170,6 +183,21 @@ var Lib = Lib || {};
         "[SK] Обработка основной: завершено, строк " + processed.rows.length
       );
 
+      // PROGRESS: Applying formulas and calculations
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Применение формул на листе Расчет цены",
+          "DEBUG",
+          "",
+          "processSkPriceSheet",
+          "Обновление INDEX/MATCH формул и расчетных формул",
+          "Price",
+          "PROGRESS",
+          { rowsProcessed: processed.rows.length },
+          null
+        );
+      }
+
       // Обновляем формулы на листе "Расчет цены"
       // 1. Сначала применяем INDEX/MATCH формулы для подтягивания данных из "Динамика цены"
       if (typeof Lib.updatePriceCalculationFormulas === 'function') {
@@ -202,9 +230,40 @@ var Lib = Lib || {};
         message += "\n\nПроверьте журнал для подробностей.";
       }
 
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка основного прайс-листа SK завершена успешно",
+          "INFO",
+          "",
+          "processSkPriceSheet",
+          `Обработано товаров: ${processed.rows.length}, ${syncResult && syncResult.createdRows ? syncResult.createdRows.length + ' новых артикулов' : 'нет новых артикулов'}`,
+          "Price",
+          "SUCCESS",
+          null,
+          { rowsProcessed: processed.rows.length, newArticles: syncResult && syncResult.createdRows ? syncResult.createdRows.length : 0, barcodeMismatches: syncResult && syncResult.barcodeMismatches ? syncResult.barcodeMismatches.length : 0 }
+        );
+      }
+
       ui.alert(menuTitle, message, ui.ButtonSet.OK);
     } catch (error) {
       Lib.logError("processSkPriceSheet: ошибка", error);
+
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при обработке основного прайс-листа SK",
+          "ERROR",
+          "",
+          "processSkPriceSheet",
+          error && error.message ? error.message : String(error),
+          "Price",
+          "ERROR",
+          null,
+          { error: error ? error.toString() : "Unknown error", stack: error && error.stack ? error.stack : null }
+        );
+      }
+
       ui.alert(
         "Ошибка обработки прайс",
         error.message || String(error),
@@ -228,6 +287,19 @@ var Lib = Lib || {};
     }
 
     try {
+      // START: Function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка пробников SK начата",
+          "INFO",
+          "",
+          "processSkPriceProbes",
+          "Пользователь инициировал обработку пробников для проекта SK",
+          "Price",
+          "START"
+        );
+      }
+
       Lib.logInfo("[SK] Обработка пробники: старт");
       var source = _getSourceData_(config, "PROBES");
       if (!source.values || source.values.length <= 1) {
@@ -352,6 +424,21 @@ var Lib = Lib || {};
         Lib.updateStatusesAfterProcessing();
       }
 
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка пробников SK завершена успешно",
+          "INFO",
+          "",
+          "processSkPriceProbes",
+          `Обработано пробников: ${processed.rows.length}, ${syncResult && syncResult.createdRows ? syncResult.createdRows.length + ' новых артикулов' : 'нет новых артикулов'}`,
+          "Price",
+          "SUCCESS",
+          null,
+          { rowsProcessed: processed.rows.length, newArticles: syncResult && syncResult.createdRows ? syncResult.createdRows.length : 0 }
+        );
+      }
+
       ui.alert(
         menuTitle,
         "Обработка прайс завершена. Обновлено строк: " +
@@ -361,6 +448,22 @@ var Lib = Lib || {};
       );
     } catch (error) {
       Lib.logError("processSkPriceProbes: ошибка", error);
+
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при обработке пробников SK",
+          "ERROR",
+          "",
+          "processSkPriceProbes",
+          error && error.message ? error.message : String(error),
+          "Price",
+          "ERROR",
+          null,
+          { error: error ? error.toString() : "Unknown error", stack: error && error.stack ? error.stack : null }
+        );
+      }
+
       ui.alert(
         "Ошибка обработки прайс",
         error.message || String(error),
@@ -383,9 +486,54 @@ var Lib = Lib || {};
       return;
     }
 
+    // START: Function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Загрузка остатков SK начата",
+        "INFO",
+        "",
+        "loadSkStockData",
+        "Пользователь инициировал загрузку остатков для проекта SK",
+        "Price",
+        "START"
+      );
+    }
+
     // Используем универсальную функцию загрузки остатков
     if (typeof Lib.loadStockData === 'function') {
-      Lib.loadStockData('SK');
+      try {
+        Lib.loadStockData('SK');
+
+        // SUCCESS: Stock data loaded successfully
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Загрузка остатков SK завершена успешно",
+            "INFO",
+            "",
+            "loadSkStockData",
+            "Остатки успешно загружены из источника в лист Заказ",
+            "Price",
+            "SUCCESS",
+            null,
+            { source: "SK", status: "loaded" }
+          );
+        }
+      } catch (err) {
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Ошибка при загрузке остатков SK",
+            "ERROR",
+            "",
+            "loadSkStockData",
+            err && err.message ? err.message : String(err),
+            "Price",
+            "ERROR",
+            null,
+            { error: err ? err.toString() : "Unknown error", source: "SK" }
+          );
+        }
+        throw err;
+      }
       return;
     }
 
