@@ -2863,6 +2863,20 @@ BASE_MENU_GROUPS: List[dict] = [
             {"label": "🧹 Очистить Журнал синхро", "function_name": "quickCleanLogSheet"},
         ],
     },
+    {
+        "title": "🗄️ Supabase",
+        "items": [
+            {"label": "🔗 Открыть Supabase Console", "function_name": "openSupabaseConsole"},
+            {"label": "📊 Просмотр данных (таблицы)", "function_name": "showSupabaseTablesView"},
+            {"separator": True},
+            {"label": "🔍 Выполнить SQL запрос", "function_name": "executeSupabaseSqlQuery"},
+            {"label": "📥 Импортировать данные", "function_name": "importSupabaseData"},
+            {"label": "📤 Экспортировать данные", "function_name": "exportSupabaseData"},
+            {"separator": True},
+            {"label": "🔐 Управление правами доступа", "function_name": "manageSupabasePermissions"},
+            {"label": "⚙️ Настройки подключения", "function_name": "configureSupabaseConnection"},
+        ],
+    },
 ]
 
 
