@@ -29,12 +29,12 @@ from src.services.meta_cache import MetaCacheService
 
 sheets_service = SheetsService()
 function_log_service = FunctionLogService()
-logging_service = LoggingService(sheets_service)
 sync_log_service = SyncLogService(
     data_dir=settings.sync_log_data_dir,
     retention_days=settings.sync_log_retention_days,
     max_entries=settings.sync_log_max_entries,
 )
+logging_service = LoggingService(sheets_service, sync_log_service)
 sync_service = SyncService(logging_service, sync_log_service) # Pass logger to sync service
 sorting_service = SortingService()
 ai_service = get_ai_service()

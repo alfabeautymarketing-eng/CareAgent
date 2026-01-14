@@ -501,6 +501,8 @@
     {
       title: "⚙️ НАСТРОЙКИ",
       items: [
+        { label: "🔄 Обновить меню", fn: "refreshMenu" },
+        { separator: true },
         { label: "Настроить правила синхронизации", fn: "showSyncRulesManagerDialog" },
         { label: "⚙️ Настройки Gemini", fn: "setupGeminiComplete" },
         { separator: true },

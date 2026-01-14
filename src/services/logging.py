@@ -5,48 +5,81 @@ from src.utils.logger import logger
 from src.services.drive import get_drive_service
 import asyncio
 
+if TYPE_CHECKING:
+    from src.services.sync_log_service import SyncLogService
+
 class LoggingService:
-    def __init__(self, sheets_service: SheetsService):
+    def __init__(self, sheets_service: SheetsService, sync_log_service: Optional["SyncLogService"] = None):
+        """
+        Initialize the logger.
+        
+        Args:
+            sheets_service: Service for interacting with Google Sheets
+            sync_log_service: Optional service for persistent sync logs (dashboard)
+        """
         self.sheets_service = sheets_service
-        # Names kept for potential reference, but not used for writing
-        self.log_sheet_name = "Логи"
+        self.sync_log_service = sync_log_service
         
     def init_session_log(self, spreadsheet_id: str):
         """
-        No-op: Session logs on sheet are disabled.
+        DEPRECATED: Initialize session log sheet.
+        Now a no-op as all logging is server-side.
         """
-        return True
+        pass
 
-    def recreate_log_sheet(self, spreadsheet_id: str, force_clear: bool = False, sheet_name: Optional[str] = None):
+    def recreate_log_sheet(self, spreadsheet_id: str, debug: bool = False):
         """
-        No-op: Sheet logging disabled.
+        DEPRECATED: Recreate the log sheet.
+        Now a no-op as all logging is server-side.
         """
-        return True
+        pass
 
-    async def archive_logs(self, spreadsheet_id: str, project_prefix: str = "Common") -> Dict[str, Any]:
+    async def archive_logs(self, spreadsheet_id: str) -> dict:
         """
-        No-op: Archiving disabled.
+        Archive logs locally if needed (managed by SyncLogService usually).
+        This method is kept for API compatibility but might be redundant.
         """
-        return {"success": True, "message": "Archiving disabled"}
+        logger.info("logging_archive_requested", spreadsheet_id=spreadsheet_id)
+        return {"status": "ok", "message": "Archiving handled by server logs"}
 
-    def get_archive_status(self, project_prefix: str = "Common") -> Dict[str, Any]:
+    def add_log(
+        self,
+        spreadsheet_id: str,
+        message: str,
+        level: str = "INFO",
+        category: str = "General",
+        status: str = "NB",
+        details: str = "",
+        function_name: str = "",
+    ):
         """
-        No-op.
+        Add a log entry. 
+        Logs to system logger and optionally to SyncLogService for dashboard visibility.
         """
-        return {"exists": False, "message": "Archiving disabled"}
-
-    def add_log(self, spreadsheet_id: str, category: str, action: str, details: str, status: str):
-        """
-        Log to system logger only. No sheet writing.
-        """
-        level = "ERROR" if "ОШИБКА" in status or status == "❌ ERR" else "INFO"
+        logger.info(
+            "general_log",
+            spreadsheet_id=spreadsheet_id,
+            level=level,
+            message=message,
+            category=category,
+            status=status,
+            details=details
+        )
         
-        log_msg = f"[{category}] {action} | {details} | {status}"
-        
-        if level == "ERROR":
-            logger.error("system_log_entry", spreadsheet_id=spreadsheet_id, msg=log_msg)
-        else:
-            logger.info("system_log_entry", spreadsheet_id=spreadsheet_id, msg=log_msg)
+        if self.sync_log_service:
+            # Map general log fields to SyncLogEntry fields
+            # We use 'source_info' for function name + message
+            # 'status' is mapped directly
+            self.sync_log_service.add_entry(
+                spreadsheet_id=spreadsheet_id,
+                source_info=f"{function_name}: {message}",
+                target_info=details,
+                category=category,
+                status=status,
+                project="SYSTEM",
+                event="LOG",
+                extra={"level": level}
+            )
 
     def add_summary_log(
         self,

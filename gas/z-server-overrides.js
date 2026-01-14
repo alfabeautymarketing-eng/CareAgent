@@ -646,7 +646,7 @@ var Lib = Lib || {};
     Lib.openServerDashboard = function() {
         const ui = SpreadsheetApp.getUi();
         const serverUrl = (Lib.CONFIG && Lib.CONFIG.SERVER_URL) || "http://localhost:5000";
-        const dashboardUrl = serverUrl + "/dashboard";
+        const dashboardUrl = serverUrl + "/logs-ui";
 
         ui.alert(
             "📊 Открыть Дашборд",
@@ -676,7 +676,7 @@ var Lib = Lib || {};
     Lib.openServerLogsJournal = function() {
         const ui = SpreadsheetApp.getUi();
         const serverUrl = (Lib.CONFIG && Lib.CONFIG.SERVER_URL) || "http://localhost:5000";
-        const logsUrl = serverUrl + "/logs";
+        const logsUrl = serverUrl + "/logs-ui";
 
         ui.alert(
             "📝 Открыть Журнал логов",
@@ -706,7 +706,7 @@ var Lib = Lib || {};
     Lib.openServerSyncJournal = function() {
         const ui = SpreadsheetApp.getUi();
         const serverUrl = (Lib.CONFIG && Lib.CONFIG.SERVER_URL) || "http://localhost:5000";
-        const syncUrl = serverUrl + "/sync-journal";
+        const syncUrl = serverUrl + "/logs-ui";
 
         ui.alert(
             "🔄 Открыть Журнал синхронизации",
