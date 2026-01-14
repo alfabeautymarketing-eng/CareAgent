@@ -2185,6 +2185,12 @@ if (ss) {
   Lib.runManualCascadeOnCertification = function () {
     const ui = SpreadsheetApp.getUi();
     const name = Lib.CONFIG.SHEETS.CERTIFICATION;
+
+    // START: Function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Запуск каскадов на листе Сертификация", "INFO", "", "runManualCascadeOnCertification", `Пересчёт всех строк на листе "${name}"`, "Certificate", "START", { sheetName: name }, null);
+    }
+
     const resp = ui.alert(
       "Пересчёт каскадов",
       `Пересчитать все строки на листе "${name}"?`,
@@ -2211,11 +2217,22 @@ if (ss) {
         2
       );
       const fakeHeader = "Объём"; // триггерим полный пересчёт
+      const rowsProcessed = last - 1; // минус заголовок
       for (let r = 2; r <= last; r++)
         _runCertificationCascade(sh, r, fakeHeader);
       SpreadsheetApp.getActiveSpreadsheet().toast("Готово!", "OK", 5);
       ui.alert("Каскады пересчитаны.");
+
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Пересчёт каскадов завершён успешно", "INFO", "", "runManualCascadeOnCertification", `Пересчитано ${rowsProcessed} строк на листе "${name}"`, "Certificate", "SUCCESS", { sheetName: name }, { rowsProcessed: rowsProcessed, status: "completed" });
+      }
     } catch (err) {
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при пересчёте каскадов", "ERROR", "", "runManualCascadeOnCertification", err && err.message ? err.message : String(err), "Certificate", "ERROR", { sheetName: name }, { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null });
+      }
+
       Lib.logError("runManualCascadeOnCertification: ошибка", err);
       ui.alert(`Ошибка: ${err.message}`);
       SpreadsheetApp.getActiveSpreadsheet().toast('Ошибка пересчёта', 'Ошибка', 3);
