@@ -445,6 +445,14 @@
           ],
         },
         {
+          submenu: "📊 Журналы (на сервере)",
+          items: [
+            { label: "📊 Дашборд", fn: "openServerDashboard_proxy" },
+            { label: "📝 Журнал логов", fn: "openServerLogsJournal_proxy" },
+            { label: "🔄 Журнал синхро", fn: "openServerSyncJournal_proxy" },
+          ],
+        },
+        {
           submenu: "🤖 Агент",
           items: [
             { label: "Проверить сервис агента", fn: "menuCheckService" },
@@ -1337,33 +1345,12 @@
 
     const fullMessage = emoji + ' ' + message;
 
-    // 1. Лог в консоль
+    // 1. Лог в консоль (server-side logging only)
     Logger.log(`[${timestamp}] ${level}: ${fullMessage}`);
 
-      // 2. Лог в Google Sheets
-    try {
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      if (!ss) return;
-
-      // ЛОГИКА РАЗДЕЛЕНИЯ ЖУРНАЛОВ:
-      // "Журнал синхро" (SHEETS.LOG) - заполняется ТОЛЬКО через Lib.logSynchronization
-      // General logs (logWithEmoji) туда больше НЕ пишут.
-
-      // Б) "Журнал логов" (SHEETS.LOG_DEBUG) - Полный технический лог (ВСЁ: DEBUG + INFO + ...)
-      // Пишем сюда ВСЕ сообщения.
-      if (SHEETS.LOG_DEBUG) {
-        const debugSheet = ss.getSheetByName(SHEETS.LOG_DEBUG);
-        if (debugSheet) {
-          // Структура LOG_DEBUG (Task 1.2): [время, категория, статус, сообщение, функция, детали, параметры, результаты]
-          // Task 1.3: Теперь используем явные параметры категории, статуса, переменных и результатов
-          debugSheet.appendRow([timestamp, category, status, fullMessage, functionName, details, variables, result]);
-        }
-      }
-
-    } catch (e) {
-      // Если не удается записать в лист, просто игнорируем ошибку
-      console.warn('Не удалось записать в лист логов:', e.message);
-    }
+    // NOTE: All logging is now server-side only
+    // Google Sheets sheets (LOG_DEBUG, LOG) have been removed
+    // Dashboard and journals are accessed via server URLs only
   }
 
   /**

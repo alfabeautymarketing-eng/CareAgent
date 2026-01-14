@@ -445,98 +445,10 @@ var Lib = Lib || {};
         return Lib.collectAndCopyDocuments();
     };
 
-    // --- LOG SHEET FUNCTIONS ---
-
-    /**
-     * Быстро очищает журнал логов (удаляет все данные, оставляя заголовки)
-     */
-    Lib.quickCleanLogSheet = function() {
-        const ui = SpreadsheetApp.getUi();
-        const confirm = ui.alert("Очистка логов", "Удалить все логи из журнала? Это действие необратимо!", ui.ButtonSet.YES_NO);
-        if (confirm !== ui.Button.YES) return;
-
-        try {
-            const ss = SpreadsheetApp.getActiveSpreadsheet();
-            const sheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.LOG_DEBUG) || "Журнал логов";
-            const sheet = ss.getSheetByName(sheetName);
-
-            if (sheet) {
-                const lastRow = sheet.getLastRow();
-                if (lastRow > 1) {
-                    sheet.deleteRows(2, lastRow - 1);
-                }
-                ui.alert("✅ Успешно", "Логи удалены. Остались только заголовки.", ui.ButtonSet.OK);
-
-                if (Lib.logWithEmoji) {
-                    Lib.logWithEmoji("Журнал логов очищен", "INFO", "🧹", "quickCleanLogSheet", "Все данные удалены, заголовки сохранены", "System", "SUCCESS");
-                }
-            } else {
-                ui.alert("❌ Ошибка", "Лист '" + sheetName + "' не найден", ui.ButtonSet.OK);
-            }
-        } catch(e) {
-            ui.alert("❌ Ошибка", e.message, ui.ButtonSet.OK);
-            if (Lib.logWithEmoji) {
-                Lib.logWithEmoji("Ошибка очистки логов", "ERROR", "❌", "quickCleanLogSheet", e.message, "System", "ERROR");
-            }
-        }
-    };
-
-    /**
-     * Пересоздаёт лист LOG (Журнал синхро)
-     */
-    Lib.recreateLogSheet = function() {
-        try {
-            const ss = SpreadsheetApp.getActiveSpreadsheet();
-            const sheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.LOG) || "Журнал синхро";
-
-            // Удаляем старый лист
-            let sheet = ss.getSheetByName(sheetName);
-            if (sheet) {
-                ss.deleteSheet(sheet);
-            }
-
-            // Создаём новый лист с заголовками
-            sheet = ss.insertSheet(sheetName, 1);
-            sheet.appendRow(["Время", "Детали", "Статус", "Сообщение", "Функция"]);
-
-            const ui = SpreadsheetApp.getUi();
-            ui.alert("✅ Готово", "Лист '" + sheetName + "' пересоздан", ui.ButtonSet.OK);
-
-            if (Lib.logWithEmoji) {
-                Lib.logWithEmoji("Лист LOG пересоздан", "INFO", "🔄", "recreateLogSheet", sheetName, "System", "SUCCESS");
-            }
-        } catch(e) {
-            const ui = SpreadsheetApp.getUi();
-            ui.alert("❌ Ошибка", e.message, ui.ButtonSet.OK);
-            if (Lib.logWithEmoji) {
-                Lib.logWithEmoji("Ошибка пересоздания LOG", "ERROR", "❌", "recreateLogSheet", e.message, "System", "ERROR");
-            }
-        }
-    };
-
-    /**
-     * Пересоздаёт лист LOG_DEBUG (Журнал логов) с полной структурой
-     */
-    Lib.recreateDebugLogSheet = function() {
-        const ui = SpreadsheetApp.getUi();
-        try {
-            if (Lib.ensureLogDebugSheetStructure) {
-                Lib.ensureLogDebugSheetStructure();
-                ui.alert("✅ Готово", "Лист LOG_DEBUG пересоздан с полной структурой", ui.ButtonSet.OK);
-
-                if (Lib.logWithEmoji) {
-                    Lib.logWithEmoji("Лист LOG_DEBUG пересоздан", "INFO", "🔄", "recreateDebugLogSheet", "Структура восстановлена", "System", "SUCCESS");
-                }
-            } else {
-                throw new Error("Функция ensureLogDebugSheetStructure не найдена");
-            }
-        } catch(e) {
-            ui.alert("❌ Ошибка", e.message, ui.ButtonSet.OK);
-            if (Lib.logWithEmoji) {
-                Lib.logWithEmoji("Ошибка пересоздания LOG_DEBUG", "ERROR", "❌", "recreateDebugLogSheet", e.message, "System", "ERROR");
-            }
-        }
-    };
+    // --- ARCHIVED: LOG SHEET FUNCTIONS (removed - all logging is server-side now) ---
+    // Previously: quickCleanLogSheet(), recreateLogSheet(), recreateDebugLogSheet()
+    // These tried to manage local Google Sheets logging
+    // Now: All logging is server-side only
 
     // --- OVERRIDE: Archive Logs ---
     Lib.manualArchiveLogs_proxy = function() {
@@ -580,29 +492,9 @@ var Lib = Lib || {};
         }
     };
 
-    // --- OVERRIDE: Show Log Sheets ---
-    Lib.showLogJournal = function() {
-        const ss = SpreadsheetApp.getActiveSpreadsheet();
-        const sheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.LOG_DEBUG) || "Журнал логов";
-        const sheet = ss.getSheetByName(sheetName);
-        if (sheet) {
-            ss.setActiveSheet(sheet);
-        } else {
-            SpreadsheetApp.getUi().alert("Лист '" + sheetName + "' не найден");
-        }
-    };
-
-    Lib.showSyncJournal = function() {
-        const ss = SpreadsheetApp.getActiveSpreadsheet();
-        const ui = SpreadsheetApp.getUi();
-        const sheetName = (Lib.CONFIG && Lib.CONFIG.SHEETS && Lib.CONFIG.SHEETS.LOG) || "Журнал синхро";
-        const sheet = ss.getSheetByName(sheetName);
-        if (sheet) {
-            ss.setActiveSheet(sheet);
-        } else {
-            ui.alert("Лист '" + sheetName + "' не найден");
-        }
-    };
+    // --- REMOVED: Local sheet navigation functions (now server-side only) ---
+    // Previously: showLogJournal(), showSyncJournal() tried to navigate to local sheets
+    // Now: All logging is server-side, access via server URLs
 
     /**
      * Проверка статуса всех внешних сервисов с детальным логированием.
@@ -744,21 +636,97 @@ var Lib = Lib || {};
         }
     };
 
+    // --- REMOVED: Local dashboard navigation (now server-side only) ---
+    // Previously: openLogDashboard() tried to create/open local sheet
+    // Now: Dashboard is accessed via server URL
+
     /**
-     * Переход на лист Дашборда (создание-заглушка).
+     * Opens the server-hosted logging dashboard
      */
-    Lib.openLogDashboard = function() {
-        const ss = SpreadsheetApp.getActiveSpreadsheet();
-        const sheetName = "📊 Дашборд";
-        const sheet = ss.getSheetByName(sheetName);
-        if (sheet) {
-            ss.setActiveSheet(sheet);
-        } else {
-            const ui = SpreadsheetApp.getUi();
-            const confirm = ui.alert("Дашборд не найден", "Лист '📊 Дашборд' еще не создан. Создать его сейчас?", ui.ButtonSet.YES_NO);
-            if (confirm === ui.Button.YES) {
-                SpreadsheetApp.getActive().toast("Функция создания дашборда будет реализована в следующей фазе.", "Инфо", 10);
-            }
+    Lib.openServerDashboard = function() {
+        const ui = SpreadsheetApp.getUi();
+        const serverUrl = (Lib.CONFIG && Lib.CONFIG.SERVER_URL) || "http://localhost:5000";
+        const dashboardUrl = serverUrl + "/dashboard";
+
+        ui.alert(
+            "📊 Открыть Дашборд",
+            "Дашборд логов доступен по адресу:\n\n" + dashboardUrl + "\n\nСкопируйте ссылку в браузер.",
+            ui.ButtonSet.OK
+        );
+
+        // Log the action
+        if (Lib.logWithEmoji) {
+            Lib.logWithEmoji(
+                "Запрос открытия дашборда",
+                "INFO",
+                "",
+                "openServerDashboard",
+                "Пользователь открыл дашборд с сервера",
+                "System",
+                "SUCCESS",
+                {},
+                { url: dashboardUrl }
+            );
+        }
+    };
+
+    /**
+     * Opens the server-hosted logs journal
+     */
+    Lib.openServerLogsJournal = function() {
+        const ui = SpreadsheetApp.getUi();
+        const serverUrl = (Lib.CONFIG && Lib.CONFIG.SERVER_URL) || "http://localhost:5000";
+        const logsUrl = serverUrl + "/logs";
+
+        ui.alert(
+            "📝 Открыть Журнал логов",
+            "Журнал логов доступен по адресу:\n\n" + logsUrl + "\n\nСкопируйте ссылку в браузер.",
+            ui.ButtonSet.OK
+        );
+
+        // Log the action
+        if (Lib.logWithEmoji) {
+            Lib.logWithEmoji(
+                "Запрос открытия журнала логов",
+                "INFO",
+                "",
+                "openServerLogsJournal",
+                "Пользователь открыл журнал логов с сервера",
+                "System",
+                "SUCCESS",
+                {},
+                { url: logsUrl }
+            );
+        }
+    };
+
+    /**
+     * Opens the server-hosted sync journal
+     */
+    Lib.openServerSyncJournal = function() {
+        const ui = SpreadsheetApp.getUi();
+        const serverUrl = (Lib.CONFIG && Lib.CONFIG.SERVER_URL) || "http://localhost:5000";
+        const syncUrl = serverUrl + "/sync-journal";
+
+        ui.alert(
+            "🔄 Открыть Журнал синхронизации",
+            "Журнал синхронизации доступен по адресу:\n\n" + syncUrl + "\n\nСкопируйте ссылку в браузер.",
+            ui.ButtonSet.OK
+        );
+
+        // Log the action
+        if (Lib.logWithEmoji) {
+            Lib.logWithEmoji(
+                "Запрос открытия журнала синхро",
+                "INFO",
+                "",
+                "openServerSyncJournal",
+                "Пользователь открыл журнал синхронизации с сервера",
+                "System",
+                "SUCCESS",
+                {},
+                { url: syncUrl }
+            );
         }
     };
 
@@ -767,269 +735,29 @@ var Lib = Lib || {};
         return Lib.showAllServicesStatus();
     };
 
-    Lib.openLogDashboard_proxy = function() {
-        return Lib.openLogDashboard();
+    // --- NEW: Server-based dashboard and journal accessors ---
+    // These functions open server URLs instead of local sheets
+
+    Lib.openServerDashboard_proxy = function() {
+        return Lib.openServerDashboard();
     };
 
-    Lib.showLogJournal_proxy = function() {
-        return Lib.showLogJournal();
+    Lib.openServerLogsJournal_proxy = function() {
+        return Lib.openServerLogsJournal();
     };
 
-    Lib.showSyncJournal_proxy = function() {
-        return Lib.showSyncJournal();
+    Lib.openServerSyncJournal_proxy = function() {
+        return Lib.openServerSyncJournal();
     };
 
-    // --- TASK 1.2: LOG_DEBUG Sheet Structure Update ---
-
-    /**
-     * Заголовки для листа LOG_DEBUG (Журнал логов) с новой расширенной структурой
-     */
-    Lib.__LOG_DEBUG_HEADERS__ = [
-        "Время",                    // A: Дата/время логирования
-        "Категория",                // B: Категория (Article, Sync, Price, etc.)
-        "Статус",                   // C: Статус (START, PROGRESS, SUCCESS, WARNING, ERROR)
-        "Сообщение",                // D: Текст сообщения
-        "Функция",                  // E: Имя функции/модуля
-        "Детали",                   // F: Дополнительные детали
-        "Параметры (JSON)",         // G: Входные параметры
-        "Результаты (JSON)"         // H: Результаты выполнения
-    ];
-
-    /**
-     * Категории логирования (справочник для выпадающего списка)
-     */
-    Lib.__LOG_CATEGORIES__ = [
-        "Article",      // Работа с артикулами
-        "Sync",         // Синхронизация
-        "Delete",       // Удаление
-        "Network",      // Сетевые операции
-        "Price",        // Работа с ценами
-        "Certificate",  // Сертификация
-        "Invoice",      // Счета-фактуры
-        "Order",        // Заказы
-        "Label",        // Этикетки
-        "Spirit",       // Спирт
-        "Dashboard",    // Дашборд
-        "Menu",         // Меню
-        "Cache",        // Кэширование
-        "Lock",         // Блокировки
-        "Settings"      // Настройки
-    ];
-
-    /**
-     * Статусы логирования
-     */
-    Lib.__LOG_STATUSES__ = [
-        "START",        // 🔵 Начало операции
-        "PROGRESS",     // 🟡 Процесс выполнения
-        "SUCCESS",      // 🟢 Успешное завершение
-        "WARNING",      // 🟠 Предупреждение
-        "ERROR"         // 🔴 Ошибка
-    ];
-
-    /**
-     * Создает или обновляет структуру листа LOG_DEBUG с новыми колонками и форматированием
-     */
-    Lib.ensureLogDebugSheetStructure = function() {
-        try {
-            const ss = SpreadsheetApp.getActiveSpreadsheet();
-            if (!ss || !Lib.CONFIG || !Lib.CONFIG.SHEETS || !Lib.CONFIG.SHEETS.LOG_DEBUG) {
-                return false;
-            }
-
-            const sheetName = Lib.CONFIG.SHEETS.LOG_DEBUG;
-            let sheet = ss.getSheetByName(sheetName);
-
-            // Если листа нет, создаем его
-            if (!sheet) {
-                sheet = ss.insertSheet(sheetName);
-            }
-
-            // Очищаем валидацию данных
-            try {
-                const dataRange = sheet.getDataRange();
-                if (dataRange) {
-                    dataRange.clearDataValidations();
-                }
-                const maxRows = sheet.getMaxRows();
-                const maxCols = sheet.getMaxColumns();
-                if (maxRows > 0 && maxCols > 0) {
-                    sheet.getRange(1, 1, maxRows, maxCols).clearDataValidations();
-                }
-            } catch (e) {
-                Lib.logWarn("[LOG_DEBUG] Не удалось очистить валидацию: " + e.message);
-            }
-
-            // Убеждаемся, что достаточно столбцов
-            const neededCols = Lib.__LOG_DEBUG_HEADERS__.length;
-            if (sheet.getMaxColumns() < neededCols) {
-                sheet.insertColumnsAfter(sheet.getMaxColumns(), neededCols - sheet.getMaxColumns());
-            }
-
-            // Устанавливаем заголовки
-            sheet.getRange(1, 1, 1, neededCols)
-                .setValues([Lib.__LOG_DEBUG_HEADERS__])
-                .setFontWeight("bold")
-                .setWrap(true)
-                .setFontColor("#FFFFFF")
-                .setBackground("#366092");
-
-            // Замораживаем шапку
-            sheet.setFrozenRows(1);
-
-            // Форматируем колонки
-            try {
-                sheet.setColumnWidth(1, 160);  // Время
-                sheet.setColumnWidth(2, 120);  // Категория
-                sheet.setColumnWidth(3, 100);  // Статус
-                sheet.setColumnWidth(4, 250);  // Сообщение
-                sheet.setColumnWidth(5, 150);  // Функция
-                sheet.setColumnWidth(6, 150);  // Детали
-                sheet.setColumnWidth(7, 200);  // Параметры JSON
-                sheet.setColumnWidth(8, 200);  // Результаты JSON
-            } catch (e) {
-                Lib.logWarn("[LOG_DEBUG] Ошибка при форматировании колонок: " + e.message);
-            }
-
-            // Добавляем валидацию для Категории (столбец B)
-            try {
-                const rule = SpreadsheetApp.newDataValidation()
-                    .requireValueInList(Lib.__LOG_CATEGORIES__, true)
-                    .setAllowInvalid(true)
-                    .setHelpText("Выберите категорию из списка или введите новую")
-                    .build();
-                sheet.getRange("B:B").setDataValidation(rule);
-            } catch (e) {
-                Lib.logWarn("[LOG_DEBUG] Ошибка при создании валидации Категории: " + e.message);
-            }
-
-            // Добавляем валидацию для Статуса (столбец C)
-            try {
-                const rule = SpreadsheetApp.newDataValidation()
-                    .requireValueInList(Lib.__LOG_STATUSES__, true)
-                    .setAllowInvalid(true)
-                    .setHelpText("Выберите статус из списка")
-                    .build();
-                sheet.getRange("C:C").setDataValidation(rule);
-            } catch (e) {
-                Lib.logWarn("[LOG_DEBUG] Ошибка при создании валидации Статуса: " + e.message);
-            }
-
-            // Форматируем столбец A (Время) как дата-время
-            try {
-                const maxRows = sheet.getMaxRows();
-                if (maxRows > 1) {
-                    sheet.getRange(2, 1, maxRows - 1, 1).setNumberFormat("dd.MM.yyyy HH:mm:ss");
-                }
-            } catch (e) {
-                Lib.logWarn("[LOG_DEBUG] Ошибка при форматировании времени: " + e.message);
-            }
-
-            return true;
-        } catch (e) {
-            Lib.logError("[LOG_DEBUG] Ошибка при создании структуры листа: " + e.message);
-            return false;
-        }
-    };
-
-    /**
-     * Публичная функция для вручного обновления структуры LOG_DEBUG листа (вызывается из меню)
-     */
-    Lib.recreateDebugLogSheet = function() {
-        const ui = SpreadsheetApp.getUi();
-        try {
-            ui.toast("Обновление структуры листа LOG_DEBUG...", "Прогресс", 5);
-            if (Lib.ensureLogDebugSheetStructure()) {
-                ui.alert("Успешно", "Лист 'Журнал логов' обновлён с новой структурой", ui.ButtonSet.OK);
-                if (Lib.logStep) {
-                    Lib.logStep("Menu", "Структура LOG_DEBUG обновлена", "SUCCESS");
-                }
-            } else {
-                ui.alert("Ошибка", "Не удалось обновить структуру листа", ui.ButtonSet.OK);
-            }
-        } catch (e) {
-            ui.alert("Ошибка", e.message, ui.ButtonSet.OK);
-        }
-    };
+    // --- ARCHIVED: LOG_DEBUG Sheet Structure (All removed - server-side logging only) ---
+    // NOTE: All local Google Sheets logging has been removed
+    // Logging is now exclusively server-side
+    // Dashboard and journals are accessed via server URLs
 
 })(Lib);
 
-// ============= GLOBAL PROXY FUNCTIONS FOR MENU =============
-
-/**
- * Глобальная прокси функция для управления листом LOG
- * Вызывается из GlobalApiBridge.js функциями quickCleanLogSheet() и recreateLogSheet()
- * @param {boolean} isClean - true: очистить лист (quickCleanLogSheet), false: пересоздать (recreateLogSheet)
- */
-function callServerLogCommand(isClean) {
-  try {
-    if (typeof Lib !== 'undefined' && Lib.logWithEmoji) {
-      if (isClean) {
-        Lib.logWithEmoji("Очистка листа LOG...", "DEBUG", "🧹", "callServerLogCommand", "Удаление данных", "System", "START");
-        if (typeof Lib.quickCleanLogSheet === 'function') {
-          return Lib.quickCleanLogSheet();
-        }
-      } else {
-        Lib.logWithEmoji("Пересоздание листа LOG...", "DEBUG", "🔄", "callServerLogCommand", "Удаление и создание нового", "System", "START");
-        if (typeof Lib.recreateLogSheet === 'function') {
-          return Lib.recreateLogSheet();
-        }
-      }
-    }
-    throw new Error('Lib.logWithEmoji или необходимая функция не определена');
-  } catch (e) {
-    console.error('Error in callServerLogCommand:', e);
-    SpreadsheetApp.getUi().alert('Ошибка: ' + e.message);
-    throw e;
-  }
-}
-
-/**
- * Глобальная прокси функция для пересоздания листа LOG_DEBUG
- * Вызывается из GlobalApiBridge.js функцией recreateDebugLogSheet()
- */
-function callServerRecreateDebugLog() {
-  try {
-    if (typeof Lib !== 'undefined' && Lib.logWithEmoji) {
-      Lib.logWithEmoji("Пересоздание листа LOG_DEBUG...", "DEBUG", "🔄", "callServerRecreateDebugLog", "Восстановление структуры", "System", "START");
-      if (typeof Lib.recreateDebugLogSheet === 'function') {
-        return Lib.recreateDebugLogSheet();
-      }
-    }
-    throw new Error('Lib.logWithEmoji или Lib.recreateDebugLogSheet не определена');
-  } catch (e) {
-    console.error('Error in callServerRecreateDebugLog:', e);
-    SpreadsheetApp.getUi().alert('Ошибка: ' + e.message);
-    throw e;
-  }
-}
-
-/**
- * Обновляет и показывает логи (для меню)
- * Перезагружает логи из LOG_DEBUG листа
- */
-(function() {
-  // Добавляем функцию в Lib
-  Lib.refreshLogs = function() {
-    try {
-      const ui = SpreadsheetApp.getUi();
-      ui.toast("Обновление логов...", "Прогресс", 3);
-
-      // Убедиться, что лист LOG_DEBUG существует с правильной структурой
-      if (typeof Lib !== 'undefined' && Lib.ensureLogDebugSheetStructure) {
-        Lib.ensureLogDebugSheetStructure();
-      }
-
-      if (typeof Lib !== 'undefined' && Lib.logWithEmoji) {
-        Lib.logWithEmoji("Логи обновлены", "INFO", "✅", "refreshLogs", "Перезагрузка данных", "System", "SUCCESS");
-      }
-
-      ui.alert("Готово", "Логи обновлены из листа LOG_DEBUG", ui.ButtonSet.OK);
-      return true;
-    } catch (e) {
-      console.error('Error in refreshLogs:', e);
-      SpreadsheetApp.getUi().alert('Ошибка обновления логов: ' + e.message);
-      return false;
-    }
-  };
-})();
+// ============= ARCHIVED: GLOBAL PROXY FUNCTIONS (removed - server-side logging only) =============
+// Previously: callServerLogCommand(), callServerRecreateDebugLog(), Lib.refreshLogs()
+// These tried to manage local Google Sheets logging
+// Now: All logging is server-side only - access via server URLs

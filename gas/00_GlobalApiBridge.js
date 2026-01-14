@@ -347,35 +347,9 @@ function clearTestResults() {
   throw new Error('Lib.clearTestResults не определена');
 }
 
-// ============ ЛОГИ ============
-
-function refreshLogs() {
-  if (typeof Lib !== 'undefined' && Lib.refreshLogs) {
-    return Lib.refreshLogs();
-  }
-  throw new Error('Lib.refreshLogs не определена');
-}
-
-function quickCleanLogSheet() {
-  if (typeof callServerLogCommand === 'function') {
-    return callServerLogCommand(true);
-  }
-  throw new Error('callServerLogCommand не определена');
-}
-
-function recreateLogSheet() {
-  if (typeof callServerLogCommand === 'function') {
-    return callServerLogCommand(false);
-  }
-  throw new Error('callServerLogCommand не определена');
-}
-
-function recreateDebugLogSheet() {
-  if (typeof callServerRecreateDebugLog === 'function') {
-    return callServerRecreateDebugLog();
-  }
-  throw new Error('callServerRecreateDebugLog не определена');
-}
+// ============ ЛОГИ (ARCHIVED - all logging is server-side now) ============
+// Removed functions: refreshLogs(), quickCleanLogSheet(), recreateLogSheet(), recreateDebugLogSheet()
+// Use openServerLogsJournal_proxy() and openServerDashboard_proxy() instead
 
 function manualArchiveLogs_proxy() {
   if (typeof Lib !== 'undefined' && Lib.manualArchiveLogs_proxy) {
@@ -391,19 +365,9 @@ function showArchiveStatus_proxy() {
   throw new Error('Lib.showArchiveStatus_proxy не определена');
 }
 
-function showLogJournal_proxy() {
-  if (typeof Lib !== 'undefined' && Lib.showLogJournal) {
-    return Lib.showLogJournal();
-  }
-  throw new Error('Lib.showLogJournal не определена');
-}
-
-function showSyncJournal_proxy() {
-  if (typeof Lib !== 'undefined' && Lib.showSyncJournal) {
-    return Lib.showSyncJournal();
-  }
-  throw new Error('Lib.showSyncJournal не определена');
-}
+// REMOVED: showLogJournal_proxy() and showSyncJournal_proxy()
+// These are now handled by server-side logging only
+// Use openServerLogsJournal_proxy() and openServerSyncJournal_proxy() instead
 
 function collectAndCopyDocuments_proxy() {
   if (typeof Lib !== 'undefined' && Lib.collectAndCopyDocuments) {
@@ -2069,10 +2033,31 @@ function showAllServicesStatus_proxy() {
 }
 
 /**
- * Прокси для открытия дашборда логов.
+ * Прокси для открытия дашборда на сервере
  */
-function openLogDashboard_proxy() {
-  if (typeof Lib !== 'undefined' && typeof Lib.openLogDashboard === 'function') {
-    return Lib.openLogDashboard();
+function openServerDashboard_proxy() {
+  if (typeof Lib !== 'undefined' && typeof Lib.openServerDashboard === 'function') {
+    return Lib.openServerDashboard();
   }
+  throw new Error('Lib.openServerDashboard не определена');
+}
+
+/**
+ * Прокси для открытия журнала логов на сервере
+ */
+function openServerLogsJournal_proxy() {
+  if (typeof Lib !== 'undefined' && typeof Lib.openServerLogsJournal === 'function') {
+    return Lib.openServerLogsJournal();
+  }
+  throw new Error('Lib.openServerLogsJournal не определена');
+}
+
+/**
+ * Прокси для открытия журнала синхронизации на сервере
+ */
+function openServerSyncJournal_proxy() {
+  if (typeof Lib !== 'undefined' && typeof Lib.openServerSyncJournal === 'function') {
+    return Lib.openServerSyncJournal();
+  }
+  throw new Error('Lib.openServerSyncJournal не определена');
 }
