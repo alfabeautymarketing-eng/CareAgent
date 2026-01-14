@@ -36,7 +36,7 @@
 - **Назначение:** Управление GitHub репозиториями, issues, PRs
 - **Подключение:** Docker (ghcr.io/github/github-mcp-server)
 - **Переменные:**
-  - `GITHUB_PERSONAL_ACCESS_TOKEN`: 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
+  - `GITHUB_PERSONAL_ACCESS_TOKEN`: [Add your GitHub PAT from Settings → Developer Settings → Personal Access Tokens]
 
 ---
 
@@ -79,7 +79,7 @@
 - **Назначение:** Поиск в интернете
 - **Подключение:** Docker
 - **Переменные:**
-  - `BRAVE_API_KEY`: BSA7I0LGblTYM_CqzP8j18EE7uQC1qm
+  - `BRAVE_API_KEY`: [Add your Brave Search API key from https://api.search.brave.com/]
 
 ---
 

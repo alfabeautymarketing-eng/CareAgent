@@ -20,15 +20,17 @@ class SupabaseService:
 
     def get_tables(self) -> list[str]:
         """
-        Returns a list of public tables. 
-        Since PostgREST doesn't expose a 'list tables' endpoint directly without permission adjustments,
-        we return the known schema or a static list if dynamic listing fails.
+        Returns a list of public tables.
+        Since PostgREST doesn't expose a 'list tables' endpoint directly without
+        permission adjustments, we return the known schema or a static list if
+        dynamic listing fails.
         """
         if not self.client:
-            return ["users", "products", "orders", "sync_log"] # Fallback
+            return ["users", "products", "orders", "sync_log"]  # Fallback
 
         # Try to infer from a known metadata query or just return the standard set
-        # Real dynamic listing would require querying information_schema via a specific function or SQL
+        # Real dynamic listing would require querying information_schema via
+        # a specific function or SQL
         return ["users", "products", "orders", "sync_log"]
 
     def execute_query(self, query: str) -> dict[str, Any]:
@@ -65,8 +67,8 @@ class SupabaseService:
                         limit_index = [p.lower() for p in parts].index("limit")
                         limit_val = int(parts[limit_index + 1].strip(';'))
                         db_query = db_query.limit(limit_val)
-                    except:
-                        pass # Ignore limit parsing errors
+                    except (ValueError, IndexError):
+                        pass  # Ignore limit parsing errors
 
                 response = db_query.execute()
                 return {"data": response.data, "count": len(response.data)}
