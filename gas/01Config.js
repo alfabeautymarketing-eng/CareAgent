@@ -433,110 +433,82 @@
   //   6. ⚙️ Синхронизация
   // =======================================================================================
   const MENU_REGISTRY_BLUEPRINT = [
-    // Группа "🧾 Заказ" формируется динамически из PRIMARY_DATA_MENU_ACTIONS
-    // и добавляется первой через _buildPrimaryDataMenuGroup()
+    // 1. 📥 ДАННЫЕ И ПРАЙСЫ (Data & Input)
+    // Dynamic items (Price Loaders) will be prepended here by _buildMenuRegistry
     {
-      title: "⚙️ ЭКОСИСТЕМА",
+      title: "📥 ДАННЫЕ И ПРАЙСЫ",
       items: [
-        {
-          submenu: "🔍 Проверки систем",
-          items: [
-            { label: "📊 Показать статус всех сервисов", fn: "showAllServicesStatus_proxy" },
-          ],
-        },
-        {
-          submenu: "📊 Журналы (на сервере)",
-          items: [
-            { label: "📊 Дашборд", fn: "openServerDashboard_proxy" },
-            { label: "📝 Журнал логов", fn: "openServerLogsJournal_proxy" },
-            { label: "🔄 Журнал синхро", fn: "openServerSyncJournal_proxy" },
-          ],
-        },
-        {
-          submenu: "🤖 Агент",
-          items: [
-            { label: "Проверить сервис агента", fn: "menuCheckService" },
-            { label: "⚙️ Настройки Gemini", fn: "setupGeminiComplete" },
-            { label: "📋 Показать текущие настройки", fn: "showGeminiSettings" },
-          ],
-        },
-
         { separator: true },
-        { label: "Добавить артикул", fn: "addArticleManually" },
-        { label: "Удалить выбранные строки (с синхронизацией)", fn: "deleteSelectedRowsWithSync" },
-        { label: "Синхронизировать выбранную строку", fn: "syncSelectedRow" },
-        { label: "Проверить и синхронизировать ВСЮ таблицу", fn: "runFullSync" },
+        { label: "Добавить артикул вручную", fn: "addArticleManually" },
+        { label: "Синхронизировать строку", fn: "syncSelectedRow" },
+        { label: "Синхронизировать ВСЮ таблицу", fn: "runFullSync" },
+        { label: "Удалить выбранные строки", fn: "deleteSelectedRowsWithSync" },
       ],
     },
+
+    // 2. 📋 УПРАВЛЕНИЕ ЗАКАЗОМ (Order Processing)
+    // Dynamic items (Sort, Filters) will be prepended here
     {
-      title: "📦 Выгрузка",
+      title: "📋 УПРАВЛЕНИЕ ЗАКАЗОМ",
       items: [
+        { separator: true },
+        { label: "Форматировать лист 'Ордер'", fn: "formatOrderSheet" },
         { label: "Выгрузить Акции", fn: "exportPromotions" },
         { label: "Выгрузить Наборы", fn: "exportSets" },
       ],
     },
+
+    // 3. 🚚 ПОСТАВКА И ДОКУМЕНТЫ (Supply & Output)
     {
-      title: "🚚 Поставка",
+      title: "🚚 ПОСТАВКА И ДОКУМЕНТЫ",
       items: [
-        { label: "Форматировать лист 'Ордер'", fn: "formatOrderSheet" },
-        { separator: true },
         { label: "1. Создать лист 'Для инвойса'", fn: "createFullInvoice" },
         { label: "2. Собрать документы", fn: "collectAndCopyDocuments_proxy" },
-      ],
-    },
-    {
-      title: "🔬 Сертификация",
-      items: [
-        { label: "Лист новинки", fn: "createNewsSheetFromCertification" },
         { separator: true },
         {
-          label: "Создать заявку протоколы (353пп)",
-          fn: "generateProtocols_353pp",
-        },
-        { label: "Создать заявку ДС (353пп)", fn: "generateDsLayouts_353pp" },
-        {
-          label: "Собрать документы для заявки (353пп)",
-          fn: "structureDocuments_353pp",
-        },
-        { separator: true },
-        { label: "Посчитать спирты", fn: "calculateAndAssignSpiritNumbers" },
-        { label: "Создать Макеты спирты", fn: "generateSpiritProtocols" },
-        { separator: true },
-        {
-          label: "Пересчитать каскады (Сертификация)",
-          fn: "runManualCascadeOnCertification",
-        },
-      ],
-    },
-    {
-      title: "⚙️ СИНХРОНИЗАЦИЯ",
-      items: [
-        { label: "Настроить правила", fn: "showSyncRulesManagerDialog" },
-        { label: "🧹 Очистить уведомления", fn: "clearAllToasts" },
-        { label: "🚀 Миграция правил со старого листа", fn: "migrateLegacyRules" },
-        { label: "🗑️ Удалить лист 'Правила синхро'", fn: "deleteLegacyRulesSheet" },
-        { separator: true },
-        {
-          submenu: "Операции с артикулами",
+          submenu: "🔬 Сертификация",
           items: [
-            { label: "Добавить артикул", fn: "addArticleManually" },
-            { label: "Удалить артикул", fn: "deleteSelectedRowsWithSync" },
-            { label: "Синхронизировать строку", fn: "syncSelectedRow" },
-            { label: "Синхронизировать ВСЮ таблицу", fn: "runFullSync" },
+            { label: "Лист новинки", fn: "createNewsSheetFromCertification" },
+            { separator: true },
+            { label: "Создать заявку 353пп", fn: "generateProtocols_353pp" },
+            { label: "Заявка ДС (353пп)", fn: "generateDsLayouts_353pp" },
+            { label: "Собрать док. для заявки (353пп)", fn: "structureDocuments_353pp" },
+            { separator: true },
+            { label: "Посчитать спирты", fn: "calculateAndAssignSpiritNumbers" },
+            { label: "Создать макеты спирты", fn: "generateSpiritProtocols" },
+            { separator: true },
+            { label: "Пересчитать каскады",  fn: "runManualCascadeOnCertification" },
           ],
         },
-        { separator: true },
-        { label: "Установить/Переустановить триггеры", fn: "setupTriggers" },
       ],
     },
+
+    // 4. 🤖 AI И КОНТРОЛЬ (Quality Loop)
     {
-      title: "🤖 АГЕНТ",
+      title: "🤖 AI И КОНТРОЛЬ",
       items: [
         { label: "🎯 Smart Match для строки", fn: "menuSmartMatch" },
         { label: "🤖 Анализировать выбранную строку", fn: "menuAnalyzeSelected" },
         { label: "📊 Анализировать пустые строки", fn: "menuAnalyzeEmpty" },
-        { separator: true },
         { label: "📦 Показать категории ТН ВЭД", fn: "menuShowCategories" },
+        { separator: true },
+        // REMOVED: Duplicate "🛡️ Проверка системы" submenu
+        // Functions moved to "⚙️ ЭКОСИСТЕМА" > "🔍 Проверки систем" and "📊 Журналы (на сервере)"
+      ],
+    },
+
+    // 5. ⚙️ НАСТРОЙКИ (Configuration)
+    {
+      title: "⚙️ НАСТРОЙКИ",
+      items: [
+        { label: "Настроить правила синхронизации", fn: "showSyncRulesManagerDialog" },
+        { label: "⚙️ Настройки Gemini", fn: "setupGeminiComplete" },
+        { separator: true },
+        { label: "Установить триггеры", fn: "setupTriggers" },
+        { label: "🧹 Очистить уведомления", fn: "clearAllToasts" },
+        { separator: true },
+        { label: "🚀 Миграция правил", fn: "migrateLegacyRules" },
+        { label: "🗑️ Удалить лист 'Правила'", fn: "deleteLegacyRulesSheet" },
       ],
     },
   ];
@@ -998,17 +970,18 @@
       return [];
     }
 
+    // 1. Merge "Data & Prices" dynamic items into the first group (index 0)
     var primaryDataGroup = _buildPrimaryDataMenuGroup(projectKey, projectConfig);
-    if (primaryDataGroup) {
-      // Добавляем группу "Заказ" ПОСЛЕ "ЭКОСИСТЕМА" (индекс 1)
-      registry.splice(1, 0, primaryDataGroup);
+    if (primaryDataGroup && primaryDataGroup.items && registry[0]) {
+       // Insert dynamic items at the beginning of the items array
+       registry[0].items = primaryDataGroup.items.concat(registry[0].items);
     }
 
-    // Добавляем группу "Стадии по заказ" для проекта SK
+    // 2. Merge "Order Processing" dynamic items (Order Stages) into the second group (index 1)
     var orderStagesGroup = _buildOrderStagesMenuGroup(projectKey, projectConfig);
-    if (orderStagesGroup) {
-      // Добавляем после группы "Заказ"
-      registry.splice(2, 0, orderStagesGroup);
+    if (orderStagesGroup && orderStagesGroup.items && registry[1]) {
+       // Insert dynamic items at the beginning
+       registry[1].items = orderStagesGroup.items.concat(registry[1].items);
     }
 
     return registry;
