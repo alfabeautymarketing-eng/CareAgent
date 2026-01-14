@@ -2,7 +2,7 @@
 Configuration management using pydantic-settings.
 """
 
-from typing import List, Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,11 +27,11 @@ class Settings(BaseSettings):
     server_workers: int = 4
 
     # CORS
-    cors_origins: List[str] = ["*"]
+    cors_origins: list[str] = ["*"]
 
     # Google
     google_credentials_file: str = "config/credentials.json"
-    google_credentials_base64: Optional[str] = None
+    google_credentials_base64: str | None = None
 
     # Gemini AI
     gemini_api_key: str = ""
@@ -42,12 +42,16 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl: int = 3600
 
+    # Supabase
+    supabase_url: str | None = None
+    supabase_service_key: str | None = None
+
     # Webhook
     webhook_secret: str = ""
 
     # Notifications
-    telegram_bot_token: Optional[str] = None
-    telegram_chat_id: Optional[str] = None
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
 
     # Sync log storage
     sync_log_data_dir: str = "data/sync_logs"

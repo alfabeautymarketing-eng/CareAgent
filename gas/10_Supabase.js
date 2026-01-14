@@ -23,9 +23,50 @@ function openSupabaseConsole() {
 /**
  * Shows available tables in Supabase database
  */
+/**
+ * Shows available tables in Supabase database
+ */
 function showSupabaseTablesView() {
   const ui = SpreadsheetApp.getUi();
-  ui.alert('🗄️ Просмотр таблиц Supabase\n\nЭта функция будет реализована через MCP сервер.\n\nДоступные таблицы:\n- users\n- products\n- orders\n- sync_log');
+  const SERVER_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL');
+  
+  if (!SERVER_URL) {
+    ui.alert('❌ Error: SERVER_URL not set in Script Properties');
+    return;
+  }
+
+  try {
+    ui.alert('⏳ Loading tables from Supabase...');
+    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/supabase/tables', {
+      method: 'get',
+      muteHttpExceptions: true
+    });
+    
+    const result = JSON.parse(response.getContentText());
+    if (response.getResponseCode() !== 200) {
+      throw new Error(result.detail || 'Unknown error');
+    }
+
+    const tables = result.tables;
+    if (!tables || tables.length === 0) {
+      ui.alert('🗄️ Supabase Tables', 'No public tables found.', ui.ButtonSet.OK);
+      return;
+    }
+
+    const html = HtmlService.createHtmlOutput(
+      '<style>body { font-family: sans-serif; padding: 10px; } ul { list-style-type: none; padding: 0; } li { padding: 8px; border-bottom: 1px solid #eee; } li:last-child { border-bottom: none; } .table-icon { margin-right: 8px; }</style>' +
+      '<h3>🗄️ Supabase Tables</h3>' +
+      '<ul>' +
+      tables.map(function(t) { return '<li><span class="table-icon">📄</span>' + t + '</li>'; }).join('') +
+      '</ul>'
+    ).setWidth(300).setHeight(400);
+
+    ui.showModelessDialog(html, 'Supabase Tables');
+
+  } catch (e) {
+    console.error(e);
+    ui.alert('❌ Error fetching tables:\n' + e.toString());
+  }
 }
 
 /**
@@ -33,12 +74,56 @@ function showSupabaseTablesView() {
  */
 function executeSupabaseSqlQuery() {
   const ui = SpreadsheetApp.getUi();
-  const response = ui.prompt('Введите SQL запрос для выполнения:', 'SELECT * FROM users LIMIT 10;');
+  const SERVER_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL');
+
+  if (!SERVER_URL) {
+    ui.alert('❌ Error: SERVER_URL not set');
+    return;
+  }
+
+  const response = ui.prompt('SQL Query', 'SELECT * FROM users LIMIT 5', ui.ButtonSet.OK_CANCEL);
 
   if (response.getSelectedButton() === ui.Button.OK) {
     const query = response.getResponseText();
-    ui.alert('SQL запрос отправлен:\n\n' + query + '\n\nРезультаты будут загружены через MCP сервер.');
-    console.log('Supabase SQL Query:', query);
+    ui.toast('🚀 Executing SQL...', 'Supabase');
+    
+    try {
+      const apiResponse = UrlFetchApp.fetch(SERVER_URL + '/api/v1/supabase/query', {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({ query: query }),
+        muteHttpExceptions: true
+      });
+
+      const result = JSON.parse(apiResponse.getContentText());
+      if (apiResponse.getResponseCode() !== 200) {
+        throw new Error(result.detail || 'Unknown error');
+      }
+
+      const data = result.data;
+      if (!data || data.length === 0) {
+        ui.alert('✅ Query executed successfully. No rows returned.');
+      } else {
+        // Show results in a simplified way or specialized sheet
+        const headers = Object.keys(data[0]);
+        const headerRow = '<tr>' + headers.map(function(h) { return '<th>' + h + '</th>'; }).join('') + '</tr>';
+        const rows = data.map(function(row) {
+          return '<tr>' + headers.map(function(h) { return '<td>' + (row[h] !== null ? row[h] : '') + '</td>'; }).join('') + '</tr>';
+        }).join('');
+
+        const html = HtmlService.createHtmlOutput(
+          '<style>table { border-collapse: collapse; width: 100%; font-family: sans-serif; font-size: 12px; } th, td { border: 1px solid #ddd; padding: 4px; text-align: left; } th { background-color: #f2f2f2; }</style>' +
+          '<h3>Query Results (' + data.length + ' rows)</h3>' +
+          '<table>' + headerRow + rows + '</table>'
+        ).setWidth(800).setHeight(600);
+
+        ui.showModelessDialog(html, 'SQL Results');
+      }
+
+    } catch (e) {
+      console.error(e);
+      ui.alert('❌ SQL Error:\n' + e.toString());
+    }
   }
 }
 
@@ -47,18 +132,57 @@ function executeSupabaseSqlQuery() {
  */
 function importSupabaseData() {
   const ui = SpreadsheetApp.getUi();
-  const response = ui.prompt('Выберите таблицу для импорта:', 'products');
+  const SERVER_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL');
+  
+  if (!SERVER_URL) {
+    ui.alert('❌ Error: SERVER_URL not set');
+    return;
+  }
+
+  const response = ui.prompt('Import Table', 'Enter table name (e.g. products)', ui.ButtonSet.OK_CANCEL);
 
   if (response.getSelectedButton() === ui.Button.OK) {
     const tableName = response.getResponseText();
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getActiveSheet();
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
 
-    ui.alert('Импорт данных из таблицы: ' + tableName + '\n\nПожалуйста, подождите...');
-    console.log('Importing from Supabase table:', tableName);
+    ui.toast('📥 Importing data...', 'Supabase');
 
-    // Placeholder for actual import logic
-    sheet.getRange('A1').setValue('Import from ' + tableName + ' (via MCP)');
+    try {
+      const apiResponse = UrlFetchApp.fetch(SERVER_URL + '/api/v1/supabase/table/' + tableName + '?limit=100', {
+        method: 'get',
+        muteHttpExceptions: true
+      });
+
+      const result = JSON.parse(apiResponse.getContentText());
+      if (apiResponse.getResponseCode() !== 200) {
+        throw new Error(result.detail || 'Unknown error');
+      }
+
+      const data = result.data;
+      if (!data || data.length === 0) {
+        ui.alert('⚠️ Table exists but returned no data (or empty).');
+        return;
+      }
+
+      // Write data to sheet
+      sheet.clear();
+      const headers = Object.keys(data[0]);
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+
+      const values = data.map(function(row) {
+        return headers.map(function(header) { return row[header]; });
+      });
+
+      if (values.length > 0) {
+        sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+      }
+      
+      ui.alert('✅ Imported ' + values.length + ' rows from ' + tableName);
+
+    } catch (e) {
+      console.error(e);
+      ui.alert('❌ Import Error:\n' + e.toString());
+    }
   }
 }
 
@@ -66,18 +190,15 @@ function importSupabaseData() {
  * Export current sheet data to Supabase
  */
 function exportSupabaseData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getActiveSheet();
-  const data = sheet.getDataRange().getValues();
-
   const ui = SpreadsheetApp.getUi();
-  const response = ui.prompt('Укажите название таблицы для экспорта:', 'exported_data');
+  const SERVER_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL');
 
-  if (response.getSelectedButton() === ui.Button.OK) {
-    const tableName = response.getResponseText();
-    ui.alert('Экспорт ' + data.length + ' строк в таблицу: ' + tableName + '\n\nОперация выполняется через MCP сервер.');
-    console.log('Exporting to Supabase table:', tableName, 'Rows:', data.length);
+  if (!SERVER_URL) {
+    ui.alert('❌ Error: SERVER_URL not set');
+    return;
   }
+
+  ui.alert('⚠️ Export feature is currently read-only in this version by safety default.\n\nPlease define target table structure first.');
 }
 
 /**
