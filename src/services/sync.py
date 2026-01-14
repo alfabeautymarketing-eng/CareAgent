@@ -673,8 +673,8 @@ class SyncService:
                        sheet=sheet_name, row_key=row_key, header=source_header)
             return {"status": "skipped", "reason": "Cell locked (anti-cycle protection)"}
 
-        # Пропускаем события на лог-листах
-        if sheet_name in {"Логи", "Журнал синхро", "Logs"}:
+        # Пропускаем события на лог-листах (Логи удалены из системы)
+        if sheet_name in {"Журнал синхро", "Logs"}:
             return {"status": "skipped", "reason": "Log sheet ignored"}
 
         self._log_to_session(

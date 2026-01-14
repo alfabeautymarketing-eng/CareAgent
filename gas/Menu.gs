@@ -148,10 +148,30 @@ function buildFallbackMenu(ui) {
 }
 
 /**
+ * Clear menu config cache.
+ * Call this if menu is not updating after server changes.
+ */
+function clearMenuCache() {
+  try {
+    const spreadsheetId = SpreadsheetApp.getActiveSpreadsheet().getId();
+    const cacheKey = 'MENU_CONFIG_CACHE_' + spreadsheetId;
+    const props = PropertiesService.getUserProperties();
+    props.deleteProperty(cacheKey);
+    console.log('Menu cache cleared for spreadsheet:', spreadsheetId);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Кэш меню очищен!', 'Cache', 2);
+  } catch (e) {
+    console.error('Error clearing menu cache:', e);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Ошибка: ' + e.toString(), 'Error', 5);
+  }
+}
+
+/**
  * Force refresh menu from server.
  * Call this manually if menu shows "Offline" but server is running.
+ * This now clears the cache before reloading.
  */
 function refreshMenu() {
+  clearMenuCache();
   createAgentMenu();
   SpreadsheetApp.getActiveSpreadsheet().toast('Меню обновлено!', 'Ecosystem', 2);
 }

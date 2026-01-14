@@ -828,85 +828,85 @@ async def truncate_sync_logs(
 
 
 
-# --- Log Management Endpoints ---
+# --- Log Management Endpoints (DISABLED - Logging to "Логи" sheet removed) ---
 
-@api_router.post("/logs/recreate", summary="Пересоздать лист логов")
-async def recreate_log_sheet_endpoint(request: LogInitRequest):
-    """Пересоздает лист 'Логи', исправляя заголовки, если они были удалены."""
-    try:
-        logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=False)
-        return {"status": "success", "message": "Log sheet recreated"}
-    except Exception as e:
-        logger.error("log_recreate_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+# @api_router.post("/logs/recreate", summary="Пересоздать лист логов")
+# async def recreate_log_sheet_endpoint(request: LogInitRequest):
+#     """Пересоздает лист 'Логи', исправляя заголовки, если они были удалены."""
+#     try:
+#         logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=False)
+#         return {"status": "success", "message": "Log sheet recreated"}
+#     except Exception as e:
+#         logger.error("log_recreate_failed", error=str(e))
+#         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/logs/clean", summary="Полная очистка логов")
-async def clean_log_sheet_endpoint(request: LogInitRequest):
-    """Полностью очищает лист логов и создает чистые заголовки."""
-    try:
-        logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=True)
-        return {"status": "success", "message": "Log sheet cleaned"}
-    except Exception as e:
-        logger.error("log_clean_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+# @api_router.post("/logs/clean", summary="Полная очистка логов")
+# async def clean_log_sheet_endpoint(request: LogInitRequest):
+#     """Полностью очищает лист логов и создает чистые заголовки."""
+#     try:
+#         logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=True)
+#         return {"status": "success", "message": "Log sheet cleaned"}
+#     except Exception as e:
+#         logger.error("log_clean_failed", error=str(e))
+#         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/logs/recreate-debug", summary="Пересоздать отладочный лист")
-async def recreate_debug_log_sheet_endpoint(request: LogInitRequest):
-    """Пересоздает лист 'Журнал логов' для технических записей."""
-    try:
-        # 'Журнал логов' is the sheet name for debug logs
-        logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=False, sheet_name="Журнал логов")
-        return {"status": "success", "message": "Debug log sheet recreated"}
-    except Exception as e:
-        logger.error("log_debug_recreate_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+# @api_router.post("/logs/recreate-debug", summary="Пересоздать отладочный лист")
+# async def recreate_debug_log_sheet_endpoint(request: LogInitRequest):
+#     """Пересоздает лист 'Журнал логов' для технических записей."""
+#     try:
+#         # 'Журнал логов' is the sheet name for debug logs
+#         logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=False, sheet_name="Журнал логов")
+#         return {"status": "success", "message": "Debug log sheet recreated"}
+#     except Exception as e:
+#         logger.error("log_debug_recreate_failed", error=str(e))
+#         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/logs/archive", summary="Архивировать логи")
-async def archive_logs_endpoint(request: LogInitRequest):
-    """Переносит старые записи из логов в архивную таблицу."""
-    try:
-        # Need to determine project prefix, default to 'Common' or try to get from request/sheet?
-        # For now, let's look up project from sheet title or just use "Project"
-        # Ideally, we should receive 'project' in request, but LogInitRequest only has spreadsheet_id
-        # We can fetch project from sheet name or config.
-        # Let's peek at sheet name? Or just use "Archive"
-        
-        # Simple heuristic:
-        try:
-             ss = sheets_service.get_spreadsheet(request.spreadsheet_id)
-             title = ss.title.lower()
-             prefix = "common"
-             if "mt" in title: prefix = "mt"
-             elif "sk" in title: prefix = "sk"
-             elif "ss" in title: prefix = "ss"
-        except:
-             prefix = "common"
-             
-        result = await logging_service.archive_logs(request.spreadsheet_id, project_prefix=prefix)
-        return {"status": "success", "data": result}
-    except Exception as e:
-        logger.error("log_archive_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+# @api_router.post("/logs/archive", summary="Архивировать логи")
+# async def archive_logs_endpoint(request: LogInitRequest):
+#     """Переносит старые записи из логов в архивную таблицу."""
+#     try:
+#         # Need to determine project prefix, default to 'Common' or try to get from request/sheet?
+#         # For now, let's look up project from sheet title or just use "Project"
+#         # Ideally, we should receive 'project' in request, but LogInitRequest only has spreadsheet_id
+#         # We can fetch project from sheet name or config.
+#         # Let's peek at sheet name? Or just use "Archive"
+#         
+#         # Simple heuristic:
+#         try:
+#              ss = sheets_service.get_spreadsheet(request.spreadsheet_id)
+#              title = ss.title.lower()
+#              prefix = "common"
+#              if "mt" in title: prefix = "mt"
+#              elif "sk" in title: prefix = "sk"
+#              elif "ss" in title: prefix = "ss"
+#         except:
+#              prefix = "common"
+#              
+#         result = await logging_service.archive_logs(request.spreadsheet_id, project_prefix=prefix)
+#         return {"status": "success", "data": result}
+#     except Exception as e:
+#         logger.error("log_archive_failed", error=str(e))
+#         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/logs/archive/status", summary="Статус архивации")
-async def get_archive_status_endpoint(spreadsheet_id: str):
-    """Проверяет текущее состояние процесса архивации логов."""
-    try:
-        try:
-             ss = sheets_service.get_spreadsheet(spreadsheet_id)
-             title = ss.title.lower()
-             prefix = "common"
-             if "mt" in title: prefix = "mt"
-             elif "sk" in title: prefix = "sk"
-             elif "ss" in title: prefix = "ss"
-        except:
-             prefix = "common"
-             
-        status = logging_service.get_archive_status(project_prefix=prefix)
-        return {"status": "success", "data": status}
-    except Exception as e:
-        logger.error("get_archive_status_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+# @api_router.get("/logs/archive/status", summary="Статус архивации")
+# async def get_archive_status_endpoint(spreadsheet_id: str):
+#     """Проверяет текущее состояние процесса архивации логов."""
+#     try:
+#         try:
+#              ss = sheets_service.get_spreadsheet(spreadsheet_id)
+#              title = ss.title.lower()
+#              prefix = "common"
+#              if "mt" in title: prefix = "mt"
+#              elif "sk" in title: prefix = "sk"
+#              elif "ss" in title: prefix = "ss"
+#         except:
+#              prefix = "common"
+#              
+#         status = logging_service.get_archive_status(project_prefix=prefix)
+#         return {"status": "success", "data": status}
+#     except Exception as e:
+#         logger.error("get_archive_status_failed", error=str(e))
+#         raise HTTPException(status_code=500, detail=str(e))
 
 # --- Document Collection Endpoints ---
 
@@ -2790,49 +2790,76 @@ PRIMARY_DATA_MENU_ACTIONS = {
     "STAGE_PRICE": {"fn": "serverShowPriceStage"},
 }
 
-# Static menu groups from legacy GAS config (without project-specific items)
+# Static menu groups organized by business cycles
 BASE_MENU_GROUPS: List[dict] = [
+    # ============== ЦИКЛ 1: ПРАЙС-ЛИСТ ==============
     {
-        "title": "📦 Выгрузка",
+        "title": "🏷️ Прайс-лист",
         "items": [
-            {"label": "Выгрузить Акции", "function_name": "serverExportPromotions"},
-            {"label": "Выгрузить Наборы", "function_name": "serverExportSets"},
+            {"label": "📥 Загрузить и обработать прайс", "function_name": "serverProcessPrimaryData"},
+            {"label": "📊 Загрузить остатки", "function_name": "serverLoadStockData"},
+            {"separator": True},
+            {"label": "💰 Анализировать цены", "function_name": "menuAnalyzePrices"},
+            {"label": "✅ Сформировать свежий прайс", "function_name": "serverGenerateFreshPriceList"},
         ],
     },
+    # ============== ЦИКЛ 2: ЗАКАЗ & ДОКУМЕНТАЦИЯ ==============
     {
-        "title": "🚚 Поставка",
+        "title": "🛒 Заказ & Документация",
         "items": [
-            {"label": "Форматировать лист 'Ордер'", "function_name": "serverFormatOrderSheet"},
+            {"label": "📋 Подготовить заказ", "function_name": "serverPrepareOrder"},
             {"separator": True},
-            {"label": "1. Создать лист 'Для инвойса'", "function_name": "serverCreateFullInvoice"},
-            {"label": "2. Собрать документы", "function_name": "collectAndCopyDocuments"},
+            {"label": "📦 Подготовить документы для таможни", "function_name": "serverPrepareCustomsDocuments"},
+            {"label": "✏️ Заполнить разрешительную документацию", "function_name": "serverFillPermitDocumentation"},
+            {"separator": True},
+            {"label": "🔬 Сертификация", "function_name": "serverCertificationWorkbench"},
+            {"label": "📄 Лист новинки", "function_name": "serverCreateNewsSheet"},
+            {"label": "📋 Протоколы (353пп)", "function_name": "serverGenerateProtocols353pp"},
+            {"label": "📋 ДС Макеты (353пп)", "function_name": "serverGenerateDsLayouts"},
+            {"label": "📦 Собрать документы для заявки", "function_name": "structureDocuments_353pp"},
+            {"separator": True},
+            {"label": "🥃 Спирты - Посчитать", "function_name": "serverCalculateSpiritNumbers"},
+            {"label": "🥃 Спирты - Создать Макеты", "function_name": "generateSpiritProtocols"},
+            {"label": "🔄 Спирты - Пересчитать каскады", "function_name": "serverRecalculateCascades"},
         ],
     },
+    # ============== ЦИКЛ 3: ЭКСПОРТ & ВЫГРУЗКА ==============
     {
-        "title": "🔬 Сертификация",
+        "title": "📦 Экспорт & Выгрузка",
         "items": [
-            {"label": "Лист новинки", "function_name": "serverCreateNewsSheet"},
+            {"label": "📤 Выгрузить Акции", "function_name": "serverExportPromotions"},
+            {"label": "📤 Выгрузить Наборы", "function_name": "serverExportSets"},
             {"separator": True},
-            {"label": "Создать заявку протоколы (353пп)", "function_name": "serverGenerateProtocols353pp"},
-            {"label": "Создать заявку ДС (353пп)", "function_name": "serverGenerateDsLayouts"},
-            {"label": "Собрать документы для заявки (353пп)", "function_name": "structureDocuments_353pp"},
-            {"separator": True},
-            {"label": "Посчитать спирты", "function_name": "serverCalculateSpiritNumbers"},
-            {"label": "Создать Макеты спирты", "function_name": "generateSpiritProtocols"},
-            {"separator": True},
-            {"label": "Пересчитать каскады (Сертификация)", "function_name": "serverRecalculateCascades"},
+            {"label": "📄 Форматировать лист 'Ордер'", "function_name": "serverFormatOrderSheet"},
+            {"label": "📄 Создать лист 'Для инвойса'", "function_name": "serverCreateFullInvoice"},
+            {"label": "📄 Собрать документы для инвойса", "function_name": "collectAndCopyDocuments"},
         ],
     },
+    # ============== ЦИКЛ 4: AI АГЕНТ ==============
     {
-        "title": "⚙️ Синхронизация",
+        "title": "🤖 AI Агент",
         "items": [
-            {
-                "submenu": "⚙️ Настройки",
-                "items": [
-                    {"label": "🔄 Обновить триггеры", "function_name": "setupTriggers"},
-                    {"label": "📝 Настроить правила", "function_name": "showSyncRulesManagerDialog"},
-                ],
-            },
+            {"label": "🔑 Ввести API ключ Gemini", "function_name": "setupGeminiComplete"},
+            {"label": "📋 Показать настройки AI", "function_name": "showGeminiSettings"},
+            {"label": "🟢 Проверить статус сервиса", "function_name": "menuCheckService"},
+            {"separator": True},
+            {"label": "🧪 Быстрый анализ (выбранная строка)", "function_name": "menuSimpleAnalyze"},
+            {"label": "🤖 Анализировать выбранную строку (полный)", "function_name": "menuAnalyzeSelected"},
+            {"label": "📊 Анализировать пустые строки", "function_name": "menuAnalyzeEmpty"},
+            {"separator": True},
+            {"label": "📚 Показать категории ТН ВЭД", "function_name": "menuShowCategories"},
+        ],
+    },
+]
+
+# Settings submenu groups
+SETTINGS_SUBMENU_GROUPS: List[dict] = [
+    # ============== ПОДМЕНЮ: СИНХРОНИЗАЦИЯ ==============
+    {
+        "title": "🔄 Синхронизация",
+        "items": [
+            {"label": "🔧 Обновить триггеры", "function_name": "setupTriggers"},
+            {"label": "📝 Настроить правила синхронизации", "function_name": "showSyncRulesManagerDialog"},
             {"separator": True},
             {"label": "➕ Добавить артикул", "function_name": "addArticleManually"},
             {"label": "❌ Удалить артикул", "function_name": "deleteSelectedRowsWithSync"},
@@ -2841,46 +2868,49 @@ BASE_MENU_GROUPS: List[dict] = [
             {"label": "🔄 Синхронизировать всю таблицу", "function_name": "runFullSync"},
         ],
     },
-    {
-        "title": "🤖 Агент",
-        "items": [
-            {"label": "🔑 Ввести API ключ", "function_name": "setupGeminiComplete"},
-            {"label": "📋 Показать настройки", "function_name": "showGeminiSettings"},
-            {"label": "🟢 Проверить сервис", "function_name": "menuCheckService"},
-            {"separator": True},
-            {"label": "🧪 Тест AI (быстрый анализ)", "function_name": "menuSimpleAnalyze"},
-            {"label": "🤖 Анализировать выбранную строку", "function_name": "menuAnalyzeSelected"},
-            {"label": "📊 Анализировать пустые строки", "function_name": "menuAnalyzeEmpty"},
-            {"separator": True},
-            {"label": "📦 Показать категории ТН ВЭД", "function_name": "menuShowCategories"},
-        ],
-    },
+    # ============== ПОДМЕНЮ: ЛОГИ ==============
     {
         "title": "📋 Логи",
         "items": [
             {"label": "📊 Статус архивирования", "function_name": "showArchiveStatus_proxy"},
-            {"separator": True},
             {"label": "📁 Архивировать логи сейчас", "function_name": "manualArchiveLogs_proxy"},
             {"separator": True},
-            {"label": "⏰ Установить триггер (полночь)", "function_name": "setupMidnightLogTrigger_proxy"},
-            {"label": "🗑️ Удалить триггер", "function_name": "removeMidnightLogTrigger_proxy"},
+            {"label": "⏰ Установить триггер архивирования (полночь)", "function_name": "setupMidnightLogTrigger_proxy"},
+            {"label": "🗑️ Удалить триггер архивирования", "function_name": "removeMidnightLogTrigger_proxy"},
             {"separator": True},
-            {"label": "📝 Пересоздать Журнал синхро", "function_name": "recreateLogSheet"},
-            {"label": "🧹 Очистить Журнал синхро", "function_name": "quickCleanLogSheet"},
+            {"label": "📝 Пересоздать Журнал синхронизации", "function_name": "recreateLogSheet"},
+            {"label": "🧹 Очистить Журнал синхронизации", "function_name": "quickCleanLogSheet"},
         ],
     },
+    # ============== ПОДМЕНЮ: SUPABASE ==============
     {
         "title": "🗄️ Supabase",
         "items": [
             {"label": "🔗 Открыть Supabase Console", "function_name": "openSupabaseConsole"},
-            {"label": "📊 Просмотр данных (таблицы)", "function_name": "showSupabaseTablesView"},
+            {"label": "📊 Просмотр данных (список таблиц)", "function_name": "showSupabaseTablesView"},
             {"separator": True},
             {"label": "🔍 Выполнить SQL запрос", "function_name": "executeSupabaseSqlQuery"},
             {"label": "📥 Импортировать данные", "function_name": "importSupabaseData"},
             {"label": "📤 Экспортировать данные", "function_name": "exportSupabaseData"},
             {"separator": True},
             {"label": "🔐 Управление правами доступа", "function_name": "manageSupabasePermissions"},
-            {"label": "⚙️ Настройки подключения", "function_name": "configureSupabaseConnection"},
+            {"label": "⚙️ Настройки подключения Supabase", "function_name": "configureSupabaseConnection"},
+        ],
+    },
+    # ============== ПОДМЕНЮ: ECOSYSTEM ==============
+    {
+        "title": "🟢 Ecosystem",
+        "items": [
+            {"label": "🏠 Открыть Главную страницу", "function_name": "openServerMainPage"},
+            {"label": "📝 Открыть Правила (UI)", "function_name": "openServerRulesPage"},
+            {"label": "📜 Открыть Журнал (UI)", "function_name": "openLogDashboard_proxy"},
+            {"label": "📚 Открыть Swagger (API)", "function_name": "openServerDocsPage"},
+            {"separator": True},
+            {"label": "🔄 Обновить меню", "function_name": "refreshMenu"},
+            {"label": "📑 Упорядочить листы", "function_name": "reorderSheets"},
+            {"label": "🔄 Обновить данные", "function_name": "callServerLoadFunctions"},
+            {"label": "🟢 Статус сервера", "function_name": "checkServerStatus"},
+            {"label": "🐛 Debug: Spreadsheet ID", "function_name": "debugShowSpreadsheetId"},
         ],
     },
 ]
@@ -2973,8 +3003,22 @@ def _server_tools_menu() -> MenuGroupModel:
     return MenuGroupModel(title="🟢 Ecosystem", items=items)
 
 
+def _build_settings_menu() -> MenuGroupModel:
+    """Build settings menu with all submenus."""
+    items = []
+
+    for submenu_group in SETTINGS_SUBMENU_GROUPS:
+        # Keep items as dicts (not MenuItemModel objects)
+        items.append(MenuItemModel(
+            submenu=submenu_group.get("title"),
+            items=submenu_group.get("items", [])  # Pass as dicts
+        ))
+
+    return MenuGroupModel(title="⚙️ Настройки", items=items)
+
+
 def _build_menu_registry(project: str) -> List[MenuGroupModel]:
-    """Assemble full menu registry similar to legacy GAS config."""
+    """Assemble full menu registry organized by business cycles."""
     registry: List[MenuGroupModel] = []
 
     primary_group = _build_primary_menu(project)
@@ -2985,10 +3029,12 @@ def _build_menu_registry(project: str) -> List[MenuGroupModel]:
     if stages_group:
         registry.append(stages_group)
 
+    # Main business cycles
     for group in BASE_MENU_GROUPS:
         registry.append(_clone_base_group(group))
 
-    registry.append(_server_tools_menu())
+    # Settings section (includes Sync, Logs, Supabase, and Ecosystem)
+    registry.append(_build_settings_menu())
 
     return registry
 
