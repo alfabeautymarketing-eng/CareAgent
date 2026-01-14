@@ -222,6 +222,8 @@ class HealthChecker:
             return
 
         try:
+            from google.auth.transport.requests import Request as GoogleRequest
+
             # Load and validate credentials
             credentials = Credentials.from_service_account_file(
                 str(creds_file),
@@ -232,7 +234,7 @@ class HealthChecker:
             )
 
             # Refresh to test validity
-            credentials.refresh(Request())
+            credentials.refresh(GoogleRequest())
 
             result = HealthCheckResult(
                 name="Google API Credentials",
@@ -244,7 +246,6 @@ class HealthChecker:
 
             # Check Sheets API
             try:
-                from google.auth.transport.requests import Request
                 from googleapiclient.discovery import build
 
                 service = build('sheets', 'v4', credentials=credentials)
