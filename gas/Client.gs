@@ -586,7 +586,7 @@ function getSheetsList() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new Set();
   if (Lib.CONFIG && Lib.CONFIG.SHEETS) {
-    ["RULES", "LOG", "LOG_DEBUG", "EXTERNAL_DOCS", "SESSION_LOG"].forEach((k) => {
+    ["RULES", "EXTERNAL_DOCS", "SESSION_LOG"].forEach((k) => {
       if (Lib.CONFIG.SHEETS[k]) service.add(Lib.CONFIG.SHEETS[k]);
     });
   }
@@ -750,71 +750,19 @@ function reorderSheetsSilent() {
 // =======================================================================================
 
 /**
- * Call server to recreate or clean log sheet.
- * @param {boolean} forceClean - If true, clears the sheet.
+ * @deprecated Log command is now handled by system logger.
  */
 function callServerLogCommand(forceClean) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const endpoint = forceClean ? '/api/v1/logs/clean' : '/api/v1/logs/recreate';
-
-  const payload = {
-    spreadsheet_id: ss.getId()
-  };
-
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-
-  try {
-    const response = UrlFetchApp.fetch(SERVER_URL + endpoint, options);
-    const code = response.getResponseCode();
-    const text = response.getContentText();
-
-    if (code === 200) {
-      const result = JSON.parse(text);
-      ss.toast('✅ ' + result.message);
-      return true;
-    } else {
-      SpreadsheetApp.getUi().alert('❌ Ошибка сервера (' + code + '):\n' + text);
-      return false;
-    }
-  } catch (e) {
-    SpreadsheetApp.getUi().alert('❌ Ошибка сети:\n' + e.message);
-    return false;
-  }
+  console.log("callServerLogCommand deprecated");
+  return true;
 }
 
 /**
- * Call server to recreate Debug Log sheet.
+ * @deprecated Debug log sheet is removed.
  */
 function callServerRecreateDebugLog() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({ spreadsheet_id: ss.getId() }),
-    muteHttpExceptions: true
-  };
-
-  try {
-    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/logs/recreate-debug', options);
-    const code = response.getResponseCode();
-    const text = response.getContentText();
-
-    if (code === 200) {
-      ss.toast('✅ Журнал логов пересоздан');
-      return true;
-    } else {
-      SpreadsheetApp.getUi().alert('❌ Ошибка сервера (' + code + '):\n' + text);
-      return false;
-    }
-  } catch (e) {
-    SpreadsheetApp.getUi().alert('❌ Ошибка сети:\n' + e.message);
-    return false;
-  }
+  console.log("callServerRecreateDebugLog deprecated");
+  return true;
 }
 
 /**

@@ -37,23 +37,9 @@ function handleOnOpen(e) {
   console.log("🚀 Running Installable handleOnOpen...");
 
 
-  // 1. Инициализация сессии логов на сервере (Логи)
-  try {
-    if (typeof Lib !== 'undefined' && typeof Lib.initSessionLogs === 'function') {
-      if (typeof Lib.logWithEmoji === 'function') {
-         Lib.logWithEmoji("Инициализация сессии логов...", "DEBUG", "⏳", "handleOnOpen", "Вызов Lib.initSessionLogs", "System", "PROGRESS");
-      }
-      Lib.initSessionLogs();
-      if (typeof Lib.logWithEmoji === 'function') {
-        Lib.logWithEmoji("Сессия логов инициализирована", "INFO", "✅", "handleOnOpen", "Session ID created", "System", "SUCCESS");
-      }
-    }
-  } catch (err) {
-    console.error("Ошибка при инициализации логов: " + err);
-    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-       Lib.logWithEmoji("Ошибка инициализации логов", "ERROR", "❌", "handleOnOpen", err.toString(), "System", "ERROR", null, {error: err.toString()});
-    }
-  }
+  // 1. Инициализация сессии логов (ОТКЛЮЧЕНО)
+  // Система логирования перенесена на сервер.
+  console.log("Логирование в Google Sheets отключено.");
 
   // 2. Загрузка меню (требует полного доступа, поэтому делаем после логов)
   if (typeof createAgentMenu === 'function') {
@@ -205,14 +191,7 @@ function handleOnChange(e) {
  * Логирует все изменения в лист "Логи".
  */
 function handleOnEdit(e) {
-  // Логируем событие редактирования
-  if (typeof Lib !== 'undefined' && typeof Lib.logEditEvent === 'function') {
-    try {
-      Lib.logEditEvent(e);
-    } catch (logErr) {
-      console.error("Ошибка логирования редактирования:", logErr);
-    }
-  }
+  // Логирование события редактирования в лист ОТКЛЮЧЕНО
 
   // Выполняем основную логику синхронизации
   if (typeof Lib !== 'undefined' && typeof Lib.onEdit_internal_ === 'function') {
@@ -230,20 +209,16 @@ function handleOnEdit(e) {
  * @param {string} details - Детали
  * @param {string} status - Статус (✅ OK, ❌ ОШИБКА и т.д.)
  */
+/**
+ * Универсальная функция записи в лист логов - ТЕПЕРЬ ТОЛЬКО КОНСОЛЬ
+ * @param {string} category - Категория
+ * @param {string} action - Действие
+ * @param {string} details - Детали
+ * @param {string} status - Статус
+ */
 function _writeToLogSheet_(category, action, details, status) {
-  try {
-    // Используем новую систему логирования через Lib.logWithEmoji
-    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-      const message = action + (details ? ": " + details : "");
-      const level = status && status.includes("ОШИБКА") ? "ERROR" : "INFO";
-      Lib.logWithEmoji(message, level, "", category, details || "");
-    } else {
-      // Fallback: просто логируем в консоль если Lib недоступен
-      console.log(`[${category}] ${action}: ${details || ""}`);
-    }
-  } catch (e) {
-    console.error("_writeToLogSheet_ error:", e);
-  }
+  // Логирование в лист ОТКЛЮЧЕНО. Пишем только в Cloud Logs.
+  console.log(`[${category}] ${action} | ${details || ""} | ${status || ""}`);
 }
 
 /**

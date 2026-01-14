@@ -67,8 +67,7 @@
     FOR_DATABASE: "Для базы",
     LOCAL_LOOKUP: "Вид и код",
     RULES: "Правила синхро",
-    LOG: "Журнал синхро",
-    LOG_DEBUG: "Журнал логов",
+
     EXTERNAL_DOCS: "Внешние документы",
   };
 
@@ -341,7 +340,7 @@
   HEADERS[SHEETS.ORDER_VERIFICATION] = []; // Структура будет определена по мере разработки
   HEADERS[SHEETS.FOR_DATABASE] = []; // Структура будет определена по мере разработки
   HEADERS[SHEETS.RULES] = [];
-  HEADERS[SHEETS.LOG] = [];
+
   HEADERS[SHEETS.EXTERNAL_DOCS] = [];
   // =======================================================================================
   // БЛОК 3.1: МАППИНГ ЛОГИЧЕСКИХ КОЛОНОК → ТЕКСТЫ ЗАГОЛОВКОВ
@@ -453,22 +452,7 @@
             { label: "📋 Показать текущие настройки", fn: "showGeminiSettings" },
           ],
         },
-        {
-          submenu: "📊 Логи",
-          items: [
-            { label: "📈 Дашборд логов", fn: "openLogDashboard_proxy" },
-            { separator: true },
-            { label: "📑 Показать журнал синхро", fn: "showSyncJournal_proxy" },
-            { label: "📑 Показать журнал логов", fn: "showLogJournal_proxy" },
-            { separator: true },
-            { label: "📦 Архивировать логи", fn: "manualArchiveLogs_proxy" },
-            { label: "📊 Статус архива", fn: "showArchiveStatus_proxy" },
-            { separator: true },
-            { label: "🔄 Пересоздать журнал синхро", fn: "recreateLogSheet" },
-            { label: "🔄 Пересоздать журнал логов", fn: "recreateDebugLogSheet" },
-            { label: "🧹 Очистить журнал (быстро)", fn: "quickCleanLogSheet" },
-          ],
-        },
+
         { separator: true },
         { label: "Добавить артикул", fn: "addArticleManually" },
         { label: "Удалить выбранные строки (с синхронизацией)", fn: "deleteSelectedRowsWithSync" },

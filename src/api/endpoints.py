@@ -549,6 +549,13 @@ async def get_rules_ui():
     return FileResponse("config/rule_manager.html")
 
 
+@api_router.get("/logs-ui")
+async def get_logs_ui():
+    """Serve the Logs Dashboard UI."""
+    return FileResponse("config/logs_manager.html")
+
+
+
 # ============== Sync Logs ==============
 
 def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
