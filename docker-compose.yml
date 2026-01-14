@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   app:
@@ -12,6 +12,8 @@ services:
       - ./config:/app/config:rw
       - ./logs:/app/logs
       - ./src:/app/src
+    environment:
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       redis:
         condition: service_healthy
@@ -22,6 +24,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: agentcare-redis
+    ports:
+      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:

@@ -1,5 +1,5 @@
 """
-Products API endpoints.
+Эндпоинты API для работы с товарами.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -12,15 +12,18 @@ from src.utils.logger import logger
 router = APIRouter()
 
 class ProductMatchRequest(BaseModel):
-    product_name: str = Field(..., description="The new product name to match")
-    spreadsheet_id: str = Field(..., description="The ID of the Google Sheet containing base products")
-    sheet_name: str = Field("Сертификация", description="The name of the sheet to search in")
+    product_name: str = Field(..., description="Название нового товара для сопоставления")
+    spreadsheet_id: str = Field(..., description="ID Google Таблицы, содержащей базовые товары")
+    sheet_name: str = Field("Сертификация", description="Имя листа для поиска")
 
-@router.post("/match", summary="Match a product to base products")
+    class Config:
+        title = "Запрос сопоставления товара"
+
+@router.post("/match", summary="Сопоставить товар с базовыми товарами")
 async def match_product(request: ProductMatchRequest) -> Dict[str, Any]:
     """
-    Finds the best matching base product for the given product name
-    using Gemini AI and Google Sheets data.
+    Находит наиболее подходящий базовый товар для заданного имени товара
+    с использованием Gemini AI и данных из Google Sheets.
     """
     logger.info(f"Received match request for '{request.product_name}'")
     

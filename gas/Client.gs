@@ -1820,3 +1820,5 @@ function openServerUrl(path, title) {
 function openServerMainPage() { openServerUrl('/', 'Главная страница'); }
 function openServerRulesPage() { openServerUrl('/api/v1/rules-ui', 'Правила синхронизации'); }
 function openServerDocsPage() { openServerUrl('/docs', 'Swagger UI'); }
+function openLogDashboard_proxy() { openServerUrl('/api/v1/logs-ui', 'Журнал синхронизации'); }
+function openLogsManager() { openServerUrl('/api/v1/logs-ui', 'Журнал синхронизации'); }

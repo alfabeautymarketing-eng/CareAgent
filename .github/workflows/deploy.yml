@@ -7,12 +7,18 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
+      CLASP_SERVICE_ACCOUNT: ${{ secrets.CLASP_SERVICE_ACCOUNT }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node
+      - name: Set up Note
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -26,12 +32,6 @@ jobs:
         run: npm install -g @google/clasp
 
       - name: Restore secrets and keys (if provided)
-        env:
-          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
-          CLASP_SERVICE_ACCOUNT: ${{ secrets.CLASP_SERVICE_ACCOUNT }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           if [ -n "$CLASP_CREDENTIALS" ]; then
             echo "$CLASP_CREDENTIALS" > ~/.clasprc.json
@@ -62,7 +62,4 @@ jobs:
         run: chmod +x ./scripts/deploy_all.sh
 
       - name: Run deploy script
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
         run: ./scripts/deploy_all.sh

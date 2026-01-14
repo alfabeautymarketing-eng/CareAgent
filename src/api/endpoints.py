@@ -601,6 +601,12 @@ async def get_rules_ui():
     return FileResponse("config/rule_manager.html")
 
 
+@api_router.get("/logs-ui", summary="Открыть интерфейс журнала синхронизации")
+async def get_logs_ui():
+    """Открывает встроенный веб-интерфейс (HTML) для просмотра логов синхронизации."""
+    return FileResponse("config/logs_manager.html")
+
+
 # ============== Sync Logs ==============
 
 def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
@@ -2955,6 +2961,7 @@ def _server_tools_menu() -> MenuGroupModel:
     items = [
         MenuItemModel(label="🏠 Открыть Главную страницу", function_name="openServerMainPage"),
         MenuItemModel(label="📝 Открыть Правила (UI)", function_name="openServerRulesPage"),
+        MenuItemModel(label="📜 Открыть Журнал (UI)", function_name="openLogDashboard_proxy"),
         MenuItemModel(label="📚 Открыть Swagger (API)", function_name="openServerDocsPage"),
         MenuItemModel(separator=True),
         MenuItemModel(label="🔄 Обновить меню", function_name="refreshMenu"),

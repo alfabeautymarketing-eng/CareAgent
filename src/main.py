@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.router import router
+from src.api.tags_metadata import tags_metadata
 from src.utils.logger import setup_logging, logger
 from src.utils.config import settings
 
@@ -34,10 +35,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AgentCare",
-    description="Google Sheets automation with AI",
+    title="AgentCare Сервер",
+    description="Автоматизация Google Таблиц с использованием ИИ",
     version=settings.version,
     lifespan=lifespan,
+    openapi_tags=tags_metadata,
 )
 
 # CORS
@@ -66,9 +68,9 @@ app.include_router(router)
 
 from fastapi.responses import RedirectResponse, HTMLResponse
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
-    """Redirect to Rules UI or show landing page."""
+    """Перенаправление на Rules UI или главную страницу."""
     return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html>
@@ -93,9 +95,9 @@ async def root():
     """)
 
 
-@app.get("/health")
+@app.get("/health", summary="Проверка здоровья сервера")
 async def health_check():
-    """Health check endpoint."""
+    """Эндпоинт для проверки статуса всех соединений сервиса."""
     return {
         "status": "healthy",
         "version": settings.version,

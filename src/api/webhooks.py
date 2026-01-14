@@ -1,12 +1,12 @@
 """
-Webhook handlers for Google Sheets events.
+Эндпоинты вебхуков для событий Google Таблиц.
 """
 
 from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Header, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.utils.logger import logger
 from src.utils.config import settings
@@ -15,23 +15,27 @@ webhook_router = APIRouter()
 
 
 class SheetEvent(BaseModel):
-    """Google Sheets event payload."""
+    """Данные события из Google Таблицы."""
+    event: str = Field(..., description="Тип события (onChange, onEdit)")
+    project: str = Field(..., description="Код проекта (mt, sk, ss)")
+    sheet: str = Field(..., description="Имя листа")
+    range: Optional[str] = Field(None, description="Диапазон (например, 'A1')")
+    changed_columns: Optional[List[str]] = Field(None, description="Список измененных колонок")
+    user: Optional[str] = Field(None, description="Email пользователя")
+    timestamp: Optional[datetime] = Field(None, description="Время события")
 
-    event: str  # onChange, onEdit
-    project: str  # mt, sk, ss
-    sheet: str  # Sheet name
-    range: Optional[str] = None
-    changed_columns: Optional[List[str]] = None
-    user: Optional[str] = None
-    timestamp: Optional[datetime] = None
+    class Config:
+        title = "Событие Google Таблицы"
 
 
 class TaskResponse(BaseModel):
-    """Response with task ID for tracking."""
+    """Ответ с ID задачи для отслеживания."""
+    task_id: str = Field(..., description="ID созданной задачи")
+    status: str = Field(..., description="Статус принятия")
+    message: str = Field(..., description="Сообщение")
 
-    task_id: str
-    status: str
-    message: str
+    class Config:
+        title = "Ответ о постановке задачи"
 
 
 def verify_webhook_signature(
@@ -67,7 +71,7 @@ def verify_webhook_signature(
     return hmac.compare_digest(expected, provided)
 
 
-@webhook_router.post("/sheets/{project}", response_model=TaskResponse)
+@webhook_router.post("/sheets/{project}", response_model=TaskResponse, summary="Обработка событий из Google Sheets")
 async def handle_sheets_webhook(
     project: str,
     event: SheetEvent,
@@ -76,10 +80,9 @@ async def handle_sheets_webhook(
     x_webhook_timestamp: Optional[str] = Header(None),
 ):
     """
-    Handle webhook from Google Sheets.
-
-    This endpoint receives events when data changes in Google Sheets
-    and queues sync tasks for processing.
+    Основной обработчик вебхуков из Google Sheets.
+    Принимает события изменения данных (настройки, редактирование) 
+    и ставит задачи на синхронизацию в очередь.
     """
     # Validate project
     if project not in ["mt", "sk", "ss"]:
@@ -111,12 +114,11 @@ async def handle_sheets_webhook(
     )
 
 
-@webhook_router.post("/sync/{project}", response_model=TaskResponse)
+@webhook_router.post("/sync/{project}", response_model=TaskResponse, summary="Запуск полной синхронизации проекта")
 async def trigger_manual_sync(project: str):
     """
-    Manually trigger full sync for a project.
-
-    Use this endpoint to force a complete sync when needed.
+    Запускает полную синхронизацию всех данных для конкретного проекта.
+    Используйте этот эндпоинт, когда нужно принудительно обновить всё вручную.
     """
     if project not in ["mt", "sk", "ss"]:
         raise HTTPException(status_code=404, detail=f"Unknown project: {project}")
