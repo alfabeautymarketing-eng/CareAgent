@@ -51,14 +51,40 @@ var Lib = Lib || {};
    * ПУБЛИЧНАЯ: Выгрузка акций
    */
   Lib.exportPromotions = function() {
-    _exportData('promotions');
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Запуск выгрузки акций", "INFO", "", "exportPromotions", "Начало процесса выгрузки акций в целевой документ", "Export", "START", {}, null);
+    }
+    try {
+      _exportData('promotions');
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Выгрузка акций завершена успешно", "INFO", "", "exportPromotions", "Процесс выгрузки завершен без ошибок", "Export", "SUCCESS", {}, { status: "completed" });
+      }
+    } catch(e) {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при выгрузке акций", "ERROR", "", "exportPromotions", e && e.message ? e.message : String(e), "Export", "ERROR", {}, { error: e ? e.toString() : "Unknown error" });
+      }
+      throw e;
+    }
   };
 
   /**
    * ПУБЛИЧНАЯ: Выгрузка наборов
    */
   Lib.exportSets = function() {
-    _exportData('sets');
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Запуск выгрузки наборов", "INFO", "", "exportSets", "Начало процесса выгрузки наборов в целевой документ", "Export", "START", {}, null);
+    }
+    try {
+      _exportData('sets');
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Выгрузка наборов завершена успешно", "INFO", "", "exportSets", "Процесс выгрузки завершен без ошибок", "Export", "SUCCESS", {}, { status: "completed" });
+      }
+    } catch(e) {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при выгрузке наборов", "ERROR", "", "exportSets", e && e.message ? e.message : String(e), "Export", "ERROR", {}, { error: e ? e.toString() : "Unknown error" });
+      }
+      throw e;
+    }
   };
 
   /**
@@ -78,7 +104,9 @@ var Lib = Lib || {};
     }
 
     try {
-      Lib.logInfo('[' + projectKey + '] Выгрузка ' + (type === 'promotions' ? 'акций' : 'наборов') + ': старт');
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Загрузка данных для выгрузки", "DEBUG", "", "_exportData", "Получение данных с листов для выгрузки " + (type === 'promotions' ? 'акций' : 'наборов'), "Export", "PROGRESS", { type: type, projectKey: projectKey }, null);
+      }
 
       var ss = SpreadsheetApp.getActiveSpreadsheet();
       var orderSheet = ss.getSheetByName('Заказ');
@@ -112,7 +140,9 @@ var Lib = Lib || {};
 
       _writeToTargetDocument(targetDocId, sheetName, enrichedRows);
 
-      Lib.logInfo('[' + projectKey + '] Выгрузка завершена: записано строк ' + enrichedRows.length);
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Данные успешно записаны в целевой документ", "INFO", "", "_exportData", "Выгрузка " + (type === 'promotions' ? 'акций' : 'наборов') + " завершена", "Export", "PROGRESS", { type: type, projectKey: projectKey }, { rowsWritten: enrichedRows.length, sheetName: sheetName });
+      }
       ui.alert(
         'Успех',
         'Выгрузка ' + (type === 'promotions' ? 'акций' : 'наборов') + ' завершена.\nЗаписано строк: ' + enrichedRows.length,
@@ -120,7 +150,9 @@ var Lib = Lib || {};
       );
 
     } catch (error) {
-      Lib.logError('[' + projectKey + '] Ошибка выгрузки', error);
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при выгрузке данных", "ERROR", "", "_exportData", error && error.message ? error.message : String(error), "Export", "ERROR", { type: type, projectKey: projectKey }, { error: error ? error.toString() : "Unknown error" });
+      }
       ui.alert(
         'Ошибка',
         error.message || String(error),
