@@ -12,69 +12,34 @@
  */
 
 /**
- * Логирует шаг в лист "Логи"
- */
-function _logMenuStep_(action, details, status) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) return;
-
-    var logSheetName = "Логи";
-    var sh = ss.getSheetByName(logSheetName);
-
-    if (!sh) {
-      // Создаём лист если его нет
-      sh = ss.insertSheet(logSheetName);
-      var headers = ["🕒 Время", "🏷️ Категория", "💬 Действие", "📝 Детали", "🔘 Статус"];
-      sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
-      sh.setFrozenRows(1);
-    }
-
-    var timestamp = Utilities.formatDate(new Date(), "Europe/Moscow", "dd.MM.yyyy HH:mm:ss");
-    sh.appendRow([timestamp, "MENU", action, details || "", status || "✅ OK"]);
-  } catch (e) {
-    console.error("_logMenuStep_ error:", e);
-  }
-}
-
-/**
  * Creates the main Ecosystem menu.
  * Loads configuration from server to build project-specific menu.
  */
 function createAgentMenu(options) {
-  _logMenuStep_("Начало создания меню", "options: " + JSON.stringify(options || {}), "🔄 В ПРОЦЕССЕ");
-
   try {
     const ui = SpreadsheetApp.getUi();
     const allowNetwork = !options || options.allowNetwork !== false;
-
-    _logMenuStep_("Загрузка конфигурации", "allowNetwork: " + allowNetwork, "🔄 В ПРОЦЕССЕ");
 
     // Try to load menu config from server
     const config = getMenuConfig({ useCacheOnFail: true, skipFetch: !allowNetwork });
 
     if (config) {
-      _logMenuStep_("Конфигурация получена", "project: " + config.project + ", groups: " + (config.menus ? config.menus.length : 0), "✅ OK");
       // Build dynamic menu from server config
       buildDynamicMenu(ui, config);
-      _logMenuStep_("Меню создано", "Динамическое меню загружено с сервера", "✅ ГОТОВО");
+      console.log('Menu created for project:', config.project);
     } else {
-      _logMenuStep_("Сервер недоступен", "Используем fallback меню", "⚠️ ВНИМАНИЕ");
       // Fallback to static menu if server unavailable
       buildFallbackMenu(ui);
-      _logMenuStep_("Fallback меню создано", "Offline режим", "✅ ГОТОВО");
+      console.log('Fallback menu created (server unavailable)');
     }
   } catch (e) {
-    _logMenuStep_("ОШИБКА создания меню", e.message, "❌ ОШИБКА");
     Logger.log('Error creating Agent menu: ' + e.toString());
     console.error('Error creating Agent menu: ' + e.toString());
 
     // Fallback menu on any error
     try {
       buildFallbackMenu(SpreadsheetApp.getUi());
-      _logMenuStep_("Fallback меню после ошибки", "Резервное меню создано", "⚠️ ВНИМАНИЕ");
     } catch (e2) {
-      _logMenuStep_("КРИТИЧЕСКАЯ ОШИБКА", e2.message, "❌ ОШИБКА");
       console.error('Failed to create fallback menu:', e2);
     }
   }
@@ -89,8 +54,6 @@ function buildDynamicMenu(ui, config) {
   const registry = (config && (config.menus || config.menu_registry)) || null;
 
   if (registry && registry.length) {
-    _logMenuStep_("Построение групп меню", "Групп: " + registry.length, "🔄 В ПРОЦЕССЕ");
-
     registry.forEach(function(group, index) {
       if (!group || !group.title || !group.items || group.items.length === 0) {
         return;
@@ -99,8 +62,6 @@ function buildDynamicMenu(ui, config) {
       const menu = ui.createMenu(group.title);
       addMenuItems(ui, menu, group.items);
       menu.addToUi();
-
-      _logMenuStep_("Группа меню добавлена", (index + 1) + ". " + group.title + " (" + group.items.length + " пунктов)", "✅ OK");
     });
 
     console.log('Dynamic menu created for project:', config.project, 'groups:', registry.length);
@@ -123,7 +84,6 @@ function buildDynamicMenu(ui, config) {
       }
     });
     menu.addToUi();
-    _logMenuStep_("Legacy меню создано", config.menu_title, "✅ OK");
     console.log('Dynamic menu (legacy format) created for project:', config.project);
     return;
   }
@@ -181,9 +141,6 @@ function buildFallbackMenu(ui) {
       .addItem('🔄 Обновить данные', 'callServerLoadFunctions')
       .addItem('📑 Упорядочить листы', 'reorderSheets')
       .addSeparator()
-      .addItem('📋 Архивировать логи', 'manualArchiveLogs_proxy')
-      .addItem('📊 Статус логов', 'showArchiveStatus_proxy')
-      .addSeparator()
       .addItem('🐛 Debug: Show Spreadsheet ID', 'debugShowSpreadsheetId')
       .addToUi();
 
@@ -195,10 +152,8 @@ function buildFallbackMenu(ui) {
  * Call this manually if menu shows "Offline" but server is running.
  */
 function refreshMenu() {
-  _logMenuStep_("Обновление меню", "Пользователь запросил обновление", "🔄 В ПРОЦЕССЕ");
   createAgentMenu();
   SpreadsheetApp.getActiveSpreadsheet().toast('Меню обновлено!', 'Ecosystem', 2);
-  _logMenuStep_("Обновление меню завершено", "Меню успешно обновлено", "✅ ГОТОВО");
 }
 
 // =======================================================================================

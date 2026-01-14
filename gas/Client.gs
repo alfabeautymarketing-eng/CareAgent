@@ -688,17 +688,9 @@ function reorderSheets() {
         ss.toast('📑 ' + result.message, 'Python Server', 3);
       }
       try {
-        if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-          const moved = result.details && typeof result.details.sheets_moved !== 'undefined'
-            ? result.details.sheets_moved
-            : 'n/a';
-          Lib.logStep('Sheets', 'Листы выстроены сервером: ' + moved);
-        }
-        if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
-          Lib.ensureLogSheetsFirst();
-        }
+        console.log('Reorder completed:', result.details);
       } catch (e) {
-        console.error('Reorder post-processing log failed:', e);
+        console.error('Reorder post-processing failed:', e);
       }
       return true;
     } else {
@@ -730,16 +722,7 @@ function reorderSheetsSilent() {
 
   try {
     const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/sheets/reorder', options);
-    try {
-      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-        Lib.logStep('Sheets', 'Бесшумная сортировка листов выполнена (код ' + response.getResponseCode() + ')');
-      }
-      if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
-        Lib.ensureLogSheetsFirst();
-      }
-    } catch (logErr) {
-      console.error('Silent reorder log failed:', logErr);
-    }
+    console.log('Silent reorder completed with code:', response.getResponseCode());
   } catch (e) {
     console.error('Silent reorder failed:', e);
   }
@@ -1758,9 +1741,7 @@ function callServerProcessPrice(project, mode, options) {
   } catch (e) {
     const errorMsg = e.message || String(e);
     ss.toast('❌ Ошибка: ' + errorMsg, project.toUpperCase(), 10);
-    if (typeof Lib !== 'undefined' && typeof Lib.logError === 'function') {
-      Lib.logError('[' + project.toUpperCase() + '] callServerProcessPrice failed', e);
-    }
+    console.error('[' + project.toUpperCase() + '] callServerProcessPrice failed:', e);
     return { status: 'error', message: errorMsg };
   }
 }
@@ -1806,3 +1787,36 @@ function callServerProcessSkProbes() {
 function callServerProcessSsMain() {
   return callServerProcessPrice('ss', 'main');
 }
+/**
+ * Вспомогательная функция для открытия веб-страниц сервера.
+ * @param {string} path - Путь страницы (например, "/docs")
+ * @param {string} title - Заголовок окна
+ */
+function openServerUrl(path, title) {
+  const baseUrl = SERVER_URL; 
+  const url = baseUrl + path;
+  
+  const html = `
+    <html>
+      <body style="font-family: sans-serif; text-align: center; padding: 20px; background: #0f172a; color: white;">
+        <p>Переход на страницу ${title}...</p>
+        <p><a href="${url}" target="_blank" style="color: #0d9488; font-weight: bold;">Нажмите здесь, если окно не открылось</a></p>
+        <script>
+          window.open('${url}', '_blank');
+          setTimeout(function() { google.script.host.close(); }, 1000);
+        </script>
+      </body>
+    </html>
+  `;
+  
+  const userInterface = HtmlService.createHtmlOutput(html)
+    .setWidth(350)
+    .setHeight(150);
+    
+  SpreadsheetApp.getUi().showModalDialog(userInterface, '🚀 Переход к ' + title);
+}
+
+// Функции-обертки для меню
+function openServerMainPage() { openServerUrl('/', 'Главная страница'); }
+function openServerRulesPage() { openServerUrl('/api/v1/rules-ui', 'Правила синхронизации'); }
+function openServerDocsPage() { openServerUrl('/docs', 'Swagger UI'); }

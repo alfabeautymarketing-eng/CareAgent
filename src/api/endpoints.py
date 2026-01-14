@@ -58,104 +58,139 @@ class RuleItem(BaseModel):
     is_external: bool = Field(False, description="Внешняя ли таблица")
     target_doc_id: Optional[str] = Field(None, description="ID внешней таблицы")
 
+    class Config:
+        title = "Элемент правила"
+
 class RulesSaveRequest(BaseModel):
     rules: List[RuleItem]
+
+    class Config:
+        title = "Запрос на сохранение правил"
 
 
 # CRUD Models for Sync Rules
 class RuleCreateRequest(BaseModel):
-    """Request to create a new sync rule."""
-    mode: str = "unidirectional"  # "unidirectional" | "bidirectional"
-    enabled: bool = True
-    category: str = ""
-    # For unidirectional
-    source_sheet: Optional[str] = None
-    source_header: Optional[str] = None
-    target_sheet: Optional[str] = None
-    target_header: Optional[str] = None
-    # For bidirectional
-    sheet_a: Optional[str] = None
-    header_a: Optional[str] = None
-    sheet_b: Optional[str] = None
-    header_b: Optional[str] = None
-    # External sync
-    is_external: bool = False
-    target_doc_id: Optional[str] = None
+    """Запрос на создание нового правила синхронизации."""
+    mode: str = Field("unidirectional", description="Режим (unidirectional/bidirectional)")
+    enabled: bool = Field(True, description="Включено ли")
+    category: str = Field("", description="Категория (например, 'Pricing')")
+    # Для односторонней
+    source_sheet: Optional[str] = Field(None, description="Лист-источник")
+    source_header: Optional[str] = Field(None, description="Заголовок-источник")
+    target_sheet: Optional[str] = Field(None, description="Целевой лист")
+    target_header: Optional[str] = Field(None, description="Целевой заголовок")
+    # Для двусторонней
+    sheet_a: Optional[str] = Field(None, description="Лист A")
+    header_a: Optional[str] = Field(None, description="Заголовок A")
+    sheet_b: Optional[str] = Field(None, description="Лист B")
+    header_b: Optional[str] = Field(None, description="Заголовок B")
+    # Внешняя синхронизация
+    is_external: bool = Field(False, description="Внешняя ли таблица")
+    target_doc_id: Optional[str] = Field(None, description="ID внешней таблицы")
+
+    class Config:
+        title = "Запрос на создание правила"
 
 
 class RuleUpdateRequest(BaseModel):
-    """Request to update an existing sync rule."""
-    enabled: Optional[bool] = None
-    category: Optional[str] = None
-    mode: Optional[str] = None
-    source_sheet: Optional[str] = None
-    source_header: Optional[str] = None
-    target_sheet: Optional[str] = None
-    target_header: Optional[str] = None
-    sheet_a: Optional[str] = None
-    header_a: Optional[str] = None
-    sheet_b: Optional[str] = None
-    header_b: Optional[str] = None
-    is_external: Optional[bool] = None
-    target_doc_id: Optional[str] = None
+    """Запрос на обновление существующего правила синхронизации."""
+    enabled: Optional[bool] = Field(None, description="Включено ли")
+    category: Optional[str] = Field(None, description="Категория")
+    mode: Optional[str] = Field(None, description="Режим")
+    source_sheet: Optional[str] = Field(None, description="Лист-источник")
+    source_header: Optional[str] = Field(None, description="Заголовок-источник")
+    target_sheet: Optional[str] = Field(None, description="Целевой лист")
+    target_header: Optional[str] = Field(None, description="Целевой заголовок")
+    sheet_a: Optional[str] = Field(None, description="Лист A")
+    header_a: Optional[str] = Field(None, description="Заголовок A")
+    sheet_b: Optional[str] = Field(None, description="Лист B")
+    header_b: Optional[str] = Field(None, description="Заголовок B")
+    is_external: Optional[bool] = Field(None, description="Внешняя ли")
+    target_doc_id: Optional[str] = Field(None, description="ID внешней таблицы")
+
+    class Config:
+        title = "Запрос на обновление правила"
 
 
 class RuleToggleRequest(BaseModel):
-    """Request to toggle rule enabled status."""
-    enabled: bool
+    """Запрос на переключение статуса активности правила."""
+    enabled: bool = Field(..., description="Новый статус активности (True/False)")
+
+    class Config:
+        title = "Запрос на переключение правила"
 
 # ============== Request/Response Models ==============
 
 class SyncRowRequest(BaseModel):
-    """Request to sync a single row."""
+    """Запрос на синхронизацию отдельной строки."""
+    project: str = Field(..., description="Код проекта (mt, sk, ss)")
+    article: str = Field(..., description="Артикул товара")
+    source_sheet: str = Field(..., description="Имя исходного листа")
+    target_sheets: Optional[List[str]] = Field(None, description="Список целевых листов (опционально)")
+    spreadsheet_id: Optional[str] = Field(None, description="ID таблицы (если не указан проект)")
 
-    project: str
-    article: str
-    source_sheet: str
-    target_sheets: Optional[List[str]] = None
-    spreadsheet_id: Optional[str] = None # Added support for direct ID
+    class Config:
+        title = "Запрос на синхронизацию строки"
 
 
 class SyncRangeRequest(BaseModel):
-    """Request to sync a range."""
+    """Запрос на синхронизацию диапазона ячеек."""
+    project: str = Field(..., description="Код проекта")
+    source_sheet: str = Field(..., description="Лист-источник")
+    range: str = Field(..., description="Диапазон (например, 'A1:B10')")
 
-    project: str
-    source_sheet: str
-    range: str
+    class Config:
+        title = "Запрос на синхронизацию диапазона"
 
 class AddArticleRequest(BaseModel):
-    project: str
-    article: str
-    spreadsheet_id: Optional[str] = None
+    """Запрос на добавление артикула."""
+    project: str = Field(..., description="Код проекта")
+    article: str = Field(..., description="Артикул товара")
+    spreadsheet_id: Optional[str] = Field(None, description="ID таблицы")
+
+    class Config:
+        title = "Запрос на добавление артикула"
 
 class DeleteArticlesRequest(BaseModel):
-    project: str
-    articles: List[str]
-    spreadsheet_id: Optional[str] = None
+    """Запрос на удаление артикулов."""
+    project: str = Field(..., description="Код проекта")
+    articles: List[str] = Field(..., description="Список артикулов для удаления")
+    spreadsheet_id: Optional[str] = Field(None, description="ID таблицы")
+
+    class Config:
+        title = "Запрос на удаление артикулов"
 
 class SyncEventRequest(BaseModel):
-    """Request from GAS onEdit trigger."""
-    spreadsheet_id: str
-    sheet_name: str
-    row: int
-    col: int
-    value: Optional[Any] = None
-    old_value: Optional[Any] = None
-    user_email: Optional[str] = None
-    header_name: Optional[str] = None
-    row_key: Optional[str] = None
-    # Защита от циклов
-    sync_origin: str = "user"  # "user" | "sync"
-    transaction_id: Optional[str] = None
+    """Запрос от триггера onEdit из Google Apps Script."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field(..., description="Имя листа")
+    row: int = Field(..., description="Номер строки")
+    col: int = Field(..., description="Номер колонки")
+    value: Optional[Any] = Field(None, description="Новое значение")
+    old_value: Optional[Any] = Field(None, description="Старое значение")
+    user_email: Optional[str] = Field(None, description="Email пользователя")
+    header_name: Optional[str] = Field(None, description="Заголовок колонки")
+    row_key: Optional[str] = Field(None, description="Ключ строки (артикул)")
+    sync_origin: str = Field("user", description="Источник (user или sync)")
+    transaction_id: Optional[str] = Field(None, description="ID транзакции")
+
+    class Config:
+        title = "Запрос события синхронизации"
 
 class LogInitRequest(BaseModel):
-    """Request to initialize logs."""
-    spreadsheet_id: str
+    """Запрос на инициализацию листов логов."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+
+    class Config:
+        title = "Запрос инициализации логов"
 
 class SyncBatchEventRequest(BaseModel):
-    """Request for batch onEdit events."""
-    spreadsheet_id: str
-    events: List[SyncEventRequest]
+    """Запрос на пакетную обработку событий onEdit."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    events: List[SyncEventRequest] = Field(..., description="Список событий для обработки")
+
+    class Config:
+        title = "Запрос пакетной синхронизации"
 
 
 class PriceProcessRequest(BaseModel):
@@ -165,14 +200,20 @@ class PriceProcessRequest(BaseModel):
     source_doc_id: Optional[str] = Field(None, description="ID исходного документа с прайсом")
     dry_run: bool = Field(False, description="Тестовый запуск без изменения данных")
 
+    class Config:
+        title = "Запрос на обработку прайса"
+
 
 class SortRequest(BaseModel):
-    """Request to sort a sheet."""
-    project: str = "Common" # specific project identifier if needed
-    spreadsheet_id: str
-    sheet_name: str
-    column_name: str
-    ascending: bool = True
+    """Запрос на сортировку листа."""
+    project: str = Field("Common", description="Код проекта")
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field(..., description="Имя листа для сортировки")
+    column_name: str = Field(..., description="Имя колонки для сортировки")
+    ascending: bool = Field(True, description="Сортировать по возрастанию (True/False)")
+
+    class Config:
+        title = "Запрос на сортировку"
 
 
 class AIAnalyzeRequest(BaseModel):
@@ -184,44 +225,55 @@ class AIAnalyzeRequest(BaseModel):
     purpose: Optional[str] = Field(None, description="Цель использования (для контекста ИИ)")
     application: Optional[str] = Field(None, description="Область применения")
 
+    class Config:
+        title = "Запрос на ИИ анализ"
+
 
 class AIAnalyzeBatchRequest(BaseModel):
-    """Request for batch AI analysis."""
-    spreadsheet_id: str
-    sheet_name: str = "Информация"
-    delay_between: float = 2.0
+    """Запрос на пакетный анализ товаров через ИИ."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field("Информация", description="Имя листа")
+    delay_between: float = Field(2.0, description="Задержка между запросами (в сек)")
+
+    class Config:
+        title = "Запрос на пакетный ИИ анализ"
 
 
 class AICheckServiceRequest(BaseModel):
-    """Request to check AI service status."""
+    """Запрос на проверку статуса сервисов ИИ."""
     pass
+
+    class Config:
+        title = "Запрос проверки ИИ сервиса"
 
 
 class AIPdfAnalyzeRequest(BaseModel):
-    """Request to analyze a PDF directly."""
-    pdf_url: str
-    purpose: Optional[str] = None
-    application: Optional[str] = None
+    """Запрос на прямой анализ PDF файла."""
+    pdf_url: str = Field(..., description="Ссылка на PDF файл")
+    purpose: Optional[str] = Field(None, description="Цель анализа")
+    application: Optional[str] = Field(None, description="Область применения")
+
+    class Config:
+        title = "Запрос на анализ PDF"
 
 
 class AISimpleAnalyzeRequest(BaseModel):
-    """Request for simple AI analysis (no PDF needed)."""
-    product_name: str
-    inci_text: Optional[str] = None
-    purpose: Optional[str] = None
-    application: Optional[str] = None
+    """Запрос на простой ИИ-анализ (без PDF)."""
+    product_name: str = Field(..., description="Название товара")
+    inci_text: Optional[str] = Field(None, description="Текст состава (INCI)")
+    purpose: Optional[str] = Field(None, description="Цель")
+    application: Optional[str] = Field(None, description="Область применения")
 
 
 class TaskStatusResponse(BaseModel):
-    """Task status response."""
-
-    task_id: str
-    status: str  # pending, running, completed, failed
-    current_phase: Optional[int] = None
-    total_phases: Optional[int] = None
-    progress_percent: Optional[int] = None
-    result: Optional[dict] = None
-    error: Optional[str] = None
+    """Ответ со статусом фоновой задачи."""
+    task_id: str = Field(..., description="ID задачи")
+    status: str = Field(..., description="Статус: pending, running, completed, failed")
+    current_phase: Optional[int] = Field(None, description="Текущая фаза")
+    total_phases: Optional[int] = Field(None, description="Всего фаз")
+    progress_percent: Optional[int] = Field(None, description="Процент выполнения")
+    result: Optional[dict] = Field(None, description="Результат выполнения")
+    error: Optional[str] = Field(None, description="Текст ошибки (если есть)")
 
 
 # ============== Sync Endpoints ==============
@@ -303,9 +355,9 @@ async def sync_full(project: str, source_sheet: str, spreadsheet_id: Optional[st
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/sync/add-article")
+@api_router.post("/sync/add-article", summary="Добавить новый артикул")
 async def add_article(request: AddArticleRequest):
-    """Add new article to all relevant sheets."""
+    """Добавляет новый артикул во все связанные и необходимые листы таблицы."""
     logger.info("add_article_requested", project=request.project, article=request.article)
     
     spreadsheet_id = request.spreadsheet_id
@@ -336,9 +388,9 @@ async def add_article(request: AddArticleRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/sync/delete-articles")
+@api_router.post("/sync/delete-articles", summary="Удалить артикулы")
 async def delete_articles(request: DeleteArticlesRequest):
-    """Delete articles from relevant sheets."""
+    """Удаляет указанные артикулы из всех связанных листов."""
     logger.info("delete_articles_requested", project=request.project, count=len(request.articles))
     
     spreadsheet_id = request.spreadsheet_id
@@ -362,11 +414,11 @@ async def delete_articles(request: DeleteArticlesRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/sync/event")
+@api_router.post("/sync/event", summary="Обработать событие onEdit")
 async def sync_event(request: SyncEventRequest, background_tasks: BackgroundTasks):
     """
-    Handle onEdit sync event (async).
-    Uses background tasks for non-blocking execution.
+    Обрабатывает одиночное событие изменения в таблице.
+    Использует фоновые задачи для немедленного ответа клиенту.
     """
     logger.info(
         "sync_event_received",
@@ -403,10 +455,11 @@ async def sync_event(request: SyncEventRequest, background_tasks: BackgroundTask
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/sync/batch-event")
+@api_router.post("/sync/batch-event", summary="Пакетная обработка событий onEdit")
 async def sync_batch_event(request: SyncBatchEventRequest, background_tasks: BackgroundTasks):
     """
-    Handle batch onEdit sync events (async).
+    Обрабатывает список (пакет) изменений из Google Sheets.
+    Эффективно для массового редактирования ячеек.
     """
     logger.info("batch_sync_event_received", count=len(request.events))
     
@@ -559,7 +612,7 @@ def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
         raise HTTPException(status_code=400, detail=f"Invalid datetime format: {value}")
 
 
-@api_router.get("/sync-logs/{spreadsheet_id}")
+@api_router.get("/sync-logs/{spreadsheet_id}", summary="Список журналов синхронизации")
 async def list_sync_logs(
     spreadsheet_id: str,
     limit: int = 200,
@@ -575,7 +628,7 @@ async def list_sync_logs(
     start: Optional[str] = None,
     end: Optional[str] = None,
 ):
-    """List sync journal entries from server storage."""
+    """Возвращает список записей из локального журнала синхронизации сервера."""
     try:
         start_dt = _parse_iso_datetime(start)
         end_dt = _parse_iso_datetime(end)
@@ -611,9 +664,9 @@ async def list_sync_logs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/sync-logs/{spreadsheet_id}/stats")
+@api_router.get("/sync-logs/{spreadsheet_id}/stats", summary="Статистика журналов синхронизации")
 async def sync_logs_stats(spreadsheet_id: str):
-    """Get statistics for sync logs (summary by category and status)."""
+    """Возвращает сводную статистику записей по категориям и статусам."""
     try:
         items, _ = sync_log_service.list_entries(
             spreadsheet_id=spreadsheet_id,
@@ -663,13 +716,13 @@ async def sync_logs_stats(spreadsheet_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/sync-logs/{spreadsheet_id}/export")
+@api_router.get("/sync-logs/{spreadsheet_id}/export", summary="Экспорт журналов синхронизации")
 async def export_sync_logs(
     spreadsheet_id: str,
     format: str = "json",
     limit: int = 10000,
 ):
-    """Export sync logs in JSON or CSV format."""
+    """Экспортирует записи журнала в формате JSON или CSV."""
     try:
         items, _ = sync_log_service.list_entries(
             spreadsheet_id=spreadsheet_id,
@@ -713,12 +766,12 @@ async def export_sync_logs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/sync-logs/{spreadsheet_id}/truncate")
+@api_router.post("/sync-logs/{spreadsheet_id}/truncate", summary="Очистить старые журналы")
 async def truncate_sync_logs(
     spreadsheet_id: str,
     keep_days: int = 0,
 ):
-    """Remove old sync logs (older than keep_days)."""
+    """Удаляет старые записи журналов (старше указанного количества дней)."""
     try:
         items, _ = sync_log_service.list_entries(
             spreadsheet_id=spreadsheet_id,
@@ -771,9 +824,9 @@ async def truncate_sync_logs(
 
 # --- Log Management Endpoints ---
 
-@api_router.post("/logs/recreate")
+@api_router.post("/logs/recreate", summary="Пересоздать лист логов")
 async def recreate_log_sheet_endpoint(request: LogInitRequest):
-    """Recreate log sheet (ensure headers are correct)."""
+    """Пересоздает лист 'Логи', исправляя заголовки, если они были удалены."""
     try:
         logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=False)
         return {"status": "success", "message": "Log sheet recreated"}
@@ -781,9 +834,9 @@ async def recreate_log_sheet_endpoint(request: LogInitRequest):
         logger.error("log_recreate_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/logs/clean")
+@api_router.post("/logs/clean", summary="Полная очистка логов")
 async def clean_log_sheet_endpoint(request: LogInitRequest):
-    """Clean log sheet (force clear and recreate headers)."""
+    """Полностью очищает лист логов и создает чистые заголовки."""
     try:
         logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=True)
         return {"status": "success", "message": "Log sheet cleaned"}
@@ -791,9 +844,9 @@ async def clean_log_sheet_endpoint(request: LogInitRequest):
         logger.error("log_clean_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/logs/recreate-debug")
+@api_router.post("/logs/recreate-debug", summary="Пересоздать отладочный лист")
 async def recreate_debug_log_sheet_endpoint(request: LogInitRequest):
-    """Recreate debug log sheet ('Журнал логов')."""
+    """Пересоздает лист 'Журнал логов' для технических записей."""
     try:
         # 'Журнал логов' is the sheet name for debug logs
         logging_service.recreate_log_sheet(request.spreadsheet_id, force_clear=False, sheet_name="Журнал логов")
@@ -802,9 +855,9 @@ async def recreate_debug_log_sheet_endpoint(request: LogInitRequest):
         logger.error("log_debug_recreate_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/logs/archive")
+@api_router.post("/logs/archive", summary="Архивировать логи")
 async def archive_logs_endpoint(request: LogInitRequest):
-    """Manually archive logs."""
+    """Переносит старые записи из логов в архивную таблицу."""
     try:
         # Need to determine project prefix, default to 'Common' or try to get from request/sheet?
         # For now, let's look up project from sheet title or just use "Project"
@@ -829,9 +882,9 @@ async def archive_logs_endpoint(request: LogInitRequest):
         logger.error("log_archive_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/logs/archive/status")
+@api_router.get("/logs/archive/status", summary="Статус архивации")
 async def get_archive_status_endpoint(spreadsheet_id: str):
-    """Get archive status."""
+    """Проверяет текущее состояние процесса архивации логов."""
     try:
         try:
              ss = sheets_service.get_spreadsheet(spreadsheet_id)
@@ -854,12 +907,16 @@ async def get_archive_status_endpoint(spreadsheet_id: str):
 # --- Document Collection Endpoints ---
 
 class CollectDocumentsRequest(BaseModel):
-    spreadsheet_id: str
-    target_sheet: str = "Для инвойса"
+    """Запрос на сбор документов."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    target_sheet: str = Field("Для инвойса", description="Имя целевого листа")
 
-@api_router.post("/documents/structure-353pp")
+    class Config:
+        title = "Запрос сбора документов"
+
+@api_router.post("/documents/structure-353pp", summary="Подготовить документы (353пп)")
 async def structure_documents_353pp_endpoint(request: CollectDocumentsRequest):
-    """Structure documents for 353pp application (from New Sert sheet)."""
+    """Структурирует документы для подачи заявки по постановлению 353пп."""
     try:
         result = await certification_service.structure_documents_353pp(
             request.spreadsheet_id
@@ -869,9 +926,9 @@ async def structure_documents_353pp_endpoint(request: CollectDocumentsRequest):
         logger.error("structure_353pp_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/documents/collect")
+@api_router.post("/documents/collect", summary="Сбор документов для инвойса")
 async def collect_documents_endpoint(request: CollectDocumentsRequest):
-    """Collect and copy documents for invoice."""
+    """Собирает и копирует все необходимые документы для формирования инвойса."""
     try:
         # Get invoice service
         inv_service = get_invoice_service(sheets_service)
@@ -887,14 +944,14 @@ async def collect_documents_endpoint(request: CollectDocumentsRequest):
 
 # --- Function Logs Endpoints ---
 
-@api_router.get("/function-logs/executions")
+@api_router.get("/function-logs/executions", summary="История выполнения функций")
 async def list_function_executions(
     module: Optional[str] = None,
     function_name: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ):
-    """List historical function executions."""
+    """Возвращает историю запусков различных серверных функций и их результат."""
     try:
         executions, total = function_log_service.list_executions(
             module=module,
@@ -916,38 +973,42 @@ async def list_function_executions(
 # --- Metadata & External Docs Endpoints ---
 
 class ExternalDocAddRequest(BaseModel):
-    name: str
-    doc_id: str
+    """Запрос на добавление внешнего документа."""
+    name: str = Field(..., description="Название документа")
+    doc_id: str = Field(..., description="ID документа (Google Doc ID)")
 
-@api_router.get("/meta/{spreadsheet_id}/sheets")
+    class Config:
+        title = "Запрос добавления документа"
+
+@api_router.get("/meta/{spreadsheet_id}/sheets", summary="Список листов таблицы")
 async def get_meta_sheets(spreadsheet_id: str):
-    """List sheets in a spreadsheet."""
+    """Возвращает названия всех листов в указанной Google Таблице."""
     try:
         sh = sheets_service.gc.open_by_key(spreadsheet_id)
         return {"sheets": [s.title for s in sh.worksheets()]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/meta/{spreadsheet_id}/{sheet_name}/headers")
+@api_router.get("/meta/{spreadsheet_id}/{sheet_name}/headers", summary="Список заголовков листа")
 async def get_meta_headers(spreadsheet_id: str, sheet_name: str):
-    """List column headers in a sheet."""
+    """Возвращает список всех названий колонок (заголовков) на указанном листе."""
     try:
         headers = sheets_service.get_worksheet_headers(spreadsheet_id, sheet_name)
         return {"headers": headers}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/meta/discovery")
+@api_router.get("/meta/discovery", summary="Карта заголовков системы")
 async def get_meta_discovery():
-    """Build and return a map of common headers across the ecosystem."""
+    """Строит и возвращает карту общих заголовков во всей экосистеме проектов."""
     return meta_cache_service.get_discovery_map()
 
-@api_router.post("/meta/index")
+@api_router.post("/meta/index", summary="Запустить переиндексацию метаданных")
 async def trigger_meta_index(background_tasks: BackgroundTasks, spreadsheet_id: Optional[str] = None):
     """
-    Trigger re-indexing of metadata. 
-    If spreadsheet_id is provided, only index that document.
-    Otherwise, index all projects in PROJECT_IDS.
+    Запускает процесс обновления кэша метаданных. 
+    Если указан spreadsheet_id, обновится только эта таблица.
+    Иначе — все проекты из PROJECT_IDS.
     """
     if spreadsheet_id:
         targets = [spreadsheet_id]
@@ -958,9 +1019,9 @@ async def trigger_meta_index(background_tasks: BackgroundTasks, spreadsheet_id: 
     background_tasks.add_task(meta_cache_service.build_global_index, targets)
     return {"status": "queued", "targets": len(targets)}
 
-@api_router.get("/meta/index/status")
+@api_router.get("/meta/index/status", summary="Статус кэша метаданных")
 async def get_meta_index_status():
-    """Get status of the metadata cache."""
+    """Возвращает текущее состояние и статистику кэша метаданных."""
     return {
         "updated_at": meta_cache_service.index.get("updated_at"),
         "total_spreadsheets": len(meta_cache_service.index.get("spreadsheets", {})),
@@ -968,37 +1029,38 @@ async def get_meta_index_status():
         "spreadsheets": meta_cache_service.get_indexed_spreadsheets()
     }
 
-@api_router.get("/meta/search")
+@api_router.get("/meta/search", summary="Поиск по заголовкам")
 async def search_meta_header(q: str):
-    """Search for sheets containing a specific header."""
+    """Ищет листы, содержащие указанный заголовок колонки."""
     return meta_cache_service.search_header(q)
 
-@api_router.get("/external-docs")
+@api_router.get("/external-docs", summary="Список внешних документов")
 async def list_external_docs():
-    """List registered external documents."""
+    """Возвращает список всех зарегистрированных внешних Google Таблиц."""
     return {"docs": external_docs_service.list_docs()}
 
-@api_router.post("/external-docs")
+@api_router.post("/external-docs", summary="Добавить внешний документ")
 async def add_external_doc(request: ExternalDocAddRequest):
-    """Register a new external document."""
+    """Регистрирует новую внешнюю Google Таблицу в системе."""
     try:
         doc = external_docs_service.add_doc(request.name, request.doc_id)
         return {"status": "ok", "doc": doc}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.delete("/external-docs/{doc_id}")
+@api_router.delete("/external-docs/{doc_id}", summary="Удалить внешний документ")
 async def remove_external_doc(doc_id: str):
-    """Unregister an external document."""
+    """Удаляет регистрацию внешней Google Таблицы."""
     if external_docs_service.remove_doc(doc_id):
         return {"status": "ok"}
     raise HTTPException(status_code=404, detail="Document not found")
 
 
-@api_router.post("/rules/{spreadsheet_id}")
+@api_router.post("/rules/{spreadsheet_id}", summary="Пересохранить все правила")
 async def save_rules(spreadsheet_id: str, request: RulesSaveRequest):
     """
-    Replace rules for a spreadsheet. IDs пересоздаются автоматически в формате 001-<SRC>-<TGT>(<Header>).
+    Полностью заменяет все правила для таблицы. 
+    ID правил пересоздаются автоматически в формате 001-<SRC>-<TGT>(<Header>).
     """
     try:
         payload = [r.model_dump() for r in request.rules]
@@ -1011,13 +1073,16 @@ async def save_rules(spreadsheet_id: str, request: RulesSaveRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 class LoadFunctionsRequest(BaseModel):
-    """Request to run load functions."""
-    spreadsheet_id: str
-    project: str = "Common"
+    """Запрос на выполнение функций загрузки."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    project: str = Field("Common", description="Код проекта")
 
-@api_router.post("/sort")
+    class Config:
+        title = "Запрос загрузки функций"
+
+@api_router.post("/sort", summary="Сортировка по колонке")
 async def sort_sheet(request: SortRequest):
-    """Sort a sheet by column."""
+    """Выполняет сортировку указанного листа по заданному заголовку колонки."""
     logger.info(
         "sort_requested",
         spreadsheet_id=request.spreadsheet_id,
@@ -1060,17 +1125,19 @@ async def sort_sheet(request: SortRequest):
 
 
 class StructureSortRequest(BaseModel):
-    """Request for high-performance structure sorting (replaces GAS structureMultipleSheets)."""
-    spreadsheet_id: str
-    mode: str  # 'byManufacturer' or 'byPrice'
+    """Запрос на высокопроизводительную структурную сортировку."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    mode: str = Field(..., description="Режим: 'byManufacturer' (по производителю) или 'byPrice' (по цене)")
+
+    class Config:
+        title = "Запрос структурной сортировки"
 
 
-@api_router.post("/sort/structure")
+@api_router.post("/sort/structure", summary="Структурная сортировка листов")
 async def sort_structure(request: StructureSortRequest):
     """
-    High-performance structure sorting.
-    Sorts multiple sheets (Заказ, Динамика цены, Расчет цены) by grouping rows.
-    Replaces the slow GAS structureMultipleSheets function.
+    Высокопроизводительная группировка и сортировка нескольких листов (Заказ, Динамика цены, Расчет цены).
+    Заменяет медленную GAS функцию structureMultipleSheets.
     """
     logger.info(
         "structure_sort_requested",
@@ -1106,9 +1173,9 @@ async def sort_structure(request: StructureSortRequest):
         )
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/load-functions")
+@api_router.post("/load-functions", summary="Выполнить логику при загрузке")
 async def run_load_functions(request: LoadFunctionsRequest):
-    """Run heavy logic normally executed on sheet load."""
+    """Запускает тяжелую логику обновления формул и данных, которая обычно выполняется при открытии таблицы."""
     logger.info("load_functions_requested", spreadsheet_id=request.spreadsheet_id)
     
     try:
@@ -1125,21 +1192,21 @@ async def run_load_functions(request: LoadFunctionsRequest):
 
 # ============== Price Processing ==============
 
-@api_router.post("/price/process/{project}")
+@api_router.post("/price/process/{project}", summary="Обработать прайс поставщика")
 async def process_price(
     project: str,
     request: PriceProcessRequest,
     background_tasks: BackgroundTasks
 ):
     """
-    Process supplier price list (Б/З поставщик).
+    Запускает процесс обновления цен из прайс-листа поставщика (Б/З поставщик).
 
-    Args:
-        project: Project code (mt, sk, ss)
-        request: Processing parameters (spreadsheet_id, mode, dry_run)
+    Аргументы:
+        project: Код проекта (mt, sk, ss)
+        request: Параметры обработки (spreadsheet_id, mode, dry_run)
 
-    Returns:
-        Processing result or preview if dry_run=True
+    Возвращает:
+        Результат обработки или предпросмотр, если dry_run=True
     """
     logger.info(
         "price_process_requested",
@@ -1182,9 +1249,9 @@ async def process_price(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/price/status/{task_id}", response_model=TaskStatusResponse)
+@api_router.get("/price/status/{task_id}", response_model=TaskStatusResponse, summary="Статус обработки цен")
 async def get_price_status(task_id: str):
-    """Get price processing status."""
+    """Возвращает текущий прогресс и статус задачи по обновлению цен."""
     # TODO: Get actual status from task queue
     return TaskStatusResponse(
         task_id=task_id,
@@ -1195,9 +1262,9 @@ async def get_price_status(task_id: str):
     )
 
 
-@api_router.post("/price/cancel/{task_id}")
+@api_router.post("/price/cancel/{task_id}", summary="Отменить обработку цен")
 async def cancel_price_processing(task_id: str):
-    """Cancel price processing."""
+    """Прерывает выполнение задачи по обработке прайс-листа."""
     logger.info("price_cancel_requested", task_id=task_id)
 
     # TODO: Cancel task
@@ -1207,26 +1274,35 @@ async def cancel_price_processing(task_id: str):
 # ============== Cascade Processing ==============
 
 class CascadeProcessRequest(BaseModel):
-    """Request for cascade processing."""
-    spreadsheet_id: str
-    sheet_name: str = "Сертификация"
-    row: Optional[int] = None
-    changed_column: Optional[str] = None
-    new_value: Optional[str] = None
-    dry_run: bool = False
+    """Запрос на каскадную обработку данных."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field("Сертификация", description="Имя листа")
+    row: Optional[int] = Field(None, description="Номер строки (если для одной)")
+    changed_column: Optional[str] = Field(None, description="Заголовок измененной колонки")
+    new_value: Optional[str] = Field(None, description="Новое значение")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос каскадной обработки"
 
 
 class CascadeProcessResponse(BaseModel):
-    """Response from cascade processing."""
-    status: str
-    row: int = 0
-    changes: List[Dict[str, Any]] = []
-    applied: bool = False
-    message: str = ""
+    """Ответ после каскадной обработки."""
+    status: str = Field(..., description="Статус выполнения")
+    row: int = Field(0, description="Номер обработанной строки")
+    changes: List[Dict[str, Any]] = Field([], description="Список внесенных изменений")
+    applied: bool = Field(False, description="Применены ли изменения")
+    message: str = Field("", description="Сообщение")
+
+    class Config:
+        title = "Ответ каскадной обработки"
 
 
-@api_router.post("/cascade/process", response_model=CascadeProcessResponse)
+@api_router.post("/cascade/process", response_model=CascadeProcessResponse, summary="Запустить каскадную обработку")
 async def process_cascade(request: CascadeProcessRequest):
+    """
+    Обрабатывает каскадные правила для листа сертификации.
+    """
     """
     Process cascade rules for certification sheet.
 
@@ -1342,36 +1418,34 @@ async def recalculate_all_cascades(request: CascadeProcessRequest):
 # ============== Order Stages ==============
 
 class OrderFilterRequest(BaseModel):
-    """Request for order stage filtering."""
-    spreadsheet_id: str
-    stage: str = "all"  # all, order, promotions, set, price
-    sheet_name: str = "Заказ"
-    dry_run: bool = False
+    """Запрос на фильтрацию этапов заказа."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    stage: str = Field("all", description="Этап: all, order, promotions, set, price")
+    sheet_name: str = Field("Заказ", description="Имя листа")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос фильтрации заказа"
 
 
 class OrderFilterResponse(BaseModel):
-    """Response from order stage filtering."""
-    status: str
-    stage: str
-    visible_rows: int = 0
-    hidden_rows: int = 0
-    hidden_columns: int = 0
-    message: str = ""
+    """Ответ фильтрации этапов заказа."""
+    status: str = Field(..., description="Статус")
+    stage: str = Field(..., description="Выбранный этап")
+    visible_rows: int = Field(0, description="Видимых строк")
+    hidden_rows: int = Field(0, description="Скрытых строк")
+    hidden_columns: int = Field(0, description="Скрытых колонок")
+    message: str = Field("", description="Сообщение")
+
+    class Config:
+        title = "Ответ фильтрации заказа"
 
 
-@api_router.post("/order/filter", response_model=OrderFilterResponse)
+@api_router.post("/order/filter", response_model=OrderFilterResponse, summary="Фильтр этапов заказа")
 async def filter_order_stage(request: OrderFilterRequest):
     """
-    Filter order sheet by stage.
-
-    Stages:
-    - all: Show all data (remove all filters)
-    - order: Show order-related columns
-    - promotions: Show promotion-related columns
-    - set: Show set-related columns
-    - price: Show price-related columns
-
-    Each stage hides specific columns and filters rows by status.
+    Фильтрует лист 'Заказ' в зависимости от этапа работы.
+    Скрывает ненужные колонки и строки для фокусировки на конкретной задаче.
     """
     from src.services.order_service import get_order_service, OrderStageType
 
@@ -1417,12 +1491,9 @@ async def filter_order_stage(request: OrderFilterRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/order/show-all")
+@api_router.post("/order/show-all", summary="Показать все данные заказа")
 async def show_all_order_data(request: OrderFilterRequest):
-    """
-    Show all data on order sheet (remove all filters).
-    Equivalent to GAS showAllOrderData().
-    """
+    """Отображает все скрытые строки и колонки на листе 'Заказ', сбрасывая фильтры."""
     request.stage = "all"
     return await filter_order_stage(request)
 
@@ -1430,37 +1501,35 @@ async def show_all_order_data(request: OrderFilterRequest):
 # ============== Data Export ==============
 
 class ExportRequest(BaseModel):
-    """Request for data export."""
-    spreadsheet_id: str
-    project: str  # mt, sk, ss
-    target_doc_id: Optional[str] = None  # Override default target
-    dry_run: bool = False
+    """Запрос на экспорт данных."""
+    spreadsheet_id: str = Field(..., description="ID исходной таблицы")
+    project: str = Field(..., description="Код проекта (mt, sk, ss)")
+    target_doc_id: Optional[str] = Field(None, description="ID целевого документа (переопределение)")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос на экспорт"
 
 
 class ExportResponse(BaseModel):
-    """Response from data export."""
-    status: str
-    export_type: str
-    exported_rows: int = 0
-    target_doc_id: str = ""
-    target_sheet_name: str = ""
-    target_url: str = ""
-    message: str = ""
+    """Ответ после выполнения экспорта."""
+    status: str = Field(..., description="Статус выполнения")
+    export_type: str = Field(..., description="Тип экспорта")
+    exported_rows: int = Field(0, description="Количество экспортированных строк")
+    target_doc_id: str = Field("", description="ID целевого документа")
+    target_sheet_name: str = Field("", description="Имя целевого листа")
+    target_url: str = Field("", description="Ссылка на целевой документ")
+    message: str = Field("", description="Сообщение результата")
+
+    class Config:
+        title = "Ответ на экспорт"
 
 
-@api_router.post("/export/promotions", response_model=ExportResponse)
+@api_router.post("/export/promotions", response_model=ExportResponse, summary="Экспорт акций")
 async def export_promotions(request: ExportRequest):
     """
-    Export promotions data to target document.
-
-    Reads rows from "Заказ" sheet where "АКЦИИ" column has value,
-    enriches with data from "Главная" and "Сертификация",
-    then writes to target document.
-
-    Target documents by project:
-    - SK: 1YkGP-1Ipn7qLMKJyxLtm3ATrOhCxO2OuFLMt5WK8tsg
-    - SS: 1Q20jk9Cy8gIEJyKQ2-Ph34qqX3Y_oEdKAOK-o_oaFHQ
-    - MT: 140vuIAJ1dcuAoc10T5EnIFjx1lUq7e7oroBJlBs1TDA
+    Экспортирует данные по акциям из листа 'Заказ' в целевой документ проекта.
+    Обогащает данные информацией из листов 'Главная' и 'Сертификация'.
     """
     from src.services.export_service import get_export_service, ExportType
 
@@ -1497,15 +1566,9 @@ async def export_promotions(request: ExportRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/export/sets", response_model=ExportResponse)
+@api_router.post("/export/sets", response_model=ExportResponse, summary="Экспорт наборов")
 async def export_sets(request: ExportRequest):
-    """
-    Export sets data to target document.
-
-    Reads rows from "Заказ" sheet where "Набор" column has value,
-    enriches with data from "Главная" and "Сертификация",
-    then writes to target document.
-    """
+    """Экспортирует данные о наборах товаров в целевой документ проекта."""
     from src.services.export_service import get_export_service, ExportType
 
     logger.info(
@@ -1544,44 +1607,52 @@ async def export_sets(request: ExportRequest):
 # ============== Certification ==============
 
 class CertificationNewsRequest(BaseModel):
-    """Request for creating news sheet."""
-    spreadsheet_id: str
-    source_sheet: str = "Сертификация"
-    target_sheet: str = "New sert"
-    dry_run: bool = False
+    """Запрос на создание листа новых товаров."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    source_sheet: str = Field("Сертификация", description="Имя исходного листа")
+    target_sheet: str = Field("New sert", description="Имя нового листа")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос листа новинок"
 
 
 class CertificationSpiritsRequest(BaseModel):
-    """Request for spirit calculations."""
-    spreadsheet_id: str
-    sheet_name: str = "Сертификация"
-    dry_run: bool = False
+    """Запрос на расчет спиртовых номеров."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field("Сертификация", description="Имя листа")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос расчета спиртов"
 
 
 class CertificationProtocolsRequest(BaseModel):
-    """Request for protocol generation."""
-    spreadsheet_id: str
-    protocol_type: str = "353pp"
-    dry_run: bool = False
+    """Запрос на генерацию протоколов/макетов."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    protocol_type: str = Field("353pp", description="Тип (например, 353пп)")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос генерации протоколов"
 
 
 class CertificationResponse(BaseModel):
-    """Response from certification operations."""
-    status: str
-    rows_affected: int = 0
-    sheet_name: str = ""
-    message: str = ""
+    """Ответ по операциям сертификации."""
+    status: str = Field(..., description="Статус")
+    rows_affected: int = Field(0, description="Количество затронутых строк")
+    sheet_name: str = Field("", description="Имя листа")
+    message: str = Field("", description="Сообщение")
+
+    class Config:
+        title = "Ответ сертификации"
 
 
-@api_router.post("/certification/news-sheet", response_model=CertificationResponse)
+@api_router.post("/certification/news-sheet", response_model=CertificationResponse, summary="Создать лист New Sert")
 async def create_news_sheet(request: CertificationNewsRequest):
     """
-    Create "New sert" sheet from Certification sheet.
-
-    Filters rows where status indicates new products pending certification.
-    Creates a new sheet with summary of products needing attention.
-
-    Equivalent to GAS createNewsSheetFromCertification().
+    Создает лист 'New sert' на основе данных из 'Сертификация'.
+    Отбирает товары, требующие внимания или новой сертификации.
     """
     logger.info(
         "certification_news_sheet_requested",
@@ -1643,15 +1714,11 @@ async def calculate_spirits(request: CertificationSpiritsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/certification/protocols-353pp", response_model=CertificationResponse)
+@api_router.post("/certification/protocols-353pp", response_model=CertificationResponse, summary="Генерация протоколов 353пп")
 async def generate_protocols_353pp(request: CertificationProtocolsRequest):
     """
-    Generate certification protocols for 353пп.
-
-    NOTE: This endpoint is a placeholder. Full implementation requires
-    Google Drive/Docs integration for document generation.
-
-    Equivalent to GAS generateProtocols_353pp().
+    Генерирует протоколы сертификации по постановлению 353пп.
+    Заменяет функцию GAS generateProtocols_353pp().
     """
     logger.info(
         "certification_protocols_requested",
@@ -1677,15 +1744,11 @@ async def generate_protocols_353pp(request: CertificationProtocolsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/certification/ds-layouts", response_model=CertificationResponse)
+@api_router.post("/certification/ds-layouts", response_model=CertificationResponse, summary="Генерация макетов ДС")
 async def generate_ds_layouts(request: CertificationProtocolsRequest):
     """
-    Generate DS (Declaration of Safety) layouts.
-
-    NOTE: This endpoint is a placeholder. Full implementation requires
-    Google Drive/Docs integration for layout generation.
-
-    Equivalent to GAS generateDsLayouts_353pp().
+    Генерирует макеты деклараций о соответствии (ДС).
+    Заменяет функцию GAS generateDsLayouts_353pp().
     """
     logger.info(
         "certification_ds_layouts_requested",
@@ -1712,40 +1775,44 @@ async def generate_ds_layouts(request: CertificationProtocolsRequest):
 # ============== Invoice Processing ==============
 
 class InvoiceFormatRequest(BaseModel):
-    """Request for invoice formatting."""
-    spreadsheet_id: str
-    sheet_name: str = "Ордер"
-    dry_run: bool = False
+    """Запрос на форматирование листа заказа."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field("Ордер", description="Имя листа для форматирования")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос форматирования инвойса"
 
 
 class InvoiceCreateRequest(BaseModel):
-    """Request for creating full invoice."""
-    spreadsheet_id: str
-    order_sheet: str = "Ордер"
-    certification_sheet: str = "Сертификация"
-    labels_sheet: str = "Этикетки"
-    target_sheet: str = "Для инвойса"
-    dry_run: bool = False
+    """Запрос на создание полного инвойса."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    order_sheet: str = Field("Ордер", description="Имя листа заказа")
+    certification_sheet: str = Field("Сертификация", description="Имя листа сертификации")
+    labels_sheet: str = Field("Этикетки", description="Имя листа этикеток")
+    target_sheet: str = Field("Для инвойса", description="Имя целевого листа")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос создания инвойса"
 
 
 class InvoiceResponse(BaseModel):
-    """Response from invoice operations."""
-    status: str
-    rows_processed: int = 0
-    target_sheet: str = ""
-    message: str = ""
+    """Ответ операций по инвойсу."""
+    status: str = Field(..., description="Статус")
+    rows_processed: int = Field(0, description="Обработано строк")
+    target_sheet: str = Field("", description="Название целевого листа")
+    message: str = Field("", description="Сообщение")
+
+    class Config:
+        title = "Ответ по инвойсу"
 
 
-@api_router.post("/invoice/format-order", response_model=InvoiceResponse)
+@api_router.post("/invoice/format-order", response_model=InvoiceResponse, summary="Нормализация листа заказа")
 async def format_order_sheet(request: InvoiceFormatRequest):
     """
-    Format order sheet - normalize numeric columns.
-
-    Converts text numbers to actual numbers:
-    - Removes spaces, replaces comma with dot
-    - Columns: кол-во, Цена ед., Сумма
-
-    Equivalent to GAS formatOrderSheet().
+    Преобразует текстовые числа в числовые значения (Цена, Кол-во, Сумма).
+    Удаляет лишние пробелы и исправляет разделители.
     """
     from src.services.invoice_service import get_invoice_service
 
@@ -1777,19 +1844,10 @@ async def format_order_sheet(request: InvoiceFormatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/invoice/create-full", response_model=InvoiceResponse)
+@api_router.post("/invoice/create-full", response_model=InvoiceResponse, summary="Собрать полный инвойс")
 async def create_full_invoice(request: InvoiceCreateRequest):
     """
-    Create full invoice sheet by joining data from multiple sheets.
-
-    Joins data from:
-    - Ордер: base order data (ID, article, quantity, prices)
-    - Сертификация: DS names, declarations, spirit info
-    - Этикетки: label descriptions
-
-    Creates "Для инвойса" sheet with combined data.
-
-    Equivalent to GAS createFullInvoice().
+    Создает сводный лист 'Для инвойса', объединяя данные из Ордера, Сертификации и Этикеток.
     """
     from src.services.invoice_service import get_invoice_service
 
@@ -1826,52 +1884,55 @@ async def create_full_invoice(request: InvoiceCreateRequest):
 # ============== Formula Operations ==============
 
 class FormulaPriceDynamicsRequest(BaseModel):
-    """Request for price dynamics formula recalculation."""
-    spreadsheet_id: str
-    sheet_name: str = "Динамика цены"
-    dry_run: bool = False
+    """Запрос на расчет формул динамики цен."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field("Динамика цены", description="Имя листа")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос динамики цен"
 
 
 class FormulaPriceCalcRequest(BaseModel):
-    """Request for price calculation formula update."""
-    spreadsheet_id: str
-    price_calc_sheet: str = "Расчет цены"
-    price_dynamics_sheet: str = "Динамика цены"
-    silent: bool = False
-    dry_run: bool = False
+    """Запрос на обновление формул расчета цены."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    price_calc_sheet: str = Field("Расчет цены", description="Имя листа расчета")
+    price_dynamics_sheet: str = Field("Динамика цены", description="Имя листа динамики")
+    silent: bool = Field(False, description="Не выводить уведомления")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос расчета цен"
 
 
 class FormulaAddYearRequest(BaseModel):
-    """Request for adding new year columns."""
-    spreadsheet_id: str
-    sheet_name: str = "Динамика цены"
-    year: Optional[int] = None
-    dry_run: bool = False
+    """Запрос на добавление колонок нового года."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field("Динамика цены", description="Имя листа")
+    year: Optional[int] = Field(None, description="Год (например, 2026)")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос добавления года"
 
 
 class FormulaResponse(BaseModel):
-    """Response from formula operations."""
-    status: str
-    blocks_processed: int = 0
-    rows_updated: int = 0
-    columns_added: int = 0
-    year: Optional[int] = None
-    message: str = ""
+    """Ответ операций с формулами."""
+    status: str = Field(..., description="Статус")
+    blocks_processed: int = Field(0, description="Обработано блоков")
+    rows_updated: int = Field(0, description="Обновлено строк")
+    columns_added: int = Field(0, description="Добавлено колонок")
+    year: Optional[int] = Field(None, description="Год")
+    message: str = Field("", description="Сообщение")
+
+    class Config:
+        title = "Ответ по формулам"
 
 
-@api_router.post("/formulas/price-dynamics", response_model=FormulaResponse)
+@api_router.post("/formulas/price-dynamics", response_model=FormulaResponse, summary="Пересчитать формулы динамики")
 async def recalculate_price_dynamics_formulas(request: FormulaPriceDynamicsRequest):
     """
-    Recalculate price dynamics formulas.
-
-    Calculates for all year blocks:
-    - EXW ALFASPA = EXW * (1 - discount/100)
-    - Purchase price = EXW ALFASPA * currency_rate
-    - DDP = Purchase * DDP coefficient
-    - Growth EXW = current_year / prev_year - 1
-    - Growth DDP = current_year_ddp / prev_year_ddp - 1
-
-    Equivalent to GAS recalculatePriceDynamicsFormulas().
+    Пересчитывает формулы в листе 'Динамика цены' (EXW ALFASPA, Закупка, DDP, Приросты).
     """
     from src.services.formula_service import get_formula_service
 
@@ -1903,19 +1964,10 @@ async def recalculate_price_dynamics_formulas(request: FormulaPriceDynamicsReque
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/formulas/price-calculation", response_model=FormulaResponse)
+@api_router.post("/formulas/price-calculation", response_model=FormulaResponse, summary="Обновить подгрузку цен")
 async def update_price_calculation_formulas(request: FormulaPriceCalcRequest):
     """
-    Update price calculation formulas (INDEX/MATCH lookups).
-
-    Pulls data from Price Dynamics sheet based on ID matching:
-    - EXW previous year
-    - EXW current year
-    - EXW ALFASPA current year
-    - Purchase price
-    - DDP
-
-    Equivalent to GAS updatePriceCalculationFormulas().
+    Обновляет формулы INDEX/MATCH в листе 'Расчет цены', подтягивая актуальные данные из 'Динамики цены'.
     """
     from src.services.formula_service import get_formula_service
 
@@ -1948,21 +2000,10 @@ async def update_price_calculation_formulas(request: FormulaPriceCalcRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/formulas/add-year-columns", response_model=FormulaResponse)
+@api_router.post("/formulas/add-year-columns", response_model=FormulaResponse, summary="Добавить колонки нового года")
 async def add_new_year_columns(request: FormulaAddYearRequest):
     """
-    Add new year columns to price dynamics sheet.
-
-    Inserts 7 columns after "Комментарий":
-    - EXW {year}, €
-    - СКИДКА ОТ EXW {year}, %
-    - EXW ALFASPA {year}, €
-    - Закупочная цена {year}, ₽
-    - DDP-МОСКВА {year}, ₽
-    - Прирост EXW, %
-    - Прирост DDP-МОСКВА, %
-
-    Equivalent to GAS addNewYearColumnsToPriceDynamics().
+    Добавляет 7 новых колонок для следующего года в лист 'Динамика цены' (EXW, скидки, закупка и т.д.).
     """
     from src.services.formula_service import get_formula_service
 
@@ -1999,68 +2040,81 @@ async def add_new_year_columns(request: FormulaAddYearRequest):
 # ============== Log Archiving ==============
 
 class LogArchiveRequest(BaseModel):
-    """Request for log archiving."""
-    spreadsheet_id: str
-    archive_folder_id: str
-    project_code: str = "project"
-    dry_run: bool = False
+    """Запрос на архивацию логов."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    archive_folder_id: str = Field(..., description="ID папки на Google Диске для архивов")
+    project_code: str = Field("project", description="Код проекта")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос архивации логов"
 
 
 class LogResetRequest(BaseModel):
-    """Request for log reset."""
-    spreadsheet_id: str
-    sheet_name: str = "Логи"
-    dry_run: bool = False
+    """Запрос на сброс листа логов."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field("Логи", description="Имя листа")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос очистки логов"
 
 
 class LogRotationRequest(BaseModel):
-    """Request for midnight log rotation."""
-    spreadsheet_id: str
-    archive_folder_id: str
-    project_code: str = "project"
-    force: bool = False
-    dry_run: bool = False
+    """Запрос на ночную ротацию логов."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    archive_folder_id: str = Field(..., description="ID папки на Google Диске")
+    project_code: str = Field("project", description="Код проекта")
+    force: bool = Field(False, description="Принудительная ротация")
+    dry_run: bool = Field(False, description="Тестовый запуск")
+
+    class Config:
+        title = "Запрос ротации логов"
 
 
 class LogEntryRequest(BaseModel):
-    """Request for writing log entry."""
-    spreadsheet_id: str
-    sheet_name: str = "Логи"
-    category: str = "SYSTEM"
-    action: str
-    details: str = ""
-    level: str = "INFO"
+    """Запрос на запись одной строки в лог."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field("Логи", description="Имя листа")
+    category: str = Field("SYSTEM", description="Категория")
+    action: str = Field(..., description="Действие")
+    details: str = Field("", description="Подробности")
+    level: str = Field("INFO", description="Уровень (INFO, WARN, ERROR)")
+
+    class Config:
+        title = "Запрос записи в лог"
 
 
 class LogArchiveResponse(BaseModel):
-    """Response from log archiving operations."""
-    status: str
-    total_rows: int = 0
-    sheets_archived: Optional[Dict[str, int]] = None
-    archive_name: Optional[str] = None
-    message: str = ""
+    """Ответ после архивации логов."""
+    status: str = Field(..., description="Статус")
+    total_rows: int = Field(0, description="Всего строк")
+    sheets_archived: Optional[Dict[str, int]] = Field(None, description="Архивированные листы")
+    archive_name: Optional[str] = Field(None, description="Название архива")
+    message: str = Field("", description="Сообщение")
+
+    class Config:
+        title = "Ответ архивации логов"
 
 
 class LogStatusResponse(BaseModel):
-    """Response from log status check."""
-    status: str
-    last_archive_date: str = "Never"
-    current_archive_name: str = ""
-    project_code: str = ""
-    sheets_to_archive: List[str] = []
-    current_row_counts: Optional[Dict[str, int]] = None
-    total_pending_rows: int = 0
+    """Ответ о статусе архивации логов."""
+    status: str = Field(..., description="Статус")
+    last_archive_date: str = Field("Never", description="Дата последней архивации")
+    current_archive_name: str = Field("", description="Имя текущего архива")
+    project_code: str = Field("", description="Код проекта")
+    sheets_to_archive: List[str] = Field([], description="Листы для архивации")
+    current_row_counts: Optional[Dict[str, int]] = Field(None, description="Количество строк в листах")
+    total_pending_rows: int = Field(0, description="Всего строк к архивации")
+
+    class Config:
+        title = "Ответ о статусе логов"
 
 
-@api_router.post("/logs/archive", response_model=LogArchiveResponse)
+@api_router.post("/logs/archive", response_model=LogArchiveResponse, summary="Ежедневная архивация")
 async def archive_logs_daily(request: LogArchiveRequest):
     """
-    Archive all log sheets to monthly archive spreadsheet.
-
-    Copies data from log sheets (Логи, Журнал синхро, Журнал логов)
-    to a monthly archive spreadsheet in the specified Drive folder.
-
-    Equivalent to GAS archiveLogsDaily().
+    Архивирует все листы логов в ежемесячную таблицу в указанной папке Диска.
     """
     logger.info(
         "log_archive_requested",
@@ -2090,14 +2144,10 @@ async def archive_logs_daily(request: LogArchiveRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/logs/reset", response_model=LogArchiveResponse)
+@api_router.post("/logs/reset", response_model=LogArchiveResponse, summary="Сбросить листы логов")
 async def reset_log_sheet(request: LogResetRequest):
     """
-    Reset (clear) a log sheet after archiving.
-
-    Clears all data rows, preserving headers.
-
-    Equivalent to GAS resetDailyLogSheet().
+    Очищает данные в листе логов после архивации, сохраняя заголовки.
     """
     logger.info(
         "log_reset_requested",
@@ -2124,15 +2174,10 @@ async def reset_log_sheet(request: LogResetRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/logs/rotation", response_model=LogArchiveResponse)
+@api_router.post("/logs/rotation", response_model=LogArchiveResponse, summary="Ночная ротация логов")
 async def midnight_log_rotation(request: LogRotationRequest):
     """
-    Perform complete midnight log rotation.
-
-    1. Archives logs to monthly spreadsheet
-    2. Resets all log sheets
-
-    Equivalent to GAS midnightLogRotation().
+    Выполняет полный цикл ночной ротации: архивация + сброс листов.
     """
     logger.info(
         "log_rotation_requested",
@@ -2165,14 +2210,10 @@ async def midnight_log_rotation(request: LogRotationRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/logs/status", response_model=LogStatusResponse)
+@api_router.get("/logs/status", response_model=LogStatusResponse, summary="Проверить статус архивов")
 async def get_log_status(spreadsheet_id: str, project_code: str = "project"):
     """
-    Get current log archive status.
-
-    Returns last archive date, pending row counts, and configuration.
-
-    Equivalent to GAS showArchiveStatus().
+    Возвращает информацию о последней архивации и количестве строк, ожидающих переноса.
     """
     logger.info(
         "log_status_requested",
@@ -2201,12 +2242,10 @@ async def get_log_status(spreadsheet_id: str, project_code: str = "project"):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/logs/write")
+@api_router.post("/logs/write", summary="Записать в лог")
 async def write_log_entry(request: LogEntryRequest):
     """
-    Write a log entry to the log sheet.
-
-    Equivalent to GAS _logToSheet_().
+    Записывает одиночную строку лога непосредственно в Google Таблицу.
     """
     try:
         result = await logging_service.write_log_entry(
@@ -2269,19 +2308,21 @@ async def get_ai_settings():
 
 
 class AIConfigureRequest(BaseModel):
-    """Request to configure AI settings."""
-    api_key: Optional[str] = None
-    model: Optional[str] = None
+    """Запрос на конфигурацию настроек AI."""
+    api_key: Optional[str] = Field(None, description="API ключ Gemini")
+    model: Optional[str] = Field(None, description="Имя модели (например, gemini-1.5-pro)")
+    spreadsheet_id: Optional[str] = Field(None, description="ID таблицы")
+    model_name: Optional[str] = Field(None, description="Альтернативное имя модели")
+    system_instruction: Optional[str] = Field(None, description="Системная инструкция")
+
+    class Config:
+        title = "Запрос настройки ИИ"
 
 
-@api_router.post("/ai/configure")
+@api_router.post("/ai/configure", summary="Настроить AI")
 async def configure_ai(request: AIConfigureRequest):
     """
-    Configure Gemini AI settings at runtime.
-    Allows setting API key and model without server restart.
-
-    Note: Settings are stored in memory and will be lost on server restart.
-    For permanent settings, update .env file.
+    Настраивает параметры Gemini AI (ключ, модель) "на лету" без перезагрузки сервера.
     """
     from src.services.gemini_client import set_runtime_config, get_gemini_client
 
@@ -2321,21 +2362,18 @@ async def configure_ai(request: AIConfigureRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/ai/categories")
+@api_router.get("/ai/categories", summary="Категории ТН ВЭД")
 async def get_ai_categories():
-    """
-    Get available ТН ВЭД categories for classification.
-    """
+    """Возвращает список доступных категорий продукции для классификации."""
     return {
         "categories": ai_service.get_available_categories()
     }
 
 
-@api_router.post("/ai/analyze/pdf")
+@api_router.post("/ai/analyze/pdf", summary="Анализ PDF документа")
 async def analyze_pdf(request: AIPdfAnalyzeRequest):
     """
-    Analyze a PDF document directly without spreadsheet.
-    Extracts INCI composition and classifies product.
+    Анализирует PDF документ (состав, описание) через AI без привязки к таблице.
     """
     logger.info("pdf_analysis_requested", url=request.pdf_url[:50] if request.pdf_url else None)
 
@@ -2354,12 +2392,10 @@ async def analyze_pdf(request: AIPdfAnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/ai/analyze/simple")
+@api_router.post("/ai/analyze/simple", summary="Тест AI (быстрый анализ)")
 async def analyze_simple(request: AISimpleAnalyzeRequest):
     """
-    Simple AI analysis without PDF - just classify product by name/purpose.
-    Use this to quickly test if Gemini API is working.
-    Returns product_type and product_reason.
+    Простая классификация продукта по названию и назначению для проверки работы API.
     """
     import json
     from src.services.gemini_client import get_gemini_client
@@ -2417,12 +2453,10 @@ async def analyze_simple(request: AISimpleAnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/ai/analyze/row")
+@api_router.post("/ai/analyze/row", summary="Анализ строки AI")
 async def analyze_row(request: AIAnalyzeRequest):
     """
-    Analyze a single row in the spreadsheet.
-    Reads INCI link from column H, analyzes with Gemini,
-    and writes results to columns L-Y.
+    Запускает AI анализ для конкретной строки таблицы (парсинг INCI, классификация).
     """
     if not request.row_number:
         raise HTTPException(status_code=400, detail="row_number is required")
@@ -2549,9 +2583,9 @@ async def _run_batch_analysis(spreadsheet_id: str, sheet_name: str, delay: float
 
 # ============== Cache Management ==============
 
-@api_router.post("/cache/clear")
+@api_router.post("/cache/clear", summary="Очистить кэш сервера")
 async def clear_cache(project: Optional[str] = None, pattern: Optional[str] = None):
-    """Clear cache."""
+    """Удаляет записи из внутреннего кэша сервера (Redis/Memory)."""
     logger.info("cache_clear_requested", project=project, pattern=pattern)
 
     # TODO: Clear cache
@@ -2560,9 +2594,9 @@ async def clear_cache(project: Optional[str] = None, pattern: Optional[str] = No
 
 # ============== Task Status ==============
 
-@api_router.get("/status/{task_id}", response_model=TaskStatusResponse)
+@api_router.get("/status/{task_id}", response_model=TaskStatusResponse, summary="Статус произвольной задачи")
 async def get_task_status(task_id: str):
-    """Get status of any task."""
+    """Возвращает прогресс любой фоновой задачи по её ID."""
     # TODO: Get from task queue
     return TaskStatusResponse(
         task_id=task_id,
@@ -2573,23 +2607,32 @@ async def get_task_status(task_id: str):
 # ============== Menu Configuration ==============
 
 class MenuItemModel(BaseModel):
-    """Single menu item."""
-    label: Optional[str] = None
-    function_name: Optional[str] = None
-    separator: bool = False
-    separator_after: bool = False
-    submenu: Optional[str] = None
-    items: Optional[List[dict]] = None
+    """Элемент меню Google Таблицы."""
+    label: Optional[str] = Field(None, description="Заголовок пункта")
+    function_name: Optional[str] = Field(None, description="Имя функции GAS")
+    separator: bool = Field(False, description="Разделитель")
+    separator_after: bool = Field(False, description="Разделитель после")
+    submenu: Optional[str] = Field(None, description="Подменю")
+    items: Optional[List[dict]] = Field(None, description="Вложенные элементы")
+
+    class Config:
+        title = "Элемент меню"
 
 
 class MenuGroupModel(BaseModel):
-    """Menu group with items."""
-    title: str
-    items: List[MenuItemModel]
+    """Группа элементов меню (подменю)."""
+    title: str = Field(..., description="Название группы")
+    items: List[MenuItemModel] = Field(..., description="Список элементов")
+
+    class Config:
+        title = "Группа меню"
 
 class MenuConfigResponse(BaseModel):
-    """Menu configuration for a project."""
-    project: str
+    """Конфигурация меню для проекта."""
+    project: str = Field(..., description="Код проекта")
+
+    class Config:
+        title = "Ответ конфигурации меню"
     project_name: str
     menu_title: str
     items: List[MenuItemModel] = []
@@ -2894,8 +2937,12 @@ def _clone_base_group(group: dict) -> MenuGroupModel:
 
 
 def _server_tools_menu() -> MenuGroupModel:
-    """Utility menu for server-driven actions and diagnostics."""
+    """Утилитарное меню для действий на сервере и диагностики."""
     items = [
+        MenuItemModel(label="🏠 Открыть Главную страницу", function_name="openServerMainPage"),
+        MenuItemModel(label="📝 Открыть Правила (UI)", function_name="openServerRulesPage"),
+        MenuItemModel(label="📚 Открыть Swagger (API)", function_name="openServerDocsPage"),
+        MenuItemModel(separator=True),
         MenuItemModel(label="🔄 Обновить меню", function_name="refreshMenu"),
         MenuItemModel(label="📑 Упорядочить листы", function_name="reorderSheets"),
         MenuItemModel(label="🔄 Обновить данные", function_name="callServerLoadFunctions"),
@@ -2924,9 +2971,9 @@ def _build_menu_registry(project: str) -> List[MenuGroupModel]:
 
     return registry
 
-@api_router.post("/logs/init")
+@api_router.post("/logs/init", summary="Инициализация логов в таблице")
 async def init_logs(request: LogInitRequest):
-    """Initialize the 'Логи' sheet."""
+    """Создает лист 'Логи' с верными заголовками, если он отсутствует."""
     logger.info("logs_init_requested", spreadsheet_id=request.spreadsheet_id)
     success = logging_service.init_session_log(request.spreadsheet_id)
     if not success:
@@ -2934,9 +2981,9 @@ async def init_logs(request: LogInitRequest):
     return {"status": "success", "message": "Log sheet initialized"}
 
 
-@api_router.get("/menu/config")
+@api_router.get("/menu/config", summary="Получить конфиг меню")
 async def get_menu_config(spreadsheet_id: str) -> MenuConfigResponse:
-    """Get menu configuration for a spreadsheet."""
+    """Строит и возвращает структуру меню для конкретного проекта на основе его ID."""
     project = PROJECT_IDS.get(spreadsheet_id, "MT")
     config = MENU_CONFIGS.get(project, MENU_CONFIGS["MT"])
 
@@ -2953,9 +3000,9 @@ async def get_menu_config(spreadsheet_id: str) -> MenuConfigResponse:
         menus=registry,
     )
 
-@api_router.get("/menu/sort-config")
+@api_router.get("/menu/sort-config", summary="Конфиг сортировки")
 async def get_sort_config(spreadsheet_id: str):
-    """Get sort configuration for a spreadsheet (columns, sheet names)."""
+    """Возвращает настройки сортировки (колонки и листы) для конкретной таблицы."""
     project = PROJECT_IDS.get(spreadsheet_id, "MT")
     config = MENU_CONFIGS.get(project, MENU_CONFIGS["MT"])
 
@@ -2997,14 +3044,17 @@ SHEET_ORDER = [
 ]
 
 class ReorderSheetsRequest(BaseModel):
-    """Request to reorder sheets."""
-    spreadsheet_id: str
+    """Запрос на упорядочивание листов."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
 
-@api_router.post("/sheets/reorder")
+    class Config:
+        title = "Запрос упорядочивания листов"
+
+@api_router.post("/sheets/reorder", summary="Упорядочить листы")
 async def reorder_sheets(request: ReorderSheetsRequest):
     """
-    Reorder sheets according to standard order.
-    Unknown sheets are moved to the end.
+    Располагает листы в таблице в стандартном порядке экосистемы.
+    Неизвестные листы переносятся в конец.
     """
     logger.info("reorder_sheets_requested", spreadsheet_id=request.spreadsheet_id)
 
@@ -3024,20 +3074,24 @@ async def reorder_sheets(request: ReorderSheetsRequest):
 
 
 class SyncLogQueryParams(BaseModel):
-    spreadsheet_id: str
-    limit: int = 200
-    offset: int = 0
-    order: str = "desc"
-    project: Optional[str] = None
-    category: Optional[str] = None
-    status: Optional[str] = None
-    row_key: Optional[str] = None
-    source: Optional[str] = None
-    target: Optional[str] = None
-    rule_id: Optional[str] = None
+    """Параметры фильтрации журнала синхронизации."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    limit: int = Field(200, description="Лимит записей")
+    offset: int = Field(0, description="Смещение")
+    order: str = Field("desc", description="Сортировка (asc/desc)")
+    project: Optional[str] = Field(None, description="Фильтр по проекту")
+    category: Optional[str] = Field(None, description="Фильтр по категории")
+    status: Optional[str] = Field(None, description="Фильтр по статусу")
+    row_key: Optional[str] = Field(None, description="Фильтр по артикулу")
+    source: Optional[str] = Field(None, description="Фильтр по источнику")
+    target: Optional[str] = Field(None, description="Фильтр по целевому листу")
+    rule_id: Optional[str] = Field(None, description="Фильтр по ID правила")
+
+    class Config:
+        title = "Параметры журнала синхронизации"
 
 
-@api_router.get("/sync-logs")
+@api_router.get("/sync-logs", summary="Журнал синхронизации (запрос)")
 def get_sync_logs(
     spreadsheet_id: str,
     limit: int = 200,
@@ -3051,9 +3105,8 @@ def get_sync_logs(
     target: Optional[str] = None,
     rule_id: Optional[str] = None,
 ):
-    """
-    Get sync journal entries with filtering and pagination.
-    """
+    """Возвращает список записей журнала синхронизации с фильтрацией."""
+    # ... (code continues)
     try:
         entries, total = sync_log_service.list_entries(
             spreadsheet_id=spreadsheet_id,
@@ -3080,11 +3133,9 @@ def get_sync_logs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/sync-logs/stats")
+@api_router.get("/sync-logs/stats", summary="Статистика синхронизации")
 def get_sync_logs_stats(spreadsheet_id: str):
-    """
-    Get summary statistics for sync logs.
-    """
+    """Возвращает сводную статистику по типам операций и статусам синхронизации."""
     try:
         entries, total = sync_log_service.list_entries(
             spreadsheet_id=spreadsheet_id,
@@ -3115,7 +3166,7 @@ def get_sync_logs_stats(spreadsheet_id: str):
 
 # Path-based versions for UI compatibility (logs_manager.html)
 
-@api_router.get("/sync-logs/{spreadsheet_id}")
+@api_router.get("/sync-logs/{spreadsheet_id}", summary="Журнал синхронизации (путь)")
 def get_sync_logs_by_path(
     spreadsheet_id: str,
     limit: int = 200,
@@ -3125,9 +3176,7 @@ def get_sync_logs_by_path(
     category: Optional[str] = None,
     status: Optional[str] = None,
 ):
-    """
-    Get sync journal entries (path-based for UI compatibility).
-    """
+    """Возвращает список записей журнала синхронизации (вариант для UI)."""
     try:
         entries, total = sync_log_service.list_entries(
             spreadsheet_id=spreadsheet_id,
@@ -3149,11 +3198,9 @@ def get_sync_logs_by_path(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/sync-logs/{spreadsheet_id}/stats")
+@api_router.get("/sync-logs/{spreadsheet_id}/stats", summary="Статистика синхронизации (путь)")
 def get_sync_logs_stats_by_path(spreadsheet_id: str):
-    """
-    Get sync log statistics (path-based for UI compatibility).
-    """
+    """Возвращает статистику синхронизации (вариант для UI)."""
     try:
         entries, total = sync_log_service.list_entries(
             spreadsheet_id=spreadsheet_id,
@@ -3183,16 +3230,14 @@ def get_sync_logs_stats_by_path(spreadsheet_id: str):
 # ============== FUNCTION LOG ENDPOINTS ==============
 
 
-@api_router.get("/function-logs")
+@api_router.get("/function-logs", summary="Журнал выполнения функций")
 def get_function_logs(
     module: Optional[str] = None,
     function_name: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ):
-    """
-    Get function execution logs with filtering.
-    """
+    """Возвращает историю выполнения различных серверных функций."""
     try:
         executions, total = function_log_service.list_executions(
             module=module,

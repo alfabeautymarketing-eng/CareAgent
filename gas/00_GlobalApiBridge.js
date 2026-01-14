@@ -47,76 +47,28 @@ function handleOnOpen(e) {
     console.error("Ошибка при проверке SERVER_URL: " + err);
   }
 
-  // 0. Гарантируем, что лог-листы первыми в порядке вкладок
-  try {
-    if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
-      Lib.ensureLogSheetsFirst();
-    }
-  } catch (err) {
-    console.error("Ошибка при переносе лог-листов: " + err);
-  }
-
-  // 1. Инициализация сессии логов на сервере (Логи)
-  try {
-    if (typeof Lib !== 'undefined' && typeof Lib.initSessionLogs === 'function') {
-      Lib.initSessionLogs();
-      if (typeof Lib.ensureLogSheetsFirst === 'function') {
-        Lib.ensureLogSheetsFirst();
-      }
-    }
-    if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-      Lib.logStep("Startup", "Инициализация логов сессии завершена");
-    }
-  } catch (err) {
-    console.error("Ошибка при инициализации логов: " + err);
-    if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
-      Lib.logWarn("Startup: не удалось инициализировать логи", err);
-    }
-  }
-
-  // 2. Загрузка меню (требует полного доступа, поэтому делаем после логов)
+  // 1. Загрузка меню (требует полного доступа)
   if (typeof createAgentMenu === 'function') {
     try {
-      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-        Lib.logStep("Startup", "Загрузка динамического меню");
-      }
       createAgentMenu();
     } catch (err) {
       console.error("Ошибка при загрузке меню: " + err);
-      if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
-        Lib.logWarn("Startup: ошибка загрузки меню", err);
-      }
     }
   }
 
-  // 3. Автоматическое упорядочивание листов через Python сервер
+  // 2. Автоматическое упорядочивание листов через Python сервер
   if (typeof reorderSheetsSilent === 'function') {
     try {
-      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-        Lib.logStep("Startup", "Выстраиваем листы по порядку (сервер)");
-      }
       reorderSheetsSilent();
-      if (typeof Lib !== 'undefined' && typeof Lib.ensureLogSheetsFirst === 'function') {
-        Lib.ensureLogSheetsFirst();
-      }
     } catch (err) {
       console.error("Ошибка при упорядочивании листов: " + err);
-      if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
-        Lib.logWarn("Startup: ошибка упорядочивания листов", err);
-      }
     }
   }
 
   // 3.5. Инициализация Gemini API из Script Properties
   if (typeof initGeminiFromStorage === 'function') {
     try {
-      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-        Lib.logStep("Startup", "Инициализация Gemini API");
-      }
       const geminiOk = initGeminiFromStorage();
-      if (geminiOk && typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-        Lib.logStep("Startup", "Gemini API инициализирован из хранилища");
-      }
     } catch (err) {
       console.error("Ошибка при инициализации Gemini: " + err);
     }
@@ -125,30 +77,18 @@ function handleOnOpen(e) {
   // 4. Обновляем формулы на ключевых листах
   try {
     if (typeof Lib !== 'undefined' && typeof Lib.recalculatePriceDynamicsFormulas === 'function') {
-      if (typeof Lib.logStep === 'function') {
-        Lib.logStep("Startup", "Обновляем формулы листа \"Динамика цены\"");
-      }
       Lib.recalculatePriceDynamicsFormulas();
     }
   } catch (err) {
     console.error("Ошибка при обновлении формул Динамика цены: " + err);
-    if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
-      Lib.logWarn('Startup: ошибка формул "Динамика цены"', err);
-    }
   }
 
   try {
     if (typeof Lib !== 'undefined' && typeof Lib.updatePriceCalculationFormulas === 'function') {
-      if (typeof Lib.logStep === 'function') {
-        Lib.logStep("Startup", "Обновляем формулы листа \"Расчет цены\"");
-      }
       Lib.updatePriceCalculationFormulas(true); // silent
     }
   } catch (err) {
     console.error("Ошибка при обновлении формул Расчет цены: " + err);
-    if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
-      Lib.logWarn('Startup: ошибка формул "Расчет цены"', err);
-    }
   }
 
   // 5. Активация листа "Главная"
@@ -156,16 +96,10 @@ function handleOnOpen(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var mainSheet = ss.getSheetByName("Главная");
     if (mainSheet) {
-      if (typeof Lib !== 'undefined' && typeof Lib.logStep === 'function') {
-        Lib.logStep("Startup", "Переходим на лист \"Главная\"");
-      }
       ss.setActiveSheet(mainSheet);
     }
   } catch (err) {
     console.error("Ошибка при активации листа Главная: " + err);
-    if (typeof Lib !== 'undefined' && typeof Lib.logWarn === 'function') {
-      Lib.logWarn("Startup: не удалось активировать лист Главная", err);
-    }
   }
 }
 
@@ -199,14 +133,7 @@ function handleOnChange(e) {
  * Логирует все изменения в лист "Логи".
  */
 function handleOnEdit(e) {
-  // Логируем событие редактирования
-  if (typeof Lib !== 'undefined' && typeof Lib.logEditEvent === 'function') {
-    try {
-      Lib.logEditEvent(e);
-    } catch (logErr) {
-      console.error("Ошибка логирования редактирования:", logErr);
-    }
-  }
+  // Редактирование обрабатывается сервером через вебхуки
 
   // Выполняем основную логику синхронизации
   if (typeof Lib !== 'undefined' && typeof Lib.onEdit_internal_ === 'function') {
