@@ -1492,6 +1492,10 @@ function menuAnalyzeEmpty() {
 function menuShowCategories() {
   const ui = SpreadsheetApp.getUi();
 
+  if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+    Lib.logWithEmoji("Запрос категорий ТН ВЭД", "INFO", "", "menuShowCategories", "Загрузка доступных категорий товаров для классификации", "Dashboard", "START", {}, null);
+  }
+
   try {
     const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/ai/categories', {
       muteHttpExceptions: true,
@@ -1502,6 +1506,10 @@ function menuShowCategories() {
       const result = JSON.parse(response.getContentText());
       const categories = result.categories || [];
 
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Категории ТН ВЭД успешно загружены", "INFO", "", "menuShowCategories", "Получено " + categories.length + " категорий", "Dashboard", "SUCCESS", {}, { categoryCount: categories.length, status: "loaded" });
+      }
+
       let msg = '📦 Категории ТН ВЭД для классификации:\n\n';
 
       categories.forEach(function(cat) {
@@ -1511,9 +1519,15 @@ function menuShowCategories() {
 
       ui.alert('Категории ТН ВЭД', msg, ui.ButtonSet.OK);
     } else {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при получении категорий ТН ВЭД", "ERROR", "", "menuShowCategories", "HTTP код: " + response.getResponseCode(), "Dashboard", "ERROR", {}, { httpCode: response.getResponseCode() });
+      }
       ui.alert('❌ Ошибка', 'Не удалось получить категории', ui.ButtonSet.OK);
     }
   } catch (e) {
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Ошибка сети при загрузке категорий", "ERROR", "", "menuShowCategories", e && e.message ? e.message : String(e), "Dashboard", "ERROR", {}, { error: e ? e.toString() : "Unknown error" });
+    }
     ui.alert('❌ Ошибка', e.message, ui.ButtonSet.OK);
   }
 }
