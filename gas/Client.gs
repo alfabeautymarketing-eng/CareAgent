@@ -1034,6 +1034,10 @@ function menuCheckService() {
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
+  if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+    Lib.logWithEmoji("Запуск проверки статуса Gemini API", "INFO", "", "menuCheckService", "Проверка доступности AI сервиса", "Agent", "START", {}, null);
+  }
+
   try {
     ss.toast('⏳ Проверка Gemini API...', 'AI Agent', 10);
 
@@ -1061,12 +1065,24 @@ function menuCheckService() {
 
         ui.alert('Статус AI сервиса', msg, ui.ButtonSet.OK);
       } else {
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji("Статус Gemini API не доступен", "WARN", "", "menuCheckService", "API вернул статус offline", "Agent", "WARNING", {}, { status: "offline" });
+        }
         ui.alert('❌ Ошибка', 'Gemini API недоступен:\n' + (result.error || 'Unknown error'), ui.ButtonSet.OK);
       }
     } else {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при проверке Gemini API", "ERROR", "", "menuCheckService", "HTTP код: " + code, "Agent", "ERROR", {}, { httpCode: code, error: response.getContentText() });
+      }
       ui.alert('❌ Ошибка сервера', 'Код: ' + code + '\n' + response.getContentText(), ui.ButtonSet.OK);
     }
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Проверка статуса Gemini API завершена", "INFO", "", "menuCheckService", "Результаты отправлены пользователю", "Agent", "SUCCESS", {}, { status: "completed" });
+    }
   } catch (e) {
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Ошибка сети при проверке Gemini API", "ERROR", "", "menuCheckService", e && e.message ? e.message : String(e), "Agent", "ERROR", {}, { error: e ? e.toString() : "Unknown error" });
+    }
     ui.alert('❌ Ошибка сети', e.message + '\n\nПроверьте, запущен ли Python сервер.', ui.ButtonSet.OK);
   }
 }
@@ -1118,6 +1134,10 @@ function menuAnalyzeSelected() {
 
   const sheetName = sheet.getName();
 
+  if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+    Lib.logWithEmoji("Запуск анализа выбранной строки", "INFO", "", "menuAnalyzeSelected", "Анализ содержимого INCI ссылки в строке " + row, "Agent", "START", { sheetName: sheetName, row: row }, null);
+  }
+
   // Confirm
   const confirm = ui.alert(
     'Анализ строки ' + row,
@@ -1152,10 +1172,13 @@ function menuAnalyzeSelected() {
 
     if (code === 200) {
       const result = JSON.parse(text);
+      const data = result.data;
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Анализ строки завершен успешно", "INFO", "", "menuAnalyzeSelected", "Результаты записаны в колонки L-Y", "Agent", "SUCCESS", { sheetName: sheetName, row: row }, { categoryCode: data.category_code, productType: data.product_type, duration: result.duration });
+      }
       ss.toast('✅ Анализ завершен! Результаты записаны в строку ' + row, 'AI Agent', 5);
 
       // Show summary
-      const data = result.data;
       ui.alert(
         '✅ Анализ завершен',
         'Строка: ' + row + '\n' +
@@ -1166,10 +1189,16 @@ function menuAnalyzeSelected() {
         ui.ButtonSet.OK
       );
     } else {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при анализе строки", "ERROR", "", "menuAnalyzeSelected", "HTTP код: " + code, "Agent", "ERROR", { sheetName: sheetName, row: row }, { httpCode: code, error: text });
+      }
       ss.toast('❌ Ошибка анализа', 'AI Agent', 5);
       ui.alert('❌ Ошибка', 'Код: ' + code + '\n\n' + text, ui.ButtonSet.OK);
     }
   } catch (e) {
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Ошибка сети при анализе строки", "ERROR", "", "menuAnalyzeSelected", e && e.message ? e.message : String(e), "Agent", "ERROR", { sheetName: sheetName, row: row }, { error: e ? e.toString() : "Unknown error" });
+    }
     ss.toast('❌ Ошибка', 'AI Agent', 3);
     ui.alert('❌ Ошибка сети', e.message, ui.ButtonSet.OK);
   }
@@ -1317,29 +1346,39 @@ function menuSmartMatch() {
     return;
   }
 
+  if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+    Lib.logWithEmoji("Запуск Smart Match для поиска базового продукта", "INFO", "", "menuSmartMatch", "Поиск совпадения для: " + productName, "Agent", "START", { row: row, productName: productName }, null);
+  }
+
   try {
     ss.toast('⏳ Поиск базового продукта для: ' + productName.substring(0, 40) + '...', 'Smart Match', 30);
 
     const result = callServerSmartMatch(productName);
 
     if (!result) {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Smart Match вернул пусто", "ERROR", "", "menuSmartMatch", "Сервер не вернул результат", "Agent", "ERROR", { row: row, productName: productName }, { status: "no_result" });
+      }
       ui.alert('❌ Ошибка', 'Не удалось выполнить Smart Match. Проверьте логи.', ui.ButtonSet.OK);
       return;
     }
 
     if (result.match_found) {
       const matched = result.matched_product_details || {};
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Smart Match найден базовый продукт", "INFO", "", "menuSmartMatch", "Найдено совпадение с ID: " + result.matched_base_id, "Agent", "SUCCESS", { row: row, productName: productName }, { matchedBaseId: result.matched_base_id, confidence: result.confidence_score });
+      }
       let msg = '✅ Найден базовый продукт!\\n\\n';
       msg += '🎯 Matched ID: ' + result.matched_base_id + '\\n';
       msg += '📊 Confidence: ' + (result.confidence_score || 'N/A') + '\\n\\n';
-      
+
       if (matched.name_eng_ds) {
         msg += '🇬🇧 Англ: ' + matched.name_eng_ds + '\\n';
       }
       if (matched.name_rus_ds) {
         msg += '🇷🇺 Рус: ' + matched.name_rus_ds + '\\n';
       }
-      
+
       msg += '\\n📝 Причина: ' + (result.reasoning || 'N/A');
 
       const confirm = ui.alert(
@@ -1353,6 +1392,9 @@ function menuSmartMatch() {
         ss.toast('🚧 Автозаполнение пока не реализовано', 'Smart Match', 5);
       }
     } else {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Smart Match не найден базовый продукт", "WARN", "", "menuSmartMatch", "Совпадение не найдено", "Agent", "WARNING", { row: row, productName: productName }, { matchFound: false, reasoning: result.reasoning });
+      }
       ui.alert(
         'Smart Match - Результат',
         '❌ Совпадение не найдено\\n\\n' +
@@ -1362,6 +1404,9 @@ function menuSmartMatch() {
       );
     }
   } catch (e) {
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Ошибка при Smart Match", "ERROR", "", "menuSmartMatch", e && e.message ? e.message : String(e), "Agent", "ERROR", { row: row, productName: productName }, { error: e ? e.toString() : "Unknown error" });
+    }
     ss.toast('❌ Ошибка', 'Smart Match', 3);
     ui.alert('❌ Ошибка', e.message, ui.ButtonSet.OK);
   }
@@ -1390,6 +1435,10 @@ function menuAnalyzeEmpty() {
     return;
   }
 
+  if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+    Lib.logWithEmoji("Запуск пакетного анализа пустых строк", "INFO", "", "menuAnalyzeEmpty", "Анализ всех пустых строк в листе " + sheetName, "Agent", "START", { sheetName: sheetName }, null);
+  }
+
   try {
     ss.toast('⏳ Пакетный анализ запущен в фоне...', 'AI Agent', 10);
 
@@ -1411,6 +1460,9 @@ function menuAnalyzeEmpty() {
 
     if (code === 200) {
       const result = JSON.parse(response.getContentText());
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Пакетный анализ запущен в фоне", "INFO", "", "menuAnalyzeEmpty", "Анализ запущен на сервере", "Agent", "SUCCESS", { sheetName: sheetName }, { status: result.status, spreadsheetId: result.spreadsheet_id });
+      }
       ui.alert(
         '✅ Анализ запущен',
         'Пакетный анализ запущен в фоновом режиме.\n\n' +
@@ -1421,9 +1473,15 @@ function menuAnalyzeEmpty() {
         ui.ButtonSet.OK
       );
     } else {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при запуске пакетного анализа", "ERROR", "", "menuAnalyzeEmpty", "HTTP код: " + code, "Agent", "ERROR", { sheetName: sheetName }, { httpCode: code, error: response.getContentText() });
+      }
       ui.alert('❌ Ошибка', 'Код: ' + code + '\n' + response.getContentText(), ui.ButtonSet.OK);
     }
   } catch (e) {
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Ошибка сети при запуске пакетного анализа", "ERROR", "", "menuAnalyzeEmpty", e && e.message ? e.message : String(e), "Agent", "ERROR", { sheetName: sheetName }, { error: e ? e.toString() : "Unknown error" });
+    }
     ui.alert('❌ Ошибка сети', e.message, ui.ButtonSet.OK);
   }
 }
