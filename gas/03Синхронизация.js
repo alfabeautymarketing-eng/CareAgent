@@ -394,11 +394,36 @@ var Lib = Lib || {};
   Lib.onEdit_internal_ = function (e) {
     const lock = LockService.getScriptLock();
     if (!lock.tryLock(Lib.CONFIG.SETTINGS.LOCK_TIMEOUT_MS)) {
+      // WARNING: Lock acquisition failed
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Процесс редактирования уже выполняется",
+          "WARN",
+          "",
+          "onEdit_internal_",
+          "Другой процесс обработки событий все еще работает",
+          "Sync",
+          "WARNING"
+        );
+      }
       Lib.logWarn("onEdit: занято другим запуском, пропускаем.");
       return;
     }
     try {
       if (!e || !e.range) return;
+
+      // START: Log edit event entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка события редактирования",
+          "DEBUG",
+          "",
+          "onEdit_internal_",
+          "Началась обработка события изменения листа",
+          "Sync",
+          "START"
+        );
+      }
 
       const range = e.range;
       const sheet = range.getSheet();
@@ -445,6 +470,18 @@ var Lib = Lib || {};
       if (serviceSheetNames.includes(sheetName)) {
         if (sheetName === Lib.CONFIG.SHEETS.RULES) {
           _cachedSyncRules = null;
+          // PROGRESS: Rules cache cleared
+          if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+            Lib.logWithEmoji(
+              "Кэш правил очищен",
+              "DEBUG",
+              "",
+              "onEdit_internal_",
+              "Правила синхронизации были изменены, кэш сброшен",
+              "Sync",
+              "PROGRESS"
+            );
+          }
           Lib.logInfo("onEdit: правила изменились — кэш очищен.");
         }
         return;
@@ -452,6 +489,20 @@ var Lib = Lib || {};
 
       _processEditEvent(e);
     } catch (err) {
+      // ERROR: Log failure
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Критическая ошибка при обработке события редактирования",
+          "ERROR",
+          "",
+          "onEdit_internal_",
+          err && err.message ? err.message : String(err),
+          "Sync",
+          "ERROR",
+          null,
+          { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null }
+        );
+      }
       Lib.logError("onEdit_internal_: критическая ошибка", err);
     } finally {
       lock.releaseLock();

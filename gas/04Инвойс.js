@@ -240,8 +240,34 @@ var Lib = Lib || {};
     const ui = SpreadsheetApp.getUi();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
+    // START: Log function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Начало создания полного инвойса",
+        "INFO",
+        "",
+        "createFullInvoice",
+        "Запуск процесса создания объединённого инвойса из всех листов",
+        "Invoice",
+        "START"
+      );
+    }
+
     try {
       ss.toast('Этап 1/5: Подготовка…', 'Выполнение', 2);
+
+      // PROGRESS: Validation step
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Проверка исходных листов",
+          "DEBUG",
+          "",
+          "createFullInvoice",
+          "Валидация наличия листов: " + S.ORDER + ", " + S.CERTIFICATION + ", " + S.LABELS,
+          "Invoice",
+          "PROGRESS"
+        );
+      }
 
       const shOrder = ss.getSheetByName(S.ORDER);
       const shCert  = ss.getSheetByName(S.CERTIFICATION);
@@ -445,10 +471,40 @@ var Lib = Lib || {};
         if (maxCols > lastCol) shTarget.deleteColumns(lastCol + 1, maxCols - lastCol);
       }
 
+      // SUCCESS: Log completion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Инвойс успешно создан",
+          "INFO",
+          "",
+          "createFullInvoice",
+          `Лист "${TGT_NAME}" успешно сформирован с данными из трёх источников`,
+          "Invoice",
+          "SUCCESS",
+          null,
+          { sheetName: TGT_NAME, status: "created" }
+        );
+      }
+
       ss.toast('Готово', 'OK', 3);
       ui.alert('Успех!', `Лист "${TGT_NAME}" успешно сформирован.`, ui.ButtonSet.OK);
       Lib.logInfo(`[INVOICE] Лист "${TGT_NAME}" создан`);
     } catch (e) {
+      // ERROR: Log failure
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при создании инвойса",
+          "ERROR",
+          "",
+          "createFullInvoice",
+          e && e.message ? e.message : String(e),
+          "Invoice",
+          "ERROR",
+          null,
+          { error: e ? e.toString() : "Unknown error", stack: e && e.stack ? e.stack : null }
+        );
+      }
+
       ss.toast('Ошибка', 'Ошибка', 3);
       Lib.logError('createFullInvoice: критическая ошибка', e);
       SpreadsheetApp.getUi().alert('Произошла ошибка!', `Подробности: ${e.message}`, ui.ButtonSet.OK);
