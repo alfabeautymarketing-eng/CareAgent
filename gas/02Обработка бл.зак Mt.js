@@ -51,6 +51,19 @@ var Lib = Lib || {};
     }
 
     try {
+      // START: Function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка основного прайс-листа MT начата",
+          "INFO",
+          "",
+          "processMtMainPrice",
+          "Пользователь инициировал обработку основного прайс-листа для проекта MT",
+          "Price",
+          "START"
+        );
+      }
+
       Lib.logInfo("[MT] Обработка Б/З поставщик: старт");
       var source = _getSourceData_(config, "MAIN");
       if (!source.values || !source.values.length) {
@@ -219,9 +232,40 @@ var Lib = Lib || {};
         message += "\n\nПроверьте журнал для подробностей.";
       }
 
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка основного прайс-листа MT завершена успешно",
+          "INFO",
+          "",
+          "processMtMainPrice",
+          `Обработано товаров: ${processed.rows.length}, ${syncResult && syncResult.createdRows ? syncResult.createdRows.length + ' новых артикулов' : 'нет новых артикулов'}`,
+          "Price",
+          "SUCCESS",
+          null,
+          { rowsProcessed: processed.rows.length, newArticles: syncResult && syncResult.createdRows ? syncResult.createdRows.length : 0, barcodeMismatches: syncResult && syncResult.barcodeMismatches ? syncResult.barcodeMismatches.length : 0 }
+        );
+      }
+
       ui.alert(menuTitle, message, ui.ButtonSet.OK);
     } catch (error) {
       Lib.logError("processMtMainPrice: ошибка", error);
+
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при обработке основного прайс-листа MT",
+          "ERROR",
+          "",
+          "processMtMainPrice",
+          error && error.message ? error.message : String(error),
+          "Price",
+          "ERROR",
+          null,
+          { error: error ? error.toString() : "Unknown error", stack: error && error.stack ? error.stack : null }
+        );
+      }
+
       ui.alert(
         "Ошибка обработки прайс",
         error.message || String(error),
@@ -246,6 +290,19 @@ var Lib = Lib || {};
     }
 
     try {
+      // START: Function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка тестеров MT начата",
+          "INFO",
+          "",
+          "processMtTesterPrice",
+          "Пользователь инициировал обработку тестеров для проекта MT",
+          "Price",
+          "START"
+        );
+      }
+
       Lib.logInfo("[MT] Обработка Тестер: старт");
       var source = _getSourceData_(config, "TESTER");
       if (!source.values || source.values.length <= 2) {
@@ -376,9 +433,39 @@ var Lib = Lib || {};
         message2 += "\n\nПроверьте журнал для подробностей.";
       }
 
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка тестеров MT завершена успешно",
+          "INFO",
+          "",
+          "processMtTesterPrice",
+          `Обработано тестеров: ${processed.rows.length}, ${syncResult && syncResult.createdRows ? syncResult.createdRows.length + ' новых артикулов' : 'нет новых артикулов'}`,
+          "Price",
+          "SUCCESS",
+          null,
+          { rowsProcessed: processed.rows.length, newArticles: syncResult && syncResult.createdRows ? syncResult.createdRows.length : 0, barcodeMismatches: syncResult && syncResult.barcodeMismatches ? syncResult.barcodeMismatches.length : 0 }
+        );
+      }
+
       ui.alert(menuTitle, message2, ui.ButtonSet.OK);
     } catch (error) {
       Lib.logError("processMtTesterPrice: ошибка", error);
+
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при обработке тестеров MT",
+          "ERROR",
+          "",
+          "processMtTesterPrice",
+          error && error.message ? error.message : String(error),
+          "Price",
+          "ERROR",
+          null,
+          { error: error ? error.toString() : "Unknown error", stack: error && error.stack ? error.stack : null }
+        );
+      }
       ui.alert(
         "Ошибка обработки прайс",
         error.message || String(error),
@@ -403,6 +490,19 @@ var Lib = Lib || {};
     }
 
     try {
+      // START: Function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка пробников MT начата",
+          "INFO",
+          "",
+          "processMtSamplesPrice",
+          "Пользователь инициировал обработку пробников для проекта MT",
+          "Price",
+          "START"
+        );
+      }
+
       Lib.logInfo("[MT] Обработка Пробники: старт");
       var source = _getSourceData_(config, "SAMPLES");
       if (!source.values || source.values.length <= 2) {
@@ -539,9 +639,40 @@ var Lib = Lib || {};
         message3 += "\n\nПроверьте журнал для подробностей.";
       }
 
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка пробников MT завершена успешно",
+          "INFO",
+          "",
+          "processMtSamplesPrice",
+          `Обработано пробников: ${processed.rows.length}, ${syncResult && syncResult.createdRows ? syncResult.createdRows.length + ' новых артикулов' : 'нет новых артикулов'}`,
+          "Price",
+          "SUCCESS",
+          null,
+          { rowsProcessed: processed.rows.length, newArticles: syncResult && syncResult.createdRows ? syncResult.createdRows.length : 0, barcodeMismatches: syncResult && syncResult.barcodeMismatches ? syncResult.barcodeMismatches.length : 0 }
+        );
+      }
+
       ui.alert(menuTitle, message3, ui.ButtonSet.OK);
     } catch (error) {
       Lib.logError("processMtSamplesPrice: ошибка", error);
+
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при обработке пробников MT",
+          "ERROR",
+          "",
+          "processMtSamplesPrice",
+          error && error.message ? error.message : String(error),
+          "Price",
+          "ERROR",
+          null,
+          { error: error ? error.toString() : "Unknown error", stack: error && error.stack ? error.stack : null }
+        );
+      }
+
       ui.alert(
         "Ошибка обработки прайс",
         error.message || String(error),
@@ -565,10 +696,67 @@ var Lib = Lib || {};
       return;
     }
 
+    // START: Function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Загрузка остатков MT начата",
+        "INFO",
+        "",
+        "loadMtStockData",
+        "Пользователь инициировал загрузку остатков для проекта MT",
+        "Price",
+        "START"
+      );
+    }
+
     // Используем универсальную функцию загрузки остатков
     if (typeof Lib.loadStockData === 'function') {
-      Lib.loadStockData('MT');
+      try {
+        Lib.loadStockData('MT');
+
+        // SUCCESS: Stock data loaded successfully
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Загрузка остатков MT завершена успешно",
+            "INFO",
+            "",
+            "loadMtStockData",
+            "Остатки успешно загружены из источника в лист Заказ",
+            "Price",
+            "SUCCESS",
+            null,
+            { source: "MT", status: "loaded" }
+          );
+        }
+      } catch (err) {
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Ошибка при загрузке остатков MT",
+            "ERROR",
+            "",
+            "loadMtStockData",
+            err && err.message ? err.message : String(err),
+            "Price",
+            "ERROR",
+            null,
+            { error: err ? err.toString() : "Unknown error", source: "MT" }
+          );
+        }
+      }
     } else {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Функция загрузки остатков недоступна",
+          "WARNING",
+          "",
+          "loadMtStockData",
+          "Lib.loadStockData не найдена в библиотеке",
+          "Price",
+          "ERROR",
+          null,
+          { source: "MT", status: "library_not_found" }
+        );
+      }
       ui.alert(
         menuTitle,
         "Функция загрузки остатков недоступна. Обновите библиотеку.",
