@@ -679,32 +679,78 @@ function generateDsLayouts_353pp() {
 }
 
 function structureDocuments_353pp() {
+  if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+    Lib.logWithEmoji("Запуск структурирования документов 353пп", "INFO", "", "structureDocuments_353pp", "Начало обработки документов для 353пп", "Certificate", "START", {}, null);
+  }
   return _loggedCall_("structureDocuments_353pp", function() {
-    if (typeof callServerStructureDocuments353pp === 'function') {
-      return callServerStructureDocuments353pp();
+    try {
+      if (typeof callServerStructureDocuments353pp === 'function') {
+        const result = callServerStructureDocuments353pp();
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji("Структурирование документов 353пп завершено", "INFO", "", "structureDocuments_353pp", "Документы успешно обработаны", "Certificate", "SUCCESS", {}, { status: "completed" });
+        }
+        return result;
+      }
+      if (typeof Lib !== 'undefined' && Lib.structureDocuments_353pp) {
+        const result = Lib.structureDocuments_353pp();
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji("Структурирование документов 353пп завершено", "INFO", "", "structureDocuments_353pp", "Документы успешно обработаны", "Certificate", "SUCCESS", {}, { status: "completed" });
+        }
+        return result;
+      }
+      throw new Error('callServerStructureDocuments353pp не определена');
+    } catch(e) {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при структурировании документов 353пп", "ERROR", "", "structureDocuments_353pp", e && e.message ? e.message : String(e), "Certificate", "ERROR", {}, { error: e ? e.toString() : "Unknown error" });
+      }
+      throw e;
     }
-    if (typeof Lib !== 'undefined' && Lib.structureDocuments_353pp) {
-      return Lib.structureDocuments_353pp();
-    }
-    throw new Error('callServerStructureDocuments353pp не определена');
   });
 }
 
 function calculateAndAssignSpiritNumbers() {
+  if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+    Lib.logWithEmoji("Запуск расчета и присвоения номеров спиртов", "INFO", "", "calculateAndAssignSpiritNumbers", "Начало расчета номеров для спиртов", "Certificate", "START", {}, null);
+  }
   return _loggedCall_("calculateAndAssignSpiritNumbers", function() {
-    if (typeof Lib !== 'undefined' && Lib.calculateAndAssignSpiritNumbers) {
-      return Lib.calculateAndAssignSpiritNumbers();
+    try {
+      if (typeof Lib !== 'undefined' && Lib.calculateAndAssignSpiritNumbers) {
+        const result = Lib.calculateAndAssignSpiritNumbers();
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji("Расчет номеров спиртов завершен", "INFO", "", "calculateAndAssignSpiritNumbers", "Номера спиртов успешно рассчитаны и присвоены", "Certificate", "SUCCESS", {}, { status: "completed" });
+        }
+        return result;
+      }
+      throw new Error('Lib.calculateAndAssignSpiritNumbers не определена');
+    } catch(e) {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при расчете номеров спиртов", "ERROR", "", "calculateAndAssignSpiritNumbers", e && e.message ? e.message : String(e), "Certificate", "ERROR", {}, { error: e ? e.toString() : "Unknown error" });
+      }
+      throw e;
     }
-    throw new Error('Lib.calculateAndAssignSpiritNumbers не определена');
   });
 }
 
 function generateSpiritProtocols() {
+  if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+    Lib.logWithEmoji("Запуск генерации протоколов спиртов", "INFO", "", "generateSpiritProtocols", "Начало создания протоколов для спиртов", "Certificate", "START", {}, null);
+  }
   return _loggedCall_("generateSpiritProtocols", function() {
-    if (typeof Lib !== 'undefined' && Lib.generateSpiritProtocols) {
-      return Lib.generateSpiritProtocols();
+    try {
+      if (typeof Lib !== 'undefined' && Lib.generateSpiritProtocols) {
+        const result = Lib.generateSpiritProtocols();
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji("Генерация протоколов спиртов завершена", "INFO", "", "generateSpiritProtocols", "Протоколы спиртов успешно созданы", "Certificate", "SUCCESS", {}, { status: "completed" });
+        }
+        return result;
+      }
+      throw new Error('Lib.generateSpiritProtocols не определена');
+    } catch(e) {
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при генерации протоколов спиртов", "ERROR", "", "generateSpiritProtocols", e && e.message ? e.message : String(e), "Certificate", "ERROR", {}, { error: e ? e.toString() : "Unknown error" });
+      }
+      throw e;
     }
-    throw new Error('Lib.generateSpiritProtocols не определена');
   });
 }
 
