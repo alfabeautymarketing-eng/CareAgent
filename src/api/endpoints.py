@@ -7,7 +7,7 @@ from typing import Optional, List, Any, Dict
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.utils.logger import logger
 from src.utils.config import settings
@@ -44,19 +44,19 @@ meta_cache_service = MetaCacheService()
 certification_service = CertificationService(sheets_service)
 
 class RuleItem(BaseModel):
-    mode: str = "unidirectional"
-    enabled: bool = True
-    category: str = ""
-    source_sheet: Optional[str] = None
-    source_header: Optional[str] = None
-    target_sheet: Optional[str] = None
-    target_header: Optional[str] = None
-    sheet_a: Optional[str] = None
-    header_a: Optional[str] = None
-    sheet_b: Optional[str] = None
-    header_b: Optional[str] = None
-    is_external: bool = False
-    target_doc_id: Optional[str] = None
+    mode: str = Field("unidirectional", description="Режим синхронизации: в одну сторону или в обе")
+    enabled: bool = Field(True, description="Включено ли правило")
+    category: str = Field("", description="Категория данных")
+    source_sheet: Optional[str] = Field(None, description="Лист-источник")
+    source_header: Optional[str] = Field(None, description="Заголовок-источник")
+    target_sheet: Optional[str] = Field(None, description="Лист-назначение")
+    target_header: Optional[str] = Field(None, description="Заголовок-назначение")
+    sheet_a: Optional[str] = Field(None, description="Лист A")
+    header_a: Optional[str] = Field(None, description="Заголовок A")
+    sheet_b: Optional[str] = Field(None, description="Лист B")
+    header_b: Optional[str] = Field(None, description="Заголовок B")
+    is_external: bool = Field(False, description="Внешняя ли таблица")
+    target_doc_id: Optional[str] = Field(None, description="ID внешней таблицы")
 
 class RulesSaveRequest(BaseModel):
     rules: List[RuleItem]
@@ -159,12 +159,11 @@ class SyncBatchEventRequest(BaseModel):
 
 
 class PriceProcessRequest(BaseModel):
-    """Request to process price file."""
-
-    spreadsheet_id: str
-    mode: str = "main"  # main, tester, samples, probes
-    source_doc_id: Optional[str] = None
-    dry_run: bool = False
+    """Запрос на обработку файла с прайсами."""
+    spreadsheet_id: str = Field(..., description="ID таблицы, в которой нужно обновить цены")
+    mode: str = Field("main", description="Режим: main (основной), tester, samples, probes")
+    source_doc_id: Optional[str] = Field(None, description="ID исходного документа с прайсом")
+    dry_run: bool = Field(False, description="Тестовый запуск без изменения данных")
 
 
 class SortRequest(BaseModel):
@@ -177,13 +176,13 @@ class SortRequest(BaseModel):
 
 
 class AIAnalyzeRequest(BaseModel):
-    """Request for AI analysis."""
-    spreadsheet_id: str
-    sheet_name: str = "Информация"
-    row_number: Optional[int] = None
-    pdf_url: Optional[str] = None
-    purpose: Optional[str] = None
-    application: Optional[str] = None
+    """Запрос на анализ товара с помощью ИИ."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    sheet_name: str = Field("Информация", description="Имя листа с данными")
+    row_number: Optional[int] = Field(None, description="Номер строки для анализа")
+    pdf_url: Optional[str] = Field(None, description="Ссылка на PDF файл (если есть)")
+    purpose: Optional[str] = Field(None, description="Цель использования (для контекста ИИ)")
+    application: Optional[str] = Field(None, description="Область применения")
 
 
 class AIAnalyzeBatchRequest(BaseModel):
@@ -227,9 +226,9 @@ class TaskStatusResponse(BaseModel):
 
 # ============== Sync Endpoints ==============
 
-@api_router.post("/sync/row")
+@api_router.post("/sync/row", summary="Синхронизация одной строки по артикулу")
 async def sync_row(request: SyncRowRequest):
-    """Sync a single row by article."""
+    """Синхронизирует данные для одного товара во всех связанных листах."""
     logger.info(
         "sync_row_requested",
         project=request.project,
@@ -262,9 +261,9 @@ async def sync_row(request: SyncRowRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/sync/range")
+@api_router.post("/sync/range", summary="Синхронизация диапазона ячеек")
 async def sync_range(request: SyncRangeRequest):
-    """Sync a range of cells."""
+    """Синхронизирует выбранный диапазон (в разработке)."""
     # For now, just alias to logging as range sync is complex to parse without context
     logger.info(
         "sync_range_requested",
@@ -280,9 +279,9 @@ async def sync_range(request: SyncRangeRequest):
     }
 
 
-@api_router.post("/sync/full")
+@api_router.post("/sync/full", summary="Полная синхронизация листа")
 async def sync_full(project: str, source_sheet: str, spreadsheet_id: Optional[str] = None):
-    """Full sync of a sheet."""
+    """Запускает полное обновление всех данных на листе."""
     logger.info("full_sync_requested", project=project, sheet=source_sheet)
     
     if not spreadsheet_id:
@@ -460,9 +459,9 @@ async def sync_batch_event(request: SyncBatchEventRequest, background_tasks: Bac
 
 # ============== Rules Management ==============
 
-@api_router.get("/rules/{spreadsheet_id}")
+@api_router.get("/rules/{spreadsheet_id}", summary="Получить список правил синхронизации")
 async def get_rules(spreadsheet_id: str, force_reload: bool = False, include_disabled: bool = True):
-    """Return sync rules (server-side YAML storage)."""
+    """Возвращает все правила синхронизации, настроенные для данной таблицы."""
     try:
         rules = sync_service.list_rules(
             spreadsheet_id,
@@ -475,9 +474,9 @@ async def get_rules(spreadsheet_id: str, force_reload: bool = False, include_dis
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/rules/{spreadsheet_id}/reload")
+@api_router.post("/rules/{spreadsheet_id}/reload", summary="Перезагрузить правила из хранилища")
 async def reload_rules(spreadsheet_id: str, include_disabled: bool = True):
-    """Force reload rules from sheets/storage and refresh cache."""
+    """Принудительно обновляет кэш правил из файлов конфигурации."""
     try:
         rules = sync_service.list_rules(
             spreadsheet_id,
@@ -490,9 +489,9 @@ async def reload_rules(spreadsheet_id: str, include_disabled: bool = True):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/rules/{spreadsheet_id}/create")
+@api_router.post("/rules/{spreadsheet_id}/create", summary="Создать новое правило")
 async def create_rule_endpoint(spreadsheet_id: str, request: RuleCreateRequest):
-    """Create a new sync rule."""
+    """Добавляет новое правило синхронизации в базу данных."""
     try:
         rule = sync_service.create_rule(spreadsheet_id, request.model_dump())
         return {"status": "ok", "rule": rule}
@@ -503,9 +502,9 @@ async def create_rule_endpoint(spreadsheet_id: str, request: RuleCreateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.patch("/rules/{spreadsheet_id}/{rule_id}")
+@api_router.patch("/rules/{spreadsheet_id}/{rule_id}", summary="Обновить правило")
 async def update_rule_endpoint(spreadsheet_id: str, rule_id: str, request: RuleUpdateRequest):
-    """Update an existing sync rule."""
+    """Изменяет параметры существующего правила по его ID."""
     try:
         payload = request.model_dump(exclude_none=True)
         rule = sync_service.update_rule(spreadsheet_id, rule_id, payload)
@@ -517,9 +516,9 @@ async def update_rule_endpoint(spreadsheet_id: str, rule_id: str, request: RuleU
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.delete("/rules/{spreadsheet_id}/{rule_id}")
+@api_router.delete("/rules/{spreadsheet_id}/{rule_id}", summary="Удалить правило")
 async def delete_rule_endpoint(spreadsheet_id: str, rule_id: str):
-    """Delete a sync rule by ID."""
+    """Навсегда удаляет правило синхронизации по его ID."""
     try:
         sync_service.delete_rule(spreadsheet_id, rule_id)
         return {"status": "ok", "deleted": True}
@@ -530,9 +529,9 @@ async def delete_rule_endpoint(spreadsheet_id: str, rule_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.patch("/rules/{spreadsheet_id}/{rule_id}/toggle")
+@api_router.patch("/rules/{spreadsheet_id}/{rule_id}/toggle", summary="Включить/выключить правило")
 async def toggle_rule_endpoint(spreadsheet_id: str, rule_id: str, request: RuleToggleRequest):
-    """Toggle rule enabled/disabled."""
+    """Меняет флаг активности правила без его удаления."""
     try:
         rule = sync_service.toggle_rule(spreadsheet_id, rule_id, request.enabled)
         return {"status": "ok", "rule": rule}
@@ -543,9 +542,9 @@ async def toggle_rule_endpoint(spreadsheet_id: str, rule_id: str, request: RuleT
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.get("/rules-ui")
+@api_router.get("/rules-ui", summary="Открыть интерфейс управления правилами")
 async def get_rules_ui():
-    """Serve the Rule Manager UI."""
+    """Открывает встроенный веб-интерфейс (HTML) для наглядного управления правилами."""
     return FileResponse("config/rule_manager.html")
 
 
@@ -2606,11 +2605,13 @@ PROJECT_IDS = {
     
     # SS (San)
     "12yIL1CuESZxeUUd-oKK2brtN1FnXE9q95N7SqzNc7vk": "SS", # Main
+    "1Bq2Pq0P1SQZfJNBZC3yduYCJmnyc4L4vmbLtvsVUkcg": "SS", # Production
     "1sTgZa-n1aP7oIhyQfPeN8QDgDNnCubqMWAd-TKjKpJXWsQm_ZhXnojPD": "SS", # Source
     "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0": "SS", # User Source
 
     # SK (Carmado)
     "1CpYYLvRYslsyCkuLzL9EbbjsvbNpWCEZcmhKqMoX5zw": "SK", # Main
+    "1hSsS9_Iu_MgKWsoE19hAMouQInLGVFaBF6ZFG4Bsm1s": "SK", # Production
     "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK", # Source
     "1DJvK1vUT2OTubN0TLdZvsgYMSYByLHl8xTsus3K-KJ-VtJxgGnSw5Ih8": "SK", # Legacy?
 }

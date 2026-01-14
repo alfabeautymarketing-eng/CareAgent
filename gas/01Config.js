@@ -918,7 +918,9 @@
   const DOC_TO_PROJECT = {
   '13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ': 'MT',
     "12yIL1CuESZxeUUd-oKK2brtN1FnXE9q95N7SqzNc7vk": "SS",
+    "1Bq2Pq0P1SQZfJNBZC3yduYCJmnyc4L4vmbLtvsVUkcg": "SS",
     "1CpYYLvRYslsyCkuLzL9EbbjsvbNpWCEZcmhKqMoX5zw": "SK",
+    "1hSsS9_Iu_MgKWsoE19hAMouQInLGVFaBF6ZFG4Bsm1s": "SK",
     "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK",
     "1fMOjUE7oZV96fCY5j5rPxnhWGJkDqg-GfwPZ8jUVgPw": "MT",
     "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0": "MT",

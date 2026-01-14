@@ -35,6 +35,17 @@ function onOpen(e) {
  */
 function handleOnOpen(e) {
   console.log("🚀 Running Installable handleOnOpen...");
+  
+  // -1. Проверяем и устанавливаем URL сервера если пусто
+  try {
+    const scriptProps = PropertiesService.getScriptProperties();
+    if (!scriptProps.getProperty('SERVER_URL')) {
+      console.log("SERVER_URL property missing, initializing...");
+      initProductionServerUrl();
+    }
+  } catch (err) {
+    console.error("Ошибка при проверке SERVER_URL: " + err);
+  }
 
   // 0. Гарантируем, что лог-листы первыми в порядке вкладок
   try {
@@ -870,7 +881,7 @@ function serverProcessCascadeRow(row, column, value) {
  * @param {Object} params - Параметры запроса
  */
 function callServerCascade(params) {
-  const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+  const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://46.226.167.153:8000';
   const endpoint = params.row ? '/api/v1/cascade/process' : '/api/v1/cascade/recalculate-all';
 
   const options = {
@@ -969,7 +980,7 @@ function _callServerOrderFilter(stage) {
 
   ss.toast("Применяю фильтр '" + stage + "'...", menuTitle, 30);
 
-  const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+  const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://46.226.167.153:8000';
 
   const options = {
     method: 'post',
@@ -1067,7 +1078,7 @@ function _callServerExport(exportType) {
   const typeName = exportType === 'promotions' ? 'акций' : 'наборов';
   ss.toast('Выгрузка ' + typeName + '...', menuTitle, 30);
 
-  const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+  const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://46.226.167.153:8000';
   const endpoint = '/api/v1/export/' + exportType;
 
   const options = {
@@ -1135,7 +1146,7 @@ function serverFormatOrderSheet() {
 
     ss.toast('Форматирование листа "Ордер"...', 'Поставка', 30);
 
-    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://46.226.167.153:8000';
 
     const options = {
       method: 'post',
@@ -1194,7 +1205,7 @@ function serverCreateFullInvoice() {
 
     ss.toast('Создание листа "Для инвойса"...', 'Поставка', 60);
 
-    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://46.226.167.153:8000';
 
     const options = {
       method: 'post',
@@ -1262,7 +1273,7 @@ function serverCreateNewsSheet() {
 
     ss.toast('Создание листа "New sert"...', 'Сертификация', 30);
 
-    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://46.226.167.153:8000';
 
     const options = {
       method: 'post',
@@ -1325,7 +1336,7 @@ function serverCalculateSpiritNumbers() {
 
     ss.toast('Расчёт номеров спиртов...', 'Сертификация', 30);
 
-    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://46.226.167.153:8000';
 
     const options = {
       method: 'post',
@@ -1385,7 +1396,7 @@ function serverGenerateProtocols353pp() {
 
     ss.toast('Генерация протоколов 353пп...', 'Сертификация', 60);
 
-    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://46.226.167.153:8000';
 
     const options = {
       method: 'post',
@@ -1445,7 +1456,7 @@ function serverGenerateDsLayouts() {
 
     ss.toast('Генерация макетов ДС...', 'Сертификация', 60);
 
-    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://localhost:8000';
+    const BASE_URL = PropertiesService.getScriptProperties().getProperty('SERVER_URL') || 'http://46.226.167.153:8000';
 
     const options = {
       method: 'post',
@@ -1991,4 +2002,26 @@ function serverGetLogStatus(projectCode) {
     ui.alert('Ошибка', err.message, ui.ButtonSet.OK);
     return { status: 'error', message: err.message };
   }
+}
+
+// =======================================================================================
+// УПРАВЛЕНИЕ НАСТРОЙКАМИ СЕРВЕРА
+// =======================================================================================
+
+/**
+ * Инициализирует URL сервера в свойствах скрипта.
+ * Можно вызвать вручную из редактора или через меню, если сервер не отвечает.
+ */
+function initProductionServerUrl() {
+  const prodUrl = 'http://46.226.167.153:8000';
+  PropertiesService.getScriptProperties().setProperty('SERVER_URL', prodUrl);
+  console.log('SERVER_URL set to: ' + prodUrl);
+  if (typeof SpreadsheetApp !== 'undefined') {
+    SpreadsheetApp.getActiveSpreadsheet().toast('URL сервера установлен: ' + prodUrl, '⚙️ Настройки');
+  }
+}
+
+// Вызываем при установке или обновлении, если нужно гарантировать наличие URL
+function forceInitServerUrl() {
+  initProductionServerUrl();
 }

@@ -64,6 +64,34 @@ async def add_security_headers(request, call_next):
 # Routes
 app.include_router(router)
 
+from fastapi.responses import RedirectResponse, HTMLResponse
+
+@app.get("/")
+async def root():
+    """Redirect to Rules UI or show landing page."""
+    return HTMLResponse(content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>AgentCare Server</title>
+            <style>
+                body {{ font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #0f172a; color: white; }}
+                .card {{ background: #1e293b; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 15px rgba(0,0,0,0.5); text-align: center; }}
+                a {{ color: #0d9488; text-decoration: none; font-weight: bold; font-size: 1.2rem; }}
+                a:hover {{ text-decoration: underline; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>🚀 AgentCare Server</h1>
+                <p>Status: <span style="color: #10b981;">Running</span></p>
+                <br>
+                <a href="/api/v1/rules-ui">打开 Rules Manager →</a>
+            </div>
+        </body>
+        </html>
+    """)
+
 
 @app.get("/health")
 async def health_check():
