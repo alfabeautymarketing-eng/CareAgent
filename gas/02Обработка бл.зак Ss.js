@@ -29,6 +29,11 @@ var Lib = Lib || {};
     }
 
     try {
+      // START: Function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Обработка основного прайс-листа SS начата", "INFO", "", "processSsPriceSheet", "Пользователь инициировал обработку основного прайс-листа для проекта SS", "Price", "START");
+      }
+
       Lib.logInfo("[SS] Обработка основной: старт");
       var source = _getSourceData_(config, "MAIN");
       if (!source.values || !source.values.length) {
@@ -208,9 +213,20 @@ var Lib = Lib || {};
         message += "\n\nПроверьте журнал для подробностей.";
       }
 
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Обработка основного прайс-листа SS завершена успешно", "INFO", "", "processSsPriceSheet", `Обработано товаров: ${processed.rows.length}`, "Price", "SUCCESS", null, { rowsProcessed: processed.rows.length, newArticles: syncResult && syncResult.createdRows ? syncResult.createdRows.length : 0 });
+      }
+
       ui.alert(menuTitle, message, ui.ButtonSet.OK);
     } catch (error) {
       Lib.logError("processSsPriceSheet: ошибка", error);
+
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при обработке основного прайс-листа SS", "ERROR", "", "processSsPriceSheet", error && error.message ? error.message : String(error), "Price", "ERROR", null, { error: error ? error.toString() : "Unknown error" });
+      }
+
       ui.alert(
         "Ошибка обработки прайс",
         error.message || String(error),
@@ -233,9 +249,24 @@ var Lib = Lib || {};
       return;
     }
 
+    // START: Function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Загрузка остатков SS начата", "INFO", "", "loadSsStockData", "Пользователь инициировал загрузку остатков для проекта SS", "Price", "START");
+    }
+
     // Используем универсальную функцию загрузки остатков
     if (typeof Lib.loadStockData === 'function') {
-      Lib.loadStockData('SS');
+      try {
+        Lib.loadStockData('SS');
+        // SUCCESS: Stock data loaded successfully
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji("Загрузка остатков SS завершена успешно", "INFO", "", "loadSsStockData", "Остатки успешно загружены из источника в лист Заказ", "Price", "SUCCESS", null, { source: "SS", status: "loaded" });
+        }
+      } catch (err) {
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji("Ошибка при загрузке остатков SS", "ERROR", "", "loadSsStockData", err && err.message ? err.message : String(err), "Price", "ERROR", null, { error: err ? err.toString() : "Unknown error", source: "SS" });
+        }
+      }
       return;
     }
 
