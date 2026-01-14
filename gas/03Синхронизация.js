@@ -553,7 +553,12 @@ var Lib = Lib || {};
    */
   Lib.handleOnChange = function (e) {
     try {
+      // START: Function entry
       const changeType = e && e.changeType ? String(e.changeType) : "UNKNOWN";
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Обработка события изменения листа", "INFO", "", "handleOnChange", `Тип изменения: ${changeType}`, "Sync", "START", { changeType: changeType }, null);
+      }
+
 Lib.logDebug(`[onChange] ${changeType}`);
 
 if (!Lib.CONFIG || !Lib.CONFIG.SHEETS) {
@@ -591,7 +596,17 @@ if (ss) {
           );
         }
       });
+
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Обработка события изменения листа завершена успешно", "INFO", "", "handleOnChange", `Обновлены листы: ${touchedSheets.join(', ')}`, "Sync", "SUCCESS", { changeType: changeType }, { sheetsUpdated: touchedSheets.length, sheets: touchedSheets });
+      }
     } catch (err) {
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при обработке события изменения листа", "ERROR", "", "handleOnChange", err && err.message ? err.message : String(err), "Sync", "ERROR", { changeType: changeType }, { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null });
+      }
+
       Lib.logError("handleOnChange: критическая ошибка", err);
     }
   };
@@ -2063,6 +2078,11 @@ if (ss) {
     }
 
     try {
+      // START: Function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Синхронизация нескольких строк начата", "INFO", "", "syncMultipleRows", `Синхронизация ${rowNumbers.length} строк`, "Sync", "START", { rowCount: rowNumbers.length, sheetName: sheetName }, null);
+      }
+
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const targetSheetName = sheetName || (global.CONFIG && global.CONFIG.SHEETS && global.CONFIG.SHEETS.PRIMARY) || "Главная";
       const sheet = ss.getSheetByName(targetSheetName);
@@ -2144,7 +2164,17 @@ if (ss) {
       if (typeof Lib.updateOrderFormBorders === 'function') {
         Lib.updateOrderFormBorders();
       }
+
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Синхронизация нескольких строк завершена успешно", "INFO", "", "syncMultipleRows", `Синхронизировано ${rowNumbers.length} строк, обработано ${counter} полей`, "Sync", "SUCCESS", { rowCount: rowNumbers.length, sheetName: targetSheetName }, { rowsSynced: rowNumbers.length, fieldsProcessed: counter });
+      }
     } catch (err) {
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при синхронизации нескольких строк", "ERROR", "", "syncMultipleRows", err && err.message ? err.message : String(err), "Sync", "ERROR", { rowCount: rowNumbers.length, sheetName: sheetName }, { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null });
+      }
+
       Lib.logError("syncMultipleRows: ошибка", err);
     }
   };
