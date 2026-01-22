@@ -59,3 +59,53 @@ gas-push:
 
 deploy:
 	./scripts/deploy_all.sh
+
+# === Локальная разработка ===
+
+# Запуск локального сервера (venv)
+local:
+	.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Тестирование API endpoints
+test-api:
+	.venv/bin/python scripts/test_menu_endpoints.py
+
+# Проверка health локального сервера
+health-local:
+	@curl -s http://localhost:8000/health | python3 -m json.tool
+
+# Проверка health VPS сервера
+health-vps:
+	@curl -s http://46.226.167.153:8000/health | python3 -m json.tool
+
+# Перезагрузка основного сервера на VPS
+restart-vps:
+	@echo "🔄 Restarting AgentCare server on VPS..."
+	ssh root@46.226.167.153 "cd ~/AgentCare && docker-compose restart app"
+	@echo "✅ Server restarted."
+
+# Полный цикл: тест + деплой (если тесты прошли)
+test-deploy:
+	@echo "🔍 Running local tests..."
+	.venv/bin/python scripts/test_menu_endpoints.py && \
+	echo "" && \
+	echo "✅ Tests passed! Deploying to VPS..." && \
+	./scripts/deploy_all.sh
+
+# === Локальная разработка (АВТОМАТИЗАЦИЯ) ===
+
+# ЕДИНАЯ КОМАНДА: Запуск сервера + туннель + авто-настройка Таблиц
+dev:
+	bash ./scripts/dev_full.sh
+
+# Запуск локального сервера (venv) отдельными частями
+local:
+	.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Запуск локального сервера + туннеля (требует двух терминалов обычно, 
+# но мы подготовили команды в workflow)
+dev-full:
+	@echo "1. В одном терминале: make local"
+	@echo "2. В другом терминале: make tunnel"
+
+

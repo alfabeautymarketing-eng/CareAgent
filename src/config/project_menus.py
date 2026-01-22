@@ -81,6 +81,17 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
                     {"label": "📊 Показать логи", "function_name": "serverShowLogs"},
                 ],
             },
+            # ============== ЦИКЛ 6: РАЗРАБОТКА ==============
+            {
+                "title": "🛠️ Инструменты разработчика",
+                "items": [
+                    {"label": "🔗 Установить URL туннеля (ngrok)", "function_name": "serverSetLocalTunnel"},
+                    {"label": "🚀 Вернуть на Production (VPS)", "function_name": "serverResetToProduction"},
+                    {"separator": True},
+                    {"label": "ℹ️ Показать текущий SERVER_URL", "function_name": "serverShowCurrentUrl"},
+                    {"label": "🔄 Принудительно обновить меню", "function_name": "refreshMenu"},
+                ],
+            },
         ],
     },
     # ========================================================================

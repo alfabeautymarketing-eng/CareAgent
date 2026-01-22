@@ -148,7 +148,12 @@ function buildFallbackMenu(ui) {
       .addItem('🔄 Обновить данные', 'callServerLoadFunctions')
       .addItem('📑 Упорядочить листы', 'reorderSheets')
       .addSeparator()
-      .addItem('🐛 Debug: Show Spreadsheet ID', 'debugShowSpreadsheetId')
+      .addSubMenu(ui.createMenu('🛠️ Инструменты разработчика')
+          .addItem('🔗 Установить URL туннеля (ngrok)', 'serverSetLocalTunnel')
+          .addItem('🚀 Вернуть на Production (VPS)', 'serverResetToProduction')
+          .addSeparator()
+          .addItem('ℹ️ Показать текущий SERVER_URL', 'serverShowCurrentUrl')
+          .addItem('🆔 Показать ID таблицы', 'debugShowSpreadsheetId'))
       .addToUi();
 
   console.log('Fallback menu created (server unavailable)');
