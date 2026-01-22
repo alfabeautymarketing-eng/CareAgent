@@ -628,6 +628,91 @@ async def get_menu_config(project: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.get("/menu/config", summary="Получить меню по spreadsheet_id (для GAS)", response_model=MenuConfigResponse)
+async def get_menu_config_by_spreadsheet(spreadsheet_id: str):
+    """
+    Get menu configuration by spreadsheet ID (for Google Apps Script).
+
+    Resolves project from spreadsheet_id using PROJECT_IDS mapping,
+    then returns the corresponding menu configuration.
+
+    Query parameters:
+        spreadsheet_id: Google Sheets ID
+
+    Returns complete menu structure for the project.
+    """
+    try:
+        # Determine project from spreadsheet_id
+        project = PROJECT_IDS.get(spreadsheet_id)
+        if not project:
+            logger.warning("Unknown spreadsheet_id", spreadsheet_id=spreadsheet_id)
+            raise ValueError(f"Unknown spreadsheet_id: {spreadsheet_id}")
+
+        # Get project config
+        config = get_project_menu(project)
+
+        # Build menu items from primary_menu
+        primary_items = []
+        primary_cfg = config.get("primary_menu", {})
+        for key in PRIMARY_DATA_MENU_ORDER:
+            label = primary_cfg.get("items", {}).get(key)
+            if not label:
+                continue
+            action_def = PRIMARY_DATA_MENU_ACTIONS.get(key)
+            fn = _resolve_action_fn(action_def, project)
+            if fn:
+                primary_items.append(MenuItemModel(label=label, function_name=fn))
+
+        # Build menu items from order_stages_menu
+        order_stages_items = []
+        stages_cfg = config.get("order_stages_menu", {})
+        for key in ORDER_STAGES_MENU_ORDER:
+            label = stages_cfg.get("items", {}).get(key)
+            if not label:
+                continue
+            action_def = PRIMARY_DATA_MENU_ACTIONS.get(key)
+            fn = _resolve_action_fn(action_def, project)
+            if fn:
+                order_stages_items.append(MenuItemModel(label=label, function_name=fn))
+
+        # Build static menu groups
+        menu_groups = []
+        for group_cfg in config.get("menu_groups", []):
+            group_items = []
+            for item_cfg in group_cfg.get("items", []):
+                if item_cfg.get("separator"):
+                    continue
+                group_items.append(MenuItemModel(
+                    label=item_cfg.get("label", ""),
+                    function_name=item_cfg.get("function_name", "")
+                ))
+            if group_items:
+                menu_groups.append(MenuGroupModel(
+                    title=group_cfg.get("title", ""),
+                    items=group_items
+                ))
+
+        return MenuConfigResponse(
+            menu_title=config.get("menu_title", project),
+            order_sheet=config.get("order_sheet", "Заказ"),
+            sort_columns=config.get("sort_columns", {}),
+            primary_menu=MenuGroupModel(
+                title=primary_cfg.get("title", "🧾 Заказ"),
+                items=primary_items
+            ),
+            order_stages_menu=MenuGroupModel(
+                title=stages_cfg.get("title", "📊 Стадии по заказ"),
+                items=order_stages_items
+            ),
+            menu_groups=menu_groups
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Failed to get menu config by spreadsheet", spreadsheet_id=spreadsheet_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============== Rules Management ==============
 
 @api_router.get("/rules/{spreadsheet_id}", summary="Получить список правил синхронизации")
