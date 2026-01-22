@@ -736,69 +736,7 @@ function reorderSheetsSilent() {
  * Call server to recreate or clean log sheet.
  * @param {boolean} forceClean - If true, clears the sheet.
  */
-function callServerLogCommand(forceClean) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const endpoint = forceClean ? '/api/v1/logs/clean' : '/api/v1/logs/recreate';
-
-  const payload = {
-    spreadsheet_id: ss.getId()
-  };
-
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-
-  try {
-    const response = UrlFetchApp.fetch(SERVER_URL + endpoint, options);
-    const code = response.getResponseCode();
-    const text = response.getContentText();
-
-    if (code === 200) {
-      const result = JSON.parse(text);
-      ss.toast('✅ ' + result.message);
-      return true;
-    } else {
-      SpreadsheetApp.getUi().alert('❌ Ошибка сервера (' + code + '):\n' + text);
-      return false;
-    }
-  } catch (e) {
-    SpreadsheetApp.getUi().alert('❌ Ошибка сети:\n' + e.message);
-    return false;
-  }
-}
-
-/**
- * Call server to recreate Debug Log sheet.
- */
-function callServerRecreateDebugLog() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({ spreadsheet_id: ss.getId() }),
-    muteHttpExceptions: true
-  };
-
-  try {
-    const response = UrlFetchApp.fetch(SERVER_URL + '/api/v1/logs/recreate-debug', options);
-    const code = response.getResponseCode();
-    const text = response.getContentText();
-
-    if (code === 200) {
-      ss.toast('✅ Журнал логов пересоздан');
-      return true;
-    } else {
-      SpreadsheetApp.getUi().alert('❌ Ошибка сервера (' + code + '):\n' + text);
-      return false;
-    }
-  } catch (e) {
-    SpreadsheetApp.getUi().alert('❌ Ошибка сети:\n' + e.message);
-    return false;
-  }
-}
+// ОТКЛЮЧЕНО: Лист логов в таблице больше не используется.
 
 /**
  * Call server to collect documents.
@@ -1743,6 +1681,59 @@ function callServerProcessPrice(project, mode, options) {
     ss.toast('❌ Ошибка: ' + errorMsg, project.toUpperCase(), 10);
     console.error('[' + project.toUpperCase() + '] callServerProcessPrice failed:', e);
     return { status: 'error', message: errorMsg };
+  }
+}
+
+/**
+ * Загрузить остатки через сервер
+ * @param {string} sourceDocId - Опциональный ID документа-источника
+ * @returns {Object} Результат обработки
+ */
+function callServerLoadStocks(sourceDocId) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheetId = ss.getId();
+
+  const payload = {
+    spreadsheet_id: spreadsheetId,
+    source_doc_id: sourceDocId || null
+  };
+
+  const fetchOptions = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  try {
+    ss.toast('⏳ Загрузка остатков через сервер...', 'Пожалуйста, подождите', 300);
+
+    const response = UrlFetchApp.fetch(
+      SERVER_URL + '/api/v1/stocks/load',
+      fetchOptions
+    );
+    const code = response.getResponseCode();
+    const text = response.getContentText();
+
+    if (code === 200) {
+      const result = JSON.parse(text);
+      ss.toast('✅ Остатки загружены: ' + result.updated_rows + ' строк', 'Готово', 5);
+      
+      // Вызываем пересчет на стороне GAS (если нужно)
+      if (typeof Lib.recalculateOrderSheet === 'function') {
+        Lib.recalculateOrderSheet();
+      }
+      
+      return result;
+    }
+
+    const errorMsg = 'Ошибка при загрузке остатков: ' + (text.substring(0, 500) || 'Неизвестная ошибка');
+    ss.toast('❌ ' + errorMsg, 'Ошибка', 10);
+    return { status: 'error', message: text };
+  } catch (e) {
+    console.error('[callServerLoadStocks] Error:', e);
+    ss.toast('❌ ' + e.toString(), 'Критическая ошибка', 10);
+    return { status: 'error', message: e.toString() };
   }
 }
 

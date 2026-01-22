@@ -8,7 +8,7 @@ project:
 
 # Google Sheets
 spreadsheet:
-  id: "YOUR_SK_SPREADSHEET_ID_HERE"
+  id: "1hSsS9_Iu_MgKWsoE19hAMouQInLGVFaBF6ZFG4Bsm1s"
 
 # ============================================================
 # Реестр листов (SHEETS)
@@ -67,8 +67,8 @@ columns:
     - "BAR CODE"
     - "ID-G"
     - "ID-L"
-    - "RRP"           # Специфично для SK
-    - "Скидка %"      # Специфично для SK
+    - "RRP" # Специфично для SK
+    - "Скидка %" # Специфично для SK
 
 # (остальные колонки аналогичны MT, см. mt.yaml)
 
@@ -120,14 +120,14 @@ parser:
     # ВАЖНО: Парсинг по цвету фона ячейки
     group_detection:
       method: "background_color"
-      group_color: "#ffff00"        # config.GROUP_HEADER_COLOR
+      group_color: "#ffff00" # config.GROUP_HEADER_COLOR
     # Комбинирование полей
     transformations:
-      combined_group: "{line} - {group}"  # "Линия - Группа"
+      combined_group: "{line} - {group}" # "Линия - Группа"
     # Дополнительные шаги
     post_processing:
-      - fill_discount_for_price_dynamics  # Заполняет 20% скидку
-      - clear_idl_column                   # Очистка ID-L (только SK)
+      - fill_discount_for_price_dynamics # Заполняет 20% скидку
+      - clear_idl_column # Очистка ID-L (только SK)
 
   # Режим 2: Пробники
   probes:
@@ -198,10 +198,10 @@ features:
   tz_by_status: false
   order_verification: false
   # SK-специфичные
-  color_based_parsing: true     # Парсинг по цвету
-  combined_line_group: true     # "Линия - Группа"
-  discount_on_dynamics: true    # 20% скидка на Динамика цены
-  clear_idl_separately: true    # Отдельная очистка ID-L
+  color_based_parsing: true # Парсинг по цвету
+  combined_line_group: true # "Линия - Группа"
+  discount_on_dynamics: true # 20% скидка на Динамика цены
+  clear_idl_separately: true # Отдельная очистка ID-L
 
 # ============================================================
 # Discount rules (SK specific)
@@ -209,7 +209,7 @@ features:
 discounts:
   enabled: true
   # Фиксированная скидка на Динамика цены
-  price_dynamics_discount: 20   # 20%
+  price_dynamics_discount: 20 # 20%
   # Категорийные скидки (опционально)
   categories:
     - name: "Уход"

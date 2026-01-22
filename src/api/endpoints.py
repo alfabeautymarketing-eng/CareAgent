@@ -11,6 +11,19 @@ from pydantic import BaseModel, Field
 
 from src.utils.logger import logger
 from src.utils.config import settings
+from src.config.project_menus import (
+    PROJECT_MENUS,
+    PRIMARY_DATA_MENU_ACTIONS,
+    PRIMARY_DATA_MENU_ORDER,
+    ORDER_STAGES_MENU_ORDER,
+    BASE_MENU_GROUPS,
+    MENU_CONFIGS,
+    get_project_menu,
+    get_primary_menu,
+    get_order_stages_menu,
+    get_menu_title,
+    get_menu_action,
+)
 
 api_router = APIRouter()
 
@@ -26,6 +39,7 @@ from src.services.sync_log_service import SyncLogService
 from src.services.function_log_service import FunctionLogService
 from src.services.certification import CertificationService
 from src.services.meta_cache import MetaCacheService
+from src.services.stock_processor import StockProcessor
 
 sheets_service = SheetsService()
 function_log_service = FunctionLogService()
@@ -42,6 +56,7 @@ price_processor = get_price_processor(sheets_service, sync_service, logging_serv
 external_docs_service = ExternalDocsService()
 meta_cache_service = MetaCacheService()
 certification_service = CertificationService(sheets_service)
+stock_processor = StockProcessor(sheets_service, logging_service)
 
 class RuleItem(BaseModel):
     mode: str = Field("unidirectional", description="Режим синхронизации: в одну сторону или в обе")
@@ -227,6 +242,20 @@ class AIAnalyzeRequest(BaseModel):
 
     class Config:
         title = "Запрос на ИИ анализ"
+
+
+class StockLoadRequest(BaseModel):
+    """Запрос на загрузку остатков."""
+    spreadsheet_id: str = Field(..., description="ID таблицы")
+    source_doc_id: Optional[str] = Field(None, description="ID исходного документа с остатками")
+
+
+class StockLoadResponse(BaseModel):
+    """Ответ после загрузки остатков."""
+    status: str = Field(..., description="Статус выполнения")
+    message: str = Field(..., description="Сообщение")
+    updated_rows: int = Field(0, description="Количество обновленных строк")
+    source_doc: str = Field("", description="ID использованного документа-источника")
 
 
 class AIAnalyzeBatchRequest(BaseModel):
@@ -509,6 +538,95 @@ async def sync_batch_event(request: SyncBatchEventRequest, background_tasks: Bac
 
 # ... (SortRequest model remains)
 # ... (SortRequest model remains)
+
+# ============== Menu Management ==============
+
+class MenuConfigResponse(BaseModel):
+    """Complete menu configuration for a project."""
+    menu_title: str = Field(..., description="Project menu title")
+    order_sheet: str = Field(..., description="Order sheet name")
+    sort_columns: Dict[str, str] = Field(..., description="Sortable columns mapping")
+    primary_menu: MenuGroupModel = Field(..., description="Primary menu (🧾 Заказ)")
+    order_stages_menu: MenuGroupModel = Field(..., description="Order stages menu (📊 Стадии)")
+    menu_groups: List[MenuGroupModel] = Field(..., description="Static menu groups")
+
+    class Config:
+        title = "Menu Configuration"
+
+
+@api_router.get("/menu/{project}", summary="Получить конфигурацию меню для проекта", response_model=MenuConfigResponse)
+async def get_menu_config(project: str):
+    """
+    Get complete menu configuration for a project.
+
+    Returns unified menu structure combining static groups and project-specific items.
+    Projects: MT, SK, SS
+    """
+    try:
+        # Get project config
+        config = get_project_menu(project)
+
+        # Build menu items from primary_menu
+        primary_items = []
+        primary_cfg = config.get("primary_menu", {})
+        for key in PRIMARY_DATA_MENU_ORDER:
+            label = primary_cfg.get("items", {}).get(key)
+            if not label:
+                continue
+            action_def = PRIMARY_DATA_MENU_ACTIONS.get(key)
+            fn = _resolve_action_fn(action_def, project)
+            if fn:
+                primary_items.append(MenuItemModel(label=label, function_name=fn))
+
+        # Build menu items from order_stages_menu
+        order_stages_items = []
+        stages_cfg = config.get("order_stages_menu", {})
+        for key in ORDER_STAGES_MENU_ORDER:
+            label = stages_cfg.get("items", {}).get(key)
+            if not label:
+                continue
+            action_def = PRIMARY_DATA_MENU_ACTIONS.get(key)
+            fn = _resolve_action_fn(action_def, project)
+            if fn:
+                order_stages_items.append(MenuItemModel(label=label, function_name=fn))
+
+        # Build static menu groups
+        menu_groups = []
+        for group_cfg in config.get("menu_groups", []):
+            group_items = []
+            for item_cfg in group_cfg.get("items", []):
+                if item_cfg.get("separator"):
+                    continue
+                group_items.append(MenuItemModel(
+                    label=item_cfg.get("label", ""),
+                    function_name=item_cfg.get("function_name", "")
+                ))
+            if group_items:
+                menu_groups.append(MenuGroupModel(
+                    title=group_cfg.get("title", ""),
+                    items=group_items
+                ))
+
+        return MenuConfigResponse(
+            menu_title=config.get("menu_title", project),
+            order_sheet=config.get("order_sheet", "Заказ"),
+            sort_columns=config.get("sort_columns", {}),
+            primary_menu=MenuGroupModel(
+                title=primary_cfg.get("title", "🧾 Заказ"),
+                items=primary_items
+            ),
+            order_stages_menu=MenuGroupModel(
+                title=stages_cfg.get("title", "📊 Стадии по заказ"),
+                items=order_stages_items
+            ),
+            menu_groups=menu_groups
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Failed to get menu config", project=project, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ============== Rules Management ==============
 
@@ -1298,6 +1416,29 @@ class CascadeProcessResponse(BaseModel):
     row: int = Field(0, description="Номер обработанной строки")
     changes: List[Dict[str, Any]] = Field([], description="Список внесенных изменений")
     applied: bool = Field(False, description="Применены ли изменения")
+
+
+# ============== Stock Loading ==============
+
+@api_router.post("/stocks/load", response_model=StockLoadResponse, summary="Загрузить остатки")
+async def load_stocks(request: StockLoadRequest):
+    """
+    Загружает данные об остатках из листа '-остатки' в лист 'Заказ'.
+    """
+    logger.info("stock_load_requested", spreadsheet_id=request.spreadsheet_id)
+    # Определяем проект
+    project_code = PROJECT_IDS.get(request.spreadsheet_id, "MT").lower()
+    
+    try:
+        result = await stock_processor.process(
+            spreadsheet_id=request.spreadsheet_id,
+            project=project_code,
+            source_doc_id=request.source_doc_id
+        )
+        return StockLoadResponse(**result)
+    except Exception as e:
+        logger.error("stock_load_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
     message: str = Field("", description="Сообщение")
 
     class Config:
@@ -2648,21 +2789,21 @@ class MenuConfigResponse(BaseModel):
 PROJECT_IDS = {
     # MT (Montibello)
     "13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ": "MT", # Main
-    "1fMOjUE7oZV96fCY5j5rPxnhWGJkDqg-GfwPZ8jUVgPw": "MT", # Alt Main
     "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0": "MT", # Source
-    "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g": "MT", # Legacy?
+    "1fMOjUE7oZV96fCY5j5rPxnhWGJkDqg-GfwPZ8jUVgPw": "MT", # Alt Main
+    "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g": "MT", # Legacy
     
     # SS (San)
-    "12yIL1CuESZxeUUd-oKK2brtN1FnXE9q95N7SqzNc7vk": "SS", # Main
-    "1Bq2Pq0P1SQZfJNBZC3yduYCJmnyc4L4vmbLtvsVUkcg": "SS", # Production
-    "1sTgZa-n1aP7oIhyQfPeN8QDgDNnCubqMWAd-TKjKpJXWsQm_ZhXnojPD": "SS", # Source
-    "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0": "SS", # User Source
-
+    "1Bq2Pq0P1SQZfJNBZC3yduYCJmnyc4L4vmbLtvsVUkcg": "SS", # Main
+    "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0": "SS", # Source
+    "12yIL1CuESZxeUUd-oKK2brtN1FnXE9q95N7SqzNc7vk": "SS", # Alt Main
+    "1sTgZa-n1aP7oIhyQfPeN8QDgDNnCubqMWAd-TKjKpJXWsQm_ZhXnojPD": "SS", # Scripts ID
+    
     # SK (Carmado)
-    "1CpYYLvRYslsyCkuLzL9EbbjsvbNpWCEZcmhKqMoX5zw": "SK", # Main
-    "1hSsS9_Iu_MgKWsoE19hAMouQInLGVFaBF6ZFG4Bsm1s": "SK", # Production
+    "1hSsS9_Iu_MgKWsoE19hAMouQInLGVFaBF6ZFG4Bsm1s": "SK", # Main
     "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK", # Source
-    "1DJvK1vUT2OTubN0TLdZvsgYMSYByLHl8xTsus3K-KJ-VtJxgGnSw5Ih8": "SK", # Legacy?
+    "1CpYYLvRYslsyCkuLzL9EbbjsvbNpWCEZcmhKqMoX5zw": "SK", # Alt Main
+    "1DJvK1vUT2OTubN0TLdZvsgYMSYByLHl8xTsus3K-KJ-VtJxgGnSw5Ih8": "SK", # Scripts ID
 }
 
 PROJECT_NAMES = {
@@ -2671,186 +2812,11 @@ PROJECT_NAMES = {
     "SS": "San (SS)",
 }
 
-# Menu configurations per project
-MENU_CONFIGS = {
-    "MT": {
-        "menu_title": "MT CosmeticaBar",
-        "order_sheet": "Заказ",
-        "sort_columns": {
-            "manufacturer": "Производитель",
-            "price": "EXW ALFASPA текущая, €",
-        },
-        "primary_menu": {
-            "title": "🧾 Заказ",
-            "items": {
-                "MAIN": "Обработка Б/З поставщик",
-                "TESTER": "Обработка Тестер",
-                "SAMPLES": "Обработка Пробники",
-                "STOCKS": "Загрузить остатки",
-                "NEW_PRICE_YEAR": "New год для динамика",
-            },
-        },
-        "order_stages_menu": {
-            "title": "📊 Стадии по заказ",
-            "items": {
-                "SORT_MANUFACTURER": "Сортировать по производителю",
-                "SORT_PRICE": "Сортировать по прайсу",
-                "STAGE_ALL": "1. Все данные",
-                "STAGE_ORDER": "2. Заказ",
-                "STAGE_PROMOTIONS": "3. Акции",
-                "STAGE_SET": "4. Набор",
-                "STAGE_PRICE": "5. Прайс",
-            },
-        },
-    },
-    "SK": {
-        "menu_title": "SK Carmado",
-        "order_sheet": "Заказ",
-        "sort_columns": {
-            "manufacturer": "Производитель",
-            "price": "Цена",
-        },
-        "primary_menu": {
-            "title": "🧾 Заказ",
-            "items": {
-                "MAIN": "Обработка Б/З поставщик",
-                "PROBES": "Обработка пробники",
-                "STOCKS": "Загрузить остатки",
-                "NEW_PRICE_YEAR": "New год для динамика",
-            },
-        },
-        "order_stages_menu": {
-            "title": "📊 Стадии по заказ",
-            "items": {
-                "SORT_MANUFACTURER": "Сортировать по производителю",
-                "SORT_PRICE": "Сортировать по прайсу",
-                "STAGE_ALL": "1. Все данные",
-                "STAGE_ORDER": "2. Заказ",
-                "STAGE_PROMOTIONS": "3. Акции",
-                "STAGE_SET": "4. Набор",
-                "STAGE_PRICE": "5. Прайс",
-            },
-        },
-    },
-    "SS": {
-        "menu_title": "SS San",
-        "order_sheet": "Заказ",
-        "sort_columns": {
-            "manufacturer": "Производитель",
-            "price": "Цена",
-        },
-        "primary_menu": {
-            "title": "🧾 Заказ",
-            "items": {
-                "MAIN": "Обработка Б/З поставщик",
-                "STOCKS": "Загрузить остатки",
-                "NEW_PRICE_YEAR": "New год для динамика",
-            },
-        },
-        "order_stages_menu": {
-            "title": "📊 Стадии по заказ",
-            "items": {
-                "SORT_MANUFACTURER": "Сортировать по производителю",
-                "SORT_PRICE": "Сортировать по прайсу",
-                "STAGE_ALL": "1. Все данные",
-                "STAGE_ORDER": "2. Заказ",
-                "STAGE_PROMOTIONS": "3. Акции",
-                "STAGE_SET": "4. Набор",
-                "STAGE_PRICE": "5. Прайс",
-            },
-        },
-    },
-}
+# Menu configurations are now imported from src.config.project_menus
+# Available as: PROJECT_MENUS, PRIMARY_DATA_MENU_ACTIONS, PRIMARY_DATA_MENU_ORDER, ORDER_STAGES_MENU_ORDER
 
-PRIMARY_DATA_MENU_ORDER = ["MAIN", "TESTER", "SAMPLES", "PROBES", "STOCKS", "NEW_PRICE_YEAR"]
-ORDER_STAGES_MENU_ORDER = [
-    "SORT_MANUFACTURER",
-    "SORT_PRICE",
-    "STAGE_ALL",
-    "STAGE_ORDER",
-    "STAGE_PROMOTIONS",
-    "STAGE_SET",
-    "STAGE_PRICE",
-]
-
-# Action mapping for menu buttons (mirrors legacy GAS config)
-PRIMARY_DATA_MENU_ACTIONS = {
-    "MAIN": {"fn_by_project": {"SK": "serverProcessSkMain", "SS": "serverProcessSsMain", "MT": "serverProcessMtMain"}},
-    "TESTER": {"fn_by_project": {"MT": "serverProcessMtTester"}},
-    "SAMPLES": {"fn_by_project": {"MT": "serverProcessMtSamples"}},
-    "PROBES": {"fn_by_project": {"SK": "serverProcessSkProbes"}},
-    "STOCKS": {"fn_by_project": {"SK": "loadSkStockData", "SS": "loadSsStockData", "MT": "loadMtStockData"}},
-    "NEW_PRICE_YEAR": {"fn": "serverAddNewYearColumns"},
-    "SORT_MANUFACTURER": {"fn": "sortByManufacturer"},
-    "SORT_PRICE": {"fn": "sortByPrice"},
-    "STAGE_ALL": {"fn": "serverShowAllOrderData"},
-    "STAGE_ORDER": {"fn": "serverShowOrderStage"},
-    "STAGE_PROMOTIONS": {"fn": "serverShowPromotionsStage"},
-    "STAGE_SET": {"fn": "serverShowSetStage"},
-    "STAGE_PRICE": {"fn": "serverShowPriceStage"},
-}
-
-# Static menu groups organized by business cycles
-BASE_MENU_GROUPS: List[dict] = [
-    # ============== ЦИКЛ 1: ПРАЙС-ЛИСТ ==============
-    {
-        "title": "🏷️ Прайс-лист",
-        "items": [
-            {"label": "📥 Загрузить и обработать прайс", "function_name": "serverProcessPrimaryData"},
-            {"label": "📊 Загрузить остатки", "function_name": "serverLoadStockData"},
-            {"separator": True},
-            {"label": "💰 Анализировать цены", "function_name": "menuAnalyzePrices"},
-            {"label": "✅ Сформировать свежий прайс", "function_name": "serverGenerateFreshPriceList"},
-        ],
-    },
-    # ============== ЦИКЛ 2: ЗАКАЗ & ДОКУМЕНТАЦИЯ ==============
-    {
-        "title": "🛒 Заказ & Документация",
-        "items": [
-            {"label": "📋 Подготовить заказ", "function_name": "serverPrepareOrder"},
-            {"separator": True},
-            {"label": "📦 Подготовить документы для таможни", "function_name": "serverPrepareCustomsDocuments"},
-            {"label": "✏️ Заполнить разрешительную документацию", "function_name": "serverFillPermitDocumentation"},
-            {"separator": True},
-            {"label": "🔬 Сертификация", "function_name": "serverCertificationWorkbench"},
-            {"label": "📄 Лист новинки", "function_name": "serverCreateNewsSheet"},
-            {"label": "📋 Протоколы (353пп)", "function_name": "serverGenerateProtocols353pp"},
-            {"label": "📋 ДС Макеты (353пп)", "function_name": "serverGenerateDsLayouts"},
-            {"label": "📦 Собрать документы для заявки", "function_name": "structureDocuments_353pp"},
-            {"separator": True},
-            {"label": "🥃 Спирты - Посчитать", "function_name": "serverCalculateSpiritNumbers"},
-            {"label": "🥃 Спирты - Создать Макеты", "function_name": "generateSpiritProtocols"},
-            {"label": "🔄 Спирты - Пересчитать каскады", "function_name": "serverRecalculateCascades"},
-        ],
-    },
-    # ============== ЦИКЛ 3: ЭКСПОРТ & ВЫГРУЗКА ==============
-    {
-        "title": "📦 Экспорт & Выгрузка",
-        "items": [
-            {"label": "📤 Выгрузить Акции", "function_name": "serverExportPromotions"},
-            {"label": "📤 Выгрузить Наборы", "function_name": "serverExportSets"},
-            {"separator": True},
-            {"label": "📄 Форматировать лист 'Ордер'", "function_name": "serverFormatOrderSheet"},
-            {"label": "📄 Создать лист 'Для инвойса'", "function_name": "serverCreateFullInvoice"},
-            {"label": "📄 Собрать документы для инвойса", "function_name": "collectAndCopyDocuments"},
-        ],
-    },
-    # ============== ЦИКЛ 4: AI АГЕНТ ==============
-    {
-        "title": "🤖 AI Агент",
-        "items": [
-            {"label": "🔑 Ввести API ключ Gemini", "function_name": "setupGeminiComplete"},
-            {"label": "📋 Показать настройки AI", "function_name": "showGeminiSettings"},
-            {"label": "🟢 Проверить статус сервиса", "function_name": "menuCheckService"},
-            {"separator": True},
-            {"label": "🧪 Быстрый анализ (выбранная строка)", "function_name": "menuSimpleAnalyze"},
-            {"label": "🤖 Анализировать выбранную строку (полный)", "function_name": "menuAnalyzeSelected"},
-            {"label": "📊 Анализировать пустые строки", "function_name": "menuAnalyzeEmpty"},
-            {"separator": True},
-            {"label": "📚 Показать категории ТН ВЭД", "function_name": "menuShowCategories"},
-        ],
-    },
-]
+# Static menu groups are now available from src.config.project_menus
+# Use get_menu_groups(project) or PROJECT_MENUS["default"]["menu_groups"]
 
 # Settings submenu groups
 SETTINGS_SUBMENU_GROUPS: List[dict] = [
@@ -2866,20 +2832,6 @@ SETTINGS_SUBMENU_GROUPS: List[dict] = [
             {"separator": True},
             {"label": "🔄 Синхронизировать строку", "function_name": "syncSelectedRow"},
             {"label": "🔄 Синхронизировать всю таблицу", "function_name": "runFullSync"},
-        ],
-    },
-    # ============== ПОДМЕНЮ: ЛОГИ ==============
-    {
-        "title": "📋 Логи",
-        "items": [
-            {"label": "📊 Статус архивирования", "function_name": "showArchiveStatus_proxy"},
-            {"label": "📁 Архивировать логи сейчас", "function_name": "manualArchiveLogs_proxy"},
-            {"separator": True},
-            {"label": "⏰ Установить триггер архивирования (полночь)", "function_name": "setupMidnightLogTrigger_proxy"},
-            {"label": "🗑️ Удалить триггер архивирования", "function_name": "removeMidnightLogTrigger_proxy"},
-            {"separator": True},
-            {"label": "📝 Пересоздать Журнал синхронизации", "function_name": "recreateLogSheet"},
-            {"label": "🧹 Очистить Журнал синхронизации", "function_name": "quickCleanLogSheet"},
         ],
     },
     # ============== ПОДМЕНЮ: SUPABASE ==============

@@ -13,7 +13,7 @@ function openSupabaseConsole() {
   const supabaseUrl = "https://supabase.com/dashboard/project/kxxdxnsvbvdpyfxccvjb";
   HtmlService.createHtmlOutput(
     '<script>window.open("' + supabaseUrl + '", "_blank"); google.script.host.close();</script>'
-  ).getWidth(1).getHeight(1);
+  ).setWidth(1).setHeight(1);
   SpreadsheetApp.getUi().showModelessDialog(
     HtmlService.createHtmlOutput('<p>Открыли Supabase Console...</p>'),
     'Supabase'

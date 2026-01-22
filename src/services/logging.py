@@ -8,8 +8,9 @@ from typing import Dict, Any
 
 class LoggingService:
     """
-    ЗАГЛУШКА (STUB) - Логирование в лист 'Логи' отключено.
-    Все методы пустые, чтобы избежать ошибок при вызовах из других частей кода.
+    Сервис логирования.
+    Логирует события в консоль сервера (через logger) для обеспечения
+    максимальной прозрачности работы системы без загромождения Google Таблиц.
     """
     def __init__(self, sheets_service: SheetsService):
         self.sheets_service = sheets_service
@@ -24,7 +25,8 @@ class LoggingService:
         # self.sheets_service.log_sheet_name = self.log_sheet_name
 
     def init_session_log(self, spreadsheet_id: str):
-        """ОТКЛЮЧЕНО: Лист 'Логи' больше не создается."""
+        """Логирование инициализации сессии."""
+        logger.info(f"Session initialized for spreadsheet: {spreadsheet_id}")
         return True
 
     def recreate_log_sheet(self, spreadsheet_id: str, force_clear: bool = False, sheet_name: Optional[str] = None):
@@ -50,8 +52,13 @@ class LoggingService:
         }
 
     def add_log(self, spreadsheet_id: str, category: str, action: str, details: str, status: str):
-        """ОТКЛЮЧЕНО: Логи не записываются в лист."""
-        pass
+        """Запись лога в системный вывод."""
+        level = "ERROR" if "ERROR" in (status or "").upper() or "ОШИБКА" in (status or "").upper() else "INFO"
+        log_msg = f"[{category}] {action} | Details: {details} | Status: {status}"
+        if level == "ERROR":
+            logger.error(log_msg)
+        else:
+            logger.info(log_msg)
 
     def add_summary_log(
         self,
@@ -62,8 +69,10 @@ class LoggingService:
         status: str = "✅ OK",
         extra_data: Optional[Any] = None,
     ):
-        """ОТКЛЮЧЕНО: Сводные логи не записываются."""
-        pass
+        """Запись сводного лога."""
+        self.add_log(spreadsheet_id, category, action, details, status)
+        if extra_data:
+            logger.debug(f"Extra data for summary log: {extra_data}")
 
     def log_sync_summary(
         self,

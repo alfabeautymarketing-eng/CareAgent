@@ -17,7 +17,14 @@
  */
 function createAgentMenu(options) {
   try {
-    const ui = SpreadsheetApp.getUi();
+    let ui;
+    try {
+      ui = SpreadsheetApp.getUi();
+    } catch (err) {
+      console.warn('Cannot access UI (likely running from editor): ' + err.toString());
+      return; // Return gracefully, we don't need UI in editor
+    }
+
     const allowNetwork = !options || options.allowNetwork !== false;
 
     // Try to load menu config from server
@@ -33,14 +40,14 @@ function createAgentMenu(options) {
       console.log('Fallback menu created (server unavailable)');
     }
   } catch (e) {
-    Logger.log('Error creating Agent menu: ' + e.toString());
     console.error('Error creating Agent menu: ' + e.toString());
 
     // Fallback menu on any error
     try {
-      buildFallbackMenu(SpreadsheetApp.getUi());
+      const ui = SpreadsheetApp.getUi();
+      buildFallbackMenu(ui);
     } catch (e2) {
-      console.error('Failed to create fallback menu:', e2);
+      console.warn('Failed to create fallback menu (UI unavailable):', e2);
     }
   }
 }
@@ -153,15 +160,23 @@ function buildFallbackMenu(ui) {
  */
 function clearMenuCache() {
   try {
-    const spreadsheetId = SpreadsheetApp.getActiveSpreadsheet().getId();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const spreadsheetId = ss.getId();
     const cacheKey = 'MENU_CONFIG_CACHE_' + spreadsheetId;
     const props = PropertiesService.getUserProperties();
     props.deleteProperty(cacheKey);
     console.log('Menu cache cleared for spreadsheet:', spreadsheetId);
-    SpreadsheetApp.getActiveSpreadsheet().toast('Кэш меню очищен!', 'Cache', 2);
+    
+    try {
+      ss.toast('Кэш меню очищен!', 'Cache', 2);
+    } catch (toastErr) {
+      // Ignore toast error in editor
+    }
   } catch (e) {
     console.error('Error clearing menu cache:', e);
-    SpreadsheetApp.getActiveSpreadsheet().toast('Ошибка: ' + e.toString(), 'Error', 5);
+    try {
+      SpreadsheetApp.getUi().alert('Ошибка: ' + e.toString());
+    } catch (uiErr) {}
   }
 }
 
@@ -173,7 +188,9 @@ function clearMenuCache() {
 function refreshMenu() {
   clearMenuCache();
   createAgentMenu();
-  SpreadsheetApp.getActiveSpreadsheet().toast('Меню обновлено!', 'Ecosystem', 2);
+  try {
+    SpreadsheetApp.getActiveSpreadsheet().toast('Меню обновлено!', 'Ecosystem', 2);
+  } catch (e) {}
 }
 
 // =======================================================================================

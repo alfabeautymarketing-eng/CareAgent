@@ -67,10 +67,7 @@
     FOR_DATABASE: "Для базы",
     LOCAL_LOOKUP: "Вид и код",
     RULES: "Правила синхро",
-    LOG: "Журнал синхро",
-    LOG_DEBUG: "Журнал логов",
     EXTERNAL_DOCS: "Внешние документы",
-    SESSION_LOG: "Логи",
   };
 
   // =======================================================================================
@@ -485,6 +482,7 @@
         { label: "🧹 Очистить уведомления", fn: "clearAllToasts" },
         { label: "🚀 Миграция правил со старого листа", fn: "migrateLegacyRules" },
         { label: "🗑️ Удалить лист 'Правила синхро'", fn: "deleteLegacyRulesSheet" },
+        { label: "🔄 Обновить меню", fn: "refreshMenu" },
         { separator: true },
         {
           submenu: "Операции с артикулами",
@@ -916,14 +914,21 @@
   // БЛОК 5: КАРТА ДОКУМЕНТОВ И АВТООПРЕДЕЛЕНИЕ ПРОЕКТА
   // =======================================================================================
   const DOC_TO_PROJECT = {
-  '13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ': 'MT',
-    "12yIL1CuESZxeUUd-oKK2brtN1FnXE9q95N7SqzNc7vk": "SS",
-    "1Bq2Pq0P1SQZfJNBZC3yduYCJmnyc4L4vmbLtvsVUkcg": "SS",
-    "1CpYYLvRYslsyCkuLzL9EbbjsvbNpWCEZcmhKqMoX5zw": "SK",
-    "1hSsS9_Iu_MgKWsoE19hAMouQInLGVFaBF6ZFG4Bsm1s": "SK",
-    "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK",
-    "1fMOjUE7oZV96fCY5j5rPxnhWGJkDqg-GfwPZ8jUVgPw": "MT",
-    "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0": "MT",
+    '13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ': 'MT', // Main MT
+    "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0": "MT", // Source MT
+    "1fMOjUE7oZV96fCY5j5rPxnhWGJkDqg-GfwPZ8jUVgPw": "MT", // Alt Main MT
+    "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g": "MT", // Legacy MT
+    
+    "1Bq2Pq0P1SQZfJNBZC3yduYCJmnyc4L4vmbLtvsVUkcg": "SS", // Main SS
+    "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0": "SS", // Source SS
+    "12yIL1CuESZxeUUd-oKK2brtN1FnXE9q95N7SqzNc7vk": "SS", // Alt Main SS
+    "1sTgZa-n1aP7oIhyQfPeN8QDgDNnCubqMWAd-TKjKpJXWsQm_ZhXnojPD": "SS", // Scripts SS
+    
+    "1hSsS9_Iu_MgKWsoE19hAMouQInLGVFaBF6ZFG4Bsm1s": "SK", // Main SK
+    "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK", // Source SK
+    "1CpYYLvRYslsyCkuLzL9EbbjsvbNpWCEZcmhKqMoX5zw": "SK", // Alt Main SK
+    "1DJvK1vUT2OTubN0TLdZvsgYMSYByLHl8xTsus3K-KJ-VtJxgGnSw5Ih8": "SK", // Scripts SK
+    
     "1w8Xddj3uSgXE_AmshWIzJoRKDQpZuqDkQFiCMX99DPk": "HD",
   };
 

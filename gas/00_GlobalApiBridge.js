@@ -13,6 +13,8 @@
  *   2. Выполните: cd /Users/aleksandr/Desktop/MyGoogleScripts/EcosystemLib && clasp push
  *   3. Обновите развертывание в Apps Script
  * =======================================================================================
+ * VERIFICATION MARKER: 199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g
+ * =======================================================================================
  */
 
 /**
@@ -151,55 +153,26 @@ function handleOnEdit(e) {
  * @param {string} status - Статус (✅ OK, ❌ ОШИБКА и т.д.)
  */
 function _writeToLogSheet_(category, action, details, status) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) return;
-
-    var logSheetName = "Логи";
-    var sh = ss.getSheetByName(logSheetName);
-
-    if (!sh) {
-      // Создаём лист если его нет
-      sh = ss.insertSheet(logSheetName);
-      var headers = ["🕒 Время", "🏷️ Категория", "💬 Действие", "📝 Детали", "🔘 Статус"];
-      sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
-      sh.setFrozenRows(1);
-      sh.getRange(1, 1, 1, headers.length).setBackground("#e8eaf6");
-    }
-
-    var timestamp = Utilities.formatDate(new Date(), "Europe/Moscow", "dd.MM.yyyy HH:mm:ss");
-    sh.appendRow([timestamp, category, action, details || "", status || "✅ OK"]);
-  } catch (e) {
-    console.error("_writeToLogSheet_ error:", e);
-  }
+  // ОТКЛЮЧЕНО: Лист 'Логи' больше не используется.
+  // console.log('[LOG]', category, action, details, status);
 }
 
 /**
- * Универсальная обёртка для логирования вызовов функций из меню.
- * @param {string} functionName - Имя функции
- * @param {Function} fn - Функция для выполнения
- * @param {string} [source="MENU"] - Источник вызова
- * @returns {*} Результат функции
+ * Обертка для логирования вызовов функций.
+ * Теперь пишет только в console.log для отладки в GAS.
  */
 function _loggedCall_(functionName, fn, source) {
   source = source || "FUNCTION";
   var startTime = Date.now();
 
-  // Логируем начало
-  _writeToLogSheet_(source, "Вызов: " + functionName, "Запуск функции", "🔄 В ПРОЦЕССЕ");
-
   try {
     var result = fn();
     var duration = Date.now() - startTime;
-
-    // Логируем успешное завершение
-    _writeToLogSheet_(source, "Завершено: " + functionName, "Время: " + duration + "ms", "✅ OK");
-
+    console.log('[OK] ' + functionName + ' (' + duration + 'ms)');
     return result;
   } catch (e) {
     var duration = Date.now() - startTime;
-    // Логируем ошибку
-    _writeToLogSheet_(source, "ОШИБКА: " + functionName, e.message, "❌ ОШИБКА");
+    console.error('[ERROR] ' + functionName + ' after ' + duration + 'ms: ' + e.message);
     throw e;
   }
 }
@@ -309,26 +282,18 @@ function refreshLogs() {
   throw new Error('Lib.refreshLogs не определена');
 }
 
-function quickCleanLogSheet() {
-  if (typeof callServerLogCommand === 'function') {
-    return callServerLogCommand(true);
-  }
-  throw new Error('callServerLogCommand не определена');
-}
+// ОТКЛЮЧЕНО: Функции управления логами через лист больше не нужны.
+// Все логи теперь ведутся на сервере и доступны через "📜 Открыть Журнал (UI)".
 
-function recreateLogSheet() {
-  if (typeof callServerLogCommand === 'function') {
-    return callServerLogCommand(false);
-  }
-  throw new Error('callServerLogCommand не определена');
-}
+function quickCleanLogSheet() { console.warn('quickCleanLogSheet отключена'); }
+function recreateLogSheet() { console.warn('recreateLogSheet отключена'); }
+function recreateDebugLogSheet() { console.warn('recreateDebugLogSheet отключена'); }
+function refreshLogs() { console.warn('refreshLogs отключена'); }
 
-function recreateDebugLogSheet() {
-  if (typeof callServerRecreateDebugLog === 'function') {
-    return callServerRecreateDebugLog();
-  }
-  throw new Error('callServerRecreateDebugLog не определена');
-}
+function serverManualArchiveLogs() { console.warn('serverManualArchiveLogs отключена'); }
+function serverResetLogSheet() { console.warn('serverResetLogSheet отключена'); }
+function serverMidnightLogRotation() { console.warn('serverMidnightLogRotation отключена'); }
+function serverGetLogStatus() { console.warn('serverGetLogStatus отключена'); }
 
 // ============ ОБРАБОТКА ПРАЙСОВ (SK) ============
 
@@ -640,6 +605,38 @@ function reorderAuxiliarySheets() {
 /**
  * Обработка основного прайса MT через сервер
  */
+/**
+ * Загрузить остатки (вызывает серверную логику)
+ */
+function serverLoadStockData() {
+  return _loggedCall_("serverLoadStockData", function() {
+    if (typeof callServerLoadStocks === 'function') {
+      return callServerLoadStocks();
+    }
+    // Фолбэк на старую логику, если серверная не готова
+    var projectKey = (typeof getActiveProjectKey === 'function') ? getActiveProjectKey() : 'MT';
+    if (Lib.loadStockData) {
+      return Lib.loadStockData(projectKey);
+    }
+    throw new Error('Логика загрузки остатков не найдена');
+  });
+}
+
+/**
+ * Загрузить и обработать прайс (вызывает серверную логику)
+ */
+function serverProcessPrimaryData() {
+  return _loggedCall_("serverProcessPrimaryData", function() {
+    var projectKey = (typeof getActiveProjectKey === 'function') ? getActiveProjectKey() : 'MT';
+    var mode = 'main'; // По умолчанию
+    
+    if (typeof callServerProcessPrice === 'function') {
+      return callServerProcessPrice(projectKey.toLowerCase(), mode);
+    }
+    throw new Error('Функция callServerProcessPrice не найдена');
+  });
+}
+
 function serverProcessMtMain() {
   return _loggedCall_("serverProcessMtMain", function() {
     if (typeof callServerProcessPrice === 'function') {

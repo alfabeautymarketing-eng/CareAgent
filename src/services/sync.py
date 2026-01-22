@@ -660,17 +660,54 @@ class SyncService:
         row_key = event_data.get("row_key")
         project = event_data.get("project")
 
+        # 0. Log Reception (Log "RECEIVED")
+        self._log_sync_journal(
+            spreadsheet_id,
+            row_key=event_data.get("row_key") or str(row_idx),
+            source_info=f"{sheet_name}",
+            target_info="Processing...",
+            old_val="", # Not essential for receipt log
+            new_val=str(new_value),
+            category="SYNC_EVENT",
+            status="RECEIVED",
+            project=project,
+            extra={"row": row_idx, "col": col_idx, "header": source_header}
+        )
+
+
         # === ЗАЩИТА ОТ ЦИКЛОВ: Проверка sync_origin ===
         sync_origin = event_data.get("sync_origin", "user")
         if sync_origin == "sync":
             logger.info("skipping_sync_originated_event",
                        sheet=sheet_name, row_key=row_key, header=source_header)
+            self._log_sync_journal(
+                spreadsheet_id,
+                row_key=str(row_key),
+                source_info=f"{sheet_name}",
+                target_info="Cycle Protection",
+                old_val="", new_val=str(new_value),
+                category="SYNC_EVENT",
+                status="SKIPPED",
+                project=project,
+                extra={"reason": "Sync-originated change"}
+            )
             return {"status": "skipped", "reason": "Sync-originated change ignored"}
 
         # === ЗАЩИТА ОТ ЦИКЛОВ: Проверка блокировки ячейки ===
         if row_key and source_header and self._is_cell_locked(spreadsheet_id, row_key, source_header):
             logger.info("skipping_locked_cell",
                        sheet=sheet_name, row_key=row_key, header=source_header)
+            self._log_sync_journal(
+                spreadsheet_id,
+                row_key=str(row_key),
+                source_info=f"{sheet_name}",
+                target_info="Cycle Protection",
+                old_val="", new_val=str(new_value),
+                category="SYNC_EVENT",
+                status="SKIPPED",
+                project=project,
+                extra={"reason": "Cell locked (anti-cycle protection)"}
+            )
             return {"status": "skipped", "reason": "Cell locked (anti-cycle protection)"}
 
         # Пропускаем события на лог-листах (Логи удалены из системы)
@@ -721,6 +758,24 @@ class SyncService:
                 "Проверка правил", 
                 f"Правила для колонки '{source_header}' листа '{sheet_name}' не найдены. Синхронизация пропущена.",
                 "ℹ️ SKIP"
+            )
+            self._log_to_session(
+                spreadsheet_id, 
+                "СИНХРОНИЗАЦИЯ", 
+                "Проверка правил", 
+                f"Правила для колонки '{source_header}' листа '{sheet_name}' не найдены. Синхронизация пропущена.",
+                "ℹ️ SKIP"
+            )
+            self._log_sync_journal(
+                spreadsheet_id,
+                row_key=str(row_key),
+                source_info=f"{sheet_name}!{source_header}",
+                target_info="No Rules",
+                old_val="", new_val=str(new_value),
+                category="SYNC_EVENT",
+                status="SKIPPED",
+                project=project,
+                extra={"reason": f"No matching rules for header '{source_header}'"}
             )
             return {"status": "skipped", "reason": "No matching rules"}
 
@@ -832,6 +887,7 @@ class SyncService:
         status: str,
         project: Optional[str] = None,
         rule_id: Optional[str] = None,
+        extra: Optional[Dict[str, Any]] = None,
     ):
         if not self.sync_log_service:
             return
@@ -848,6 +904,7 @@ class SyncService:
                 category=category,
                 status=status,
                 rule_id=rule_id,
+                extra=extra,
             )
         except Exception as e:
             logger.error("sync_journal_write_failed", error=str(e))
@@ -935,6 +992,18 @@ class SyncService:
         try:
             ws = self.sheets_service.get_worksheet(target_ss_id, target_sheet)
         except Exception:
+            self._log_sync_journal(
+                spreadsheet_id,
+                row_key=row_key,
+                source_info=f"{source_sheet} -> {target_sheet}",
+                target_info=f"{target_sheet}",
+                old_val="", new_val=str(new_value),
+                category=rule.category,
+                status="ERROR",
+                project=project,
+                rule_id=rule.id,
+                extra={"error": f"Target sheet '{target_sheet}' not found"}
+            )
             return {"rule_id": rule.id, "status": "failed", "error": f"Target sheet '{target_sheet}' not found"}
 
         # 2. Find target column index by header
@@ -942,6 +1011,18 @@ class SyncService:
         try:
             target_col = headers.index(target_header) + 1
         except ValueError:
+            self._log_sync_journal(
+                spreadsheet_id,
+                row_key=row_key,
+                source_info=f"{source_sheet} -> {target_sheet}",
+                target_info=f"{target_sheet}!{target_header}",
+                old_val="", new_val=str(new_value),
+                category=rule.category,
+                status="ERROR",
+                project=project,
+                rule_id=rule.id,
+                extra={"error": f"Target header '{target_header}' not found"}
+            )
             return {"rule_id": rule.id, "status": "failed", "error": f"Target header '{target_header}' not found"}
 
         # 3. Find target row by Key (Col A)

@@ -2,39 +2,23 @@
 
 Google Sheets automation with AI - Python replacement for MyGoogleScripts.
 
-## Features
+## 🎯 Main Goals
+1. **Stable Buttons**: Reliable execution from Google Sheets.
+2. **"Journal" Workflow**: Debug via logs (Supabase/Files) before fixing code.
+3. **Traceable Sync**: Data consistency via Supabase.
+4. **Smart Agent**: Proactive AI assistance.
 
-- Synchronization between 15+ Google Sheets
-- AI analysis (INCI, ТН ВЭД classification) via Gemini
-- Price processing (9 phases)
-- Invoice generation
-- Auto-order calculation
-- Cascade rules engine
-- Transaction support with rollback
-- Live server logging to sheet `Логи` (всегда первая вкладка)
-- Server-side sync rules support (`config/rules/<spreadsheet_id>.yaml`) to avoid лишних чтений листа правил
-- HTML-форма управления правилами: `docs/rules-form.html` (работает через API `/rules/{spreadsheet_id}`)
+## 🤖 For AI Agents
+**Start Here:** 👉 **[AI HANDBOOK (Правила)](./AI_HANDBOOK.md)** 👈
+*This is the single source of truth for all rules, workflows (Beads), and architectural principles.*
 
-## Documentation
+## 📚 Documentation
+- **[Architecture](ARCHITECTURE.md)**: System overview, components, and data flow.
+- **[API Documentation](docs/API.md)**: REST API reference.
+- **[Deployment](DEPLOY.md)**: Production deployment guide.
+- **[Legacy Docs](docs/archive/)**: Archived documentation.
 
-### For Developers
-- [Quick Start Guide](QUICKSTART.md)
-- [Production Deployment](PROD_DEPLOY.md)
-- [Logging System](LOGGING_README.md)
-- [API Documentation](docs/)
-
-### For AI Agents 🤖
-- **[AI Central Command](AI_CENTRAL_COMMAND.md)** - START HERE!
-- [AI Rules (Detailed)](AI_RULES.md)
-- [Agent Procedures](AGENTS.md)
-- [Beads Quickstart](BEADS_QUICKSTART.md)
-
-### System Documentation 📚
-- **[Architecture](ARCHITECTURE.md)** - Полная архитектура системы
-- **[Function Map](FUNCTION_MAP.md)** - Карта всех функций с зависимостями
-- **[API Reference](API_REFERENCE.md)** - Справочник по всем endpoints
-
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 # Clone
@@ -43,40 +27,22 @@ cd agentcare
 
 # Setup
 cp .env.example .env
-# Edit .env with your credentials
-
-# Install dependencies
-pip install poetry
 poetry install
 
-# Run
+# Run Server
 poetry run uvicorn src.main:app --reload
 ```
 
-## Docker
+## 🏗 System Components
+- **Server**: Python 3.12 (FastAPI)
+- **Database**: Supabase (PostgreSQL)
+- **Client**: Google Apps Script (Thin Client)
+- **AI**: Gemini 1.5 Pro
 
-```bash
-docker compose up -d
-```
+## 📦 Projects
+- **MT**: CosmeticaBar
+- **SK**: Carmado
+- **SS**: San
 
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md)
-- [Modules](docs/MODULES.md)
-- [API](docs/API.md)
-- [Rules](docs/RULES.md)
-- [Dependencies](docs/DEPENDENCIES.md)
-- [Deployment](docs/DEPLOYMENT.md)
-- [GAS & CI: clasp credentials and GitHub secrets](docs/GAS_CI_SECRETS.md)
-
-## Projects
-
-- **MT** - CosmeticaBar (testers, samples)
-- **SK** - Carmado (samples, RRP, discounts)
-- **SS** - San (base price)
-
-## License
-
-MIT
-
-# CareAgent
+---
+*License: MIT*

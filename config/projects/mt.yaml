@@ -314,7 +314,7 @@ parser:
   main:
     type: mt_main
     function: processMtMainPrice
-    sheet_name: "Прайс"
+    # sheet_name берется из source.sheets.main (правильно: "-Б/З поставщик")
     header_row: 1
     # Индексы колонок в Excel поставщика
     excel_columns:

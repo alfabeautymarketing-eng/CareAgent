@@ -1,0 +1,13 @@
+.git
+.venv
+__pycache__
+*.pyc
+.ipynb_checkpoints
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.beads/*.sock
+.DS_Store
+node_modules
+dist
+build

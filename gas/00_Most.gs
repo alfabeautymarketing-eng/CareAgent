@@ -168,3 +168,25 @@ function setupTriggers_proxy() {
     );
   }
 }
+
+/**
+ * Proxy for server status check
+ */
+function showAllServicesStatus_proxy() {
+  if (typeof checkServerStatus === 'function') {
+    checkServerStatus();
+  } else {
+    SpreadsheetApp.getUi().alert('❌ Функция checkServerStatus не найдена.');
+  }
+}
+
+/**
+ * Proxy for opening server dashboard
+ */
+function openLogDashboard_proxy() {
+  if (typeof openServerUrl === 'function') {
+    openServerUrl('/api/v1/logs-ui', 'Журнал синхронизации');
+  } else {
+    SpreadsheetApp.getUi().alert('❌ Функция openServerUrl не найдена.');
+  }
+}

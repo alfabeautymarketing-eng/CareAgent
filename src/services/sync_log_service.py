@@ -35,6 +35,8 @@ class SyncLogEntry(BaseModel):
     extra: Dict[str, Any] = Field(default_factory=dict)
 
 
+from src.services.supabase_service import get_supabase_service
+
 class SyncLogService:
     def __init__(
         self,
@@ -46,6 +48,7 @@ class SyncLogService:
         self.retention_days = retention_days
         self.max_entries = max_entries
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.supabase = get_supabase_service()
 
     def add_entry(
         self,
@@ -83,6 +86,7 @@ class SyncLogService:
         path = self._log_path(spreadsheet_id)
         lock = self._lock_path(spreadsheet_id)
 
+        # 1. Write to local file
         try:
             with FileLock(lock):
                 with open(path, "a", encoding="utf-8") as handle:
@@ -90,6 +94,15 @@ class SyncLogService:
             self._enforce_retention(path, lock)
         except Exception as exc:
             logger.error("sync_log_write_failed", error=str(exc))
+
+        # 2. Write to Supabase (if configured)
+        if self.supabase.is_configured():
+            try:
+                # We use the raw client to insert
+                self.supabase.client.table("sync_logs").insert(payload).execute()
+            except Exception as exc:
+                # We don't want to break the main flow if supabase logging fails
+                logger.error("supabase_log_write_failed", error=str(exc))
 
         return payload
 

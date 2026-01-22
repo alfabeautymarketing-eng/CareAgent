@@ -19,7 +19,7 @@ from src.utils.config import settings
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
-    setup_logging(settings.log_level)
+    setup_logging(settings.log_level, log_file=settings.server_log_file)
     logger.info("application_starting", version=settings.version)
 
     # TODO: Initialize connections

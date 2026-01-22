@@ -8,7 +8,7 @@ project:
 
 # Google Sheets
 spreadsheet:
-  id: "YOUR_SS_SPREADSHEET_ID_HERE"
+  id: "1Bq2Pq0P1SQZfJNBZC3yduYCJmnyc4L4vmbLtvsVUkcg"
 
 # ============================================================
 # Реестр листов (SHEETS) - минимальный набор
@@ -98,13 +98,13 @@ parser:
     header_row: 1
     # Индексы колонок в Excel поставщика
     excel_columns:
-      CODE: 1                   # Арт. произв.
-      PRODUCT_NAME: 2           # Название ENG
-      SIZE: 3                   # Объём
-      PACK: 4                   # Форма выпуска
-      BAR_CODE_ACL: 5           # BAR CODE
-      QTY_BOX: 6                # шт./уп.
-      EX_WORKS_CARROS: 7        # Цена EXW (колонка "EX WORKS CARROS (06)")
+      CODE: 1 # Арт. произв.
+      PRODUCT_NAME: 2 # Название ENG
+      SIZE: 3 # Объём
+      PACK: 4 # Форма выпуска
+      BAR_CODE_ACL: 5 # BAR CODE
+      QTY_BOX: 6 # шт./уп.
+      EX_WORKS_CARROS: 7 # Цена EXW (колонка "EX WORKS CARROS (06)")
 
     # Маркеры режимов
     markers:
@@ -121,9 +121,9 @@ parser:
       # Для группы SAMPLES: извлекает число из "Форма выпуска" в "шт./уп."
       enabled: true
       group_name: "SAMPLES"
-      extract_number_from: "form"       # Форма выпуска
-      extract_number_to: "units_per_pack"  # шт./уп.
-      pattern: "\\d+"                   # Любое число
+      extract_number_from: "form" # Форма выпуска
+      extract_number_to: "units_per_pack" # шт./уп.
+      pattern: "\\d+" # Любое число
 
 # ============================================================
 # Порядок синхронизации SS
@@ -163,9 +163,9 @@ features:
   order_verification: false
   for_database: false
   # SS-специфичные
-  professional_mode_marker: true    # Маркер "-ПРОФ"
-  stop_on_promotional: true         # Остановка на PROMOTIONAL MATERIALS
-  samples_number_extraction: true   # Извлечение числа для SAMPLES
+  professional_mode_marker: true # Маркер "-ПРОФ"
+  stop_on_promotional: true # Остановка на PROMOTIONAL MATERIALS
+  samples_number_extraction: true # Извлечение числа для SAMPLES
 
 # ============================================================
 # Business constants
