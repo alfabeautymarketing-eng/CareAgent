@@ -28,6 +28,11 @@ var Lib = Lib || {};
     }
 
     try {
+      // START: Function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Форматирование листа Заказ начато", "INFO", "", "formatOrderSheet", `Форматирование листа "${SHEET_NAME}"`, "Invoice", "START");
+      }
+
       ss.toast(`Форматирование листа "${SHEET_NAME}"…`, 'Выполнение', 2);
       // 1) Эксклюзивная очистка под поставщика
       _exclusiveCleanup_Order_(sh);
@@ -70,8 +75,19 @@ var Lib = Lib || {};
 
       ss.toast('Форматирование успешно завершено!', 'Готово', 5);
       Lib.logInfo(`[ORDER] Форматирование завершено на листе "${SHEET_NAME}"`);
+
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Форматирование листа Заказ завершено успешно", "INFO", "", "formatOrderSheet", `Лист "${SHEET_NAME}" успешно отформатирован`, "Invoice", "SUCCESS", null, { sheetName: SHEET_NAME, status: "formatted" });
+      }
     } catch (e) {
       Lib.logError('formatOrderSheet: критическая ошибка', e);
+
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при форматировании листа Заказ", "ERROR", "", "formatOrderSheet", e && e.message ? e.message : String(e), "Invoice", "ERROR", null, { sheetName: SHEET_NAME, error: e ? e.toString() : "Unknown error" });
+      }
+
       ui.alert(`Ошибка при форматировании: ${e.message}`);
       ss.toast('Ошибка форматирования', 'Ошибка', 3);
     } finally {
@@ -240,8 +256,34 @@ var Lib = Lib || {};
     const ui = SpreadsheetApp.getUi();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
+    // START: Log function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Начало создания полного инвойса",
+        "INFO",
+        "",
+        "createFullInvoice",
+        "Запуск процесса создания объединённого инвойса из всех листов",
+        "Invoice",
+        "START"
+      );
+    }
+
     try {
       ss.toast('Этап 1/5: Подготовка…', 'Выполнение', 2);
+
+      // PROGRESS: Validation step
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Проверка исходных листов",
+          "DEBUG",
+          "",
+          "createFullInvoice",
+          "Валидация наличия листов: " + S.ORDER + ", " + S.CERTIFICATION + ", " + S.LABELS,
+          "Invoice",
+          "PROGRESS"
+        );
+      }
 
       const shOrder = ss.getSheetByName(S.ORDER);
       const shCert  = ss.getSheetByName(S.CERTIFICATION);
@@ -445,10 +487,40 @@ var Lib = Lib || {};
         if (maxCols > lastCol) shTarget.deleteColumns(lastCol + 1, maxCols - lastCol);
       }
 
+      // SUCCESS: Log completion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Инвойс успешно создан",
+          "INFO",
+          "",
+          "createFullInvoice",
+          `Лист "${TGT_NAME}" успешно сформирован с данными из трёх источников`,
+          "Invoice",
+          "SUCCESS",
+          null,
+          { sheetName: TGT_NAME, status: "created" }
+        );
+      }
+
       ss.toast('Готово', 'OK', 3);
       ui.alert('Успех!', `Лист "${TGT_NAME}" успешно сформирован.`, ui.ButtonSet.OK);
       Lib.logInfo(`[INVOICE] Лист "${TGT_NAME}" создан`);
     } catch (e) {
+      // ERROR: Log failure
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при создании инвойса",
+          "ERROR",
+          "",
+          "createFullInvoice",
+          e && e.message ? e.message : String(e),
+          "Invoice",
+          "ERROR",
+          null,
+          { error: e ? e.toString() : "Unknown error", stack: e && e.stack ? e.stack : null }
+        );
+      }
+
       ss.toast('Ошибка', 'Ошибка', 3);
       Lib.logError('createFullInvoice: критическая ошибка', e);
       SpreadsheetApp.getUi().alert('Произошла ошибка!', `Подробности: ${e.message}`, ui.ButtonSet.OK);
@@ -570,6 +642,11 @@ var Lib = Lib || {};
     };
 
     try {
+      // START: Function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Сбор документов и описания начат", "INFO", "", "collectAndCopyDocuments", "Пользователь инициировал сбор документов и создание описания для инвойса", "Invoice", "START");
+      }
+
       const invoiceSheet = ss.getSheetByName(Lib.CONFIG.SHEETS.INVOICE_FULL);
       const certSheet    = ss.getSheetByName(Lib.CONFIG.SHEETS.CERTIFICATION);
       if (!invoiceSheet || !certSheet) {
@@ -685,11 +762,18 @@ var Lib = Lib || {};
         `- Скопировано новых ДС: ${dsCopied}\n` +
         `- Скопировано новых Спиртов: ${spiritsCopied}`;
 
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Сбор документов завершен успешно", "INFO", "", "collectAndCopyDocuments", `Документ "${docName}" создан с ${processedNames.size} описаниями, скопировано ДС: ${dsCopied}, Спиртов: ${spiritsCopied}`, "Invoice", "SUCCESS", null, { documentName: docName, descriptionsCount: processedNames.size, dsCopied: dsCopied, spiritsCopied: spiritsCopied });
+      }
+
       ui.alert('Операция завершена!', msg, ui.ButtonSet.OK);
 
     } catch (e) {
-      // Используем logWithEmoji для критических ошибок
-      if (typeof global.logWithEmoji === 'function') {
+      // ERROR: Enhanced error logging with full context
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при сборе документов", "ERROR", "", "collectAndCopyDocuments", e && e.message ? e.message : String(e), "Invoice", "ERROR", null, { error: e ? e.toString() : "Unknown error", stack: e && e.stack ? e.stack : null });
+      } else if (typeof global.logWithEmoji === 'function') {
         global.logWithEmoji(`КРИТИЧЕСКАЯ ОШИБКА в collectAndCopyDocuments: ${e.message}`, 'ERROR', '❌', 'Инвойс', e.stack);
       } else {
         Logger.log(`КРИТИЧЕСКАЯ ОШИБКА в collectAndCopyDocuments: ${e.message}\n${e.stack}`);

@@ -15,6 +15,7 @@ import re
 
 from src.utils.logger import logger
 from src.services.drive import get_drive_service
+from src.services.docs import get_docs_service
 
 
 @dataclass
@@ -520,19 +521,27 @@ class InvoiceService:
             logger.error(f"Create full invoice failed: {e}")
             raise
 
+    RUS_MONTHS = [
+        "январь", "февраль", "март", "апрель", "май", "июнь",
+        "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"
+    ]
+
     async def collect_and_copy_documents(
         self,
         spreadsheet_id: str,
         target_sheet: str = "Для инвойса",
-        parent_folder_id: Optional[str] = "1DjrtDKLUMCypFqlC38kjgOESupTjjUpK"
+        parent_folder_id: Optional[str] = "1DjrtDKLUMCypFqlC38kjgOESupTjjUpK",
+        brand_prefix: str = "MT"
     ) -> Dict[str, Any]:
         """
         Collect documents from invoice sheet and copy to a new folder.
+        Also creates a description document.
         """
         if not self.sheets:
             raise ValueError("Sheets service not initialized")
             
         drive = get_drive_service()
+        docs = get_docs_service()
         
         try:
             logger.info("Starting document collection")
@@ -547,7 +556,7 @@ class InvoiceService:
             if not values or len(values) < 2:
                 return {"message": "Invoice sheet is empty", "count": 0}
                 
-            headers = values[0]
+            headers = [str(h).strip() for h in values[0]]
             data = values[1:]
             
             # Find columns
@@ -555,52 +564,177 @@ class InvoiceService:
                 ds_idx = headers.index("ДС")
                 spirit_idx = headers.index("Спирт")
                 art_idx = headers.index("Арт. Рус")
-            except ValueError:
-                return {"message": "Required columns (ДС, Спирт, Арт. Рус) not found", "count": 0}
+                name_idx = headers.index("Наименование")
+                purpose_idx = headers.index("Назначение Этикетка")
+                app_idx = headers.index("Применение Этикетка")
+                ingr_idx = headers.index("Активные ингредиенты без %")
+            except ValueError as ve:
+                return {"message": f"Required column not found: {ve}", "count": 0}
                 
+            # Get name lookup from Certification
+            cert_lookup = await self.get_certification_lookup(spreadsheet_id)
+            # Refetch Certification to get "Наименование ДС" which might not be in the default lookup
+            # Actually, let's fetch it specifically for naming
+            cert_raw = await self.sheets.get(spreadsheet_id=spreadsheet_id, range="'Сертификация'")
+            cert_vals = cert_raw.get("values", [])
+            name_map = {} # Invoice Name -> DS Name
+            if cert_vals:
+                cert_h = [str(h).strip() for h in cert_vals[0]]
+                try:
+                    inv_n_idx = cert_h.index("Наименование для инвойса")
+                    ds_n_idx = cert_h.index("Наименование ДС")
+                    for r in cert_vals[1:]:
+                        if len(r) > max(inv_n_idx, ds_n_idx):
+                            name_map[str(r[inv_n_idx]).strip()] = str(r[ds_n_idx]).strip()
+                except ValueError:
+                    logger.warning("Certification headers for naming not found")
+
             # Create folder
-            date_str = datetime.now().strftime("%Y-%m-%d_%H-%M")
-            folder_name = f"Documents_{date_str}"
-            folder_id = drive.create_folder(folder_name, parent_folder_id)
+            now = datetime.now()
+            month_name = self.RUS_MONTHS[now.month - 1]
+            folder_name = f"{brand_prefix}{month_name} {now.year}"
             
+            # Try to find existing folder or create new
+            folder_id = drive.create_folder(folder_name, parent_folder_id)
+            ds_folder_id = drive.create_folder("ДС", folder_id)
+            spirits_folder_id = drive.create_folder("Спирты", folder_id)
+
+            # Create Description Doc
+            doc_name = f"{brand_prefix}Описание инвойса"
+            doc_id = docs.create_document(doc_name)
+            # Clear doc content if it was reused (but create_document creates NEW)
+            # docs.clear_document(doc_id) 
+            
+            # Move doc to folder
+            drive.service.files().update(
+                fileId=doc_id,
+                addParents=folder_id,
+                removeParents="root",
+                fields="id, parents"
+            ).execute()
+
             copied_files = 0
             errors = 0
-            
             processed_links = set()
+            processed_names = set()
             
-            for row in data:
-                # Helper to process link
-                for idx, type_name in [(ds_idx, "DS"), (spirit_idx, "Spirit")]:
-                    if idx >= len(row):
-                        continue
-                        
+            # For highlighting and Docs
+            sheet_updates = []
+            full_text = ""
+            
+            # Get sheet ID for background color
+            meta = self.sheets.gc.open_by_key(spreadsheet_id)
+            worksheet = meta.worksheet(target_sheet)
+            sheet_id = worksheet._properties['sheetId']
+
+            for i, row in enumerate(data):
+                row_idx = i + 2 # 1-indexed + header
+                if len(row) <= max(ds_idx, spirit_idx, art_idx, name_idx):
+                    continue
+
+                # 1. Handle File Copying
+                files_found_in_row = False
+                for idx, type_name, target_f in [(ds_idx, "DS", ds_folder_id), (spirit_idx, "Spirit", spirits_folder_id)]:
                     cell_val = row[idx]
                     if not cell_val:
                         continue
                         
-                    # Extract URL
                     file_id = drive.get_file_id_from_url(cell_val)
                     if not file_id:
                         continue
                         
+                    files_found_in_row = True
+                    
                     if file_id in processed_links:
                         continue
                         
                     processed_links.add(file_id)
-                    
                     try:
-                        art = row[art_idx] if art_idx < len(row) else "Unknown"
-                        new_name = f"{art}_{type_name}_{date_str}"
-                        drive.copy_file(file_id, folder_id, new_name)
+                        orig_file = drive.service.files().get(fileId=file_id, fields='name').execute()
+                        drive.copy_file(file_id, target_f, orig_file.get('name'))
                         copied_files += 1
+                        
+                        # Add highlight update for the cell
+                        sheet_updates.append({
+                            "range": f"'{target_sheet}'!{chr(65+idx)}{row_idx}",
+                            "values": [[cell_val]] # We'll use a different tool for formatting or just update background
+                        })
                     except Exception as copy_err:
                         logger.error(f"Failed to copy file {file_id}: {copy_err}")
                         errors += 1
-                        
+
+                # 2. Handle Description Generation
+                inv_name = str(row[name_idx]).strip()
+                if not inv_name or inv_name == "!!! НЕ НАЙДЕНО !!!":
+                    continue
+                
+                clean_name = name_map.get(inv_name, inv_name)
+                if clean_name in processed_names:
+                    continue
+                
+                processed_names.add(clean_name)
+                
+                purpose = str(row[purpose_idx]) if purpose_idx < len(row) else ""
+                app = str(row[app_idx]) if app_idx < len(row) else ""
+                ingr = str(row[ingr_idx]) if ingr_idx < len(row) else ""
+                
+                text_to_add = f"\n{clean_name}\n"
+                text_to_add += f"Назначение: {purpose}\n" if purpose else ""
+                text_to_add += f"Применение: {app}\n" if app else ""
+                text_to_add += f"Активные ингредиенты: {ingr}\n" if ingr else ""
+                full_text += text_to_add
+
+            # Execute Doc updates (append all at once)
+            if full_text:
+                docs.append_text(doc_id, full_text)
+
+            # Apply highlights (background color)
+            # Using spreadsheets().batchUpdate with repeatCell for efficiency
+            if sheet_updates:
+                bg_color_requests = []
+                for upd in sheet_updates:
+                     # Parse range like 'Для инвойса'!I11
+                     import re
+                     match = re.search(r'!([A-Z]+)(\d+)$', upd['range'])
+                     if match:
+                         col_str, row_str = match.groups()
+                         col_idx = 0
+                         for char in col_str:
+                             col_idx = col_idx * 26 + (ord(char) - ord('A') + 1)
+                         col_idx -= 1
+                         row_idx = int(row_str) - 1
+                         
+                         bg_color_requests.append({
+                             "updateCells": {
+                                 "range": {
+                                     "sheetId": sheet_id,
+                                     "startRowIndex": row_idx,
+                                     "endRowIndex": row_idx + 1,
+                                     "startColumnIndex": col_idx,
+                                     "endColumnIndex": col_idx + 1
+                                 },
+                                 "rows": [{
+                                     "values": [{
+                                         "userEnteredFormat": {
+                                             "backgroundColor": {"red": 0.8, "green": 1.0, "blue": 0.8} # Light green
+                                         }
+                                     }]
+                                 }],
+                                 "fields": "userEnteredFormat.backgroundColor"
+                             }
+                         })
+                
+                if bg_color_requests:
+                    self.sheets.service.spreadsheets().batchUpdate(
+                        spreadsheetId=spreadsheet_id,
+                        body={"requests": bg_color_requests}
+                    ).execute()
+
             return {
-                "message": f"Copied {copied_files} files to folder {folder_name}", 
+                "message": f"Сбор завершен! Скопировано файлов: {copied_files}, уникальных описаний: {len(processed_names)}", 
                 "count": copied_files,
                 "folder_id": folder_id,
+                "doc_id": doc_id,
                 "errors": errors
             }
             

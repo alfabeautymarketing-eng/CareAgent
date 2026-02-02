@@ -67,3 +67,5 @@ temp/
 
 # Local docs
 docs/SMART_MATCH_HOWTO.md
+.env.local
+service-account.json

@@ -120,8 +120,7 @@ var Lib = Lib || {};
       const active = ss.getActiveSheet();
       const names = [];
       if (Lib.CONFIG && Lib.CONFIG.SHEETS) {
-        // Strict priority: Логи first, then others
-        if (Lib.CONFIG.SHEETS.SESSION_LOG) names.push(Lib.CONFIG.SHEETS.SESSION_LOG);
+        // Strict priority: LOG_DEBUG first, then LOG
         if (Lib.CONFIG.SHEETS.LOG_DEBUG) names.push(Lib.CONFIG.SHEETS.LOG_DEBUG);
         if (Lib.CONFIG.SHEETS.LOG) names.push(Lib.CONFIG.SHEETS.LOG);
       }
@@ -395,11 +394,36 @@ var Lib = Lib || {};
   Lib.onEdit_internal_ = function (e) {
     const lock = LockService.getScriptLock();
     if (!lock.tryLock(Lib.CONFIG.SETTINGS.LOCK_TIMEOUT_MS)) {
+      // WARNING: Lock acquisition failed
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Процесс редактирования уже выполняется",
+          "WARN",
+          "",
+          "onEdit_internal_",
+          "Другой процесс обработки событий все еще работает",
+          "Sync",
+          "WARNING"
+        );
+      }
       Lib.logWarn("onEdit: занято другим запуском, пропускаем.");
       return;
     }
     try {
       if (!e || !e.range) return;
+
+      // START: Log edit event entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Обработка события редактирования",
+          "DEBUG",
+          "",
+          "onEdit_internal_",
+          "Началась обработка события изменения листа",
+          "Sync",
+          "START"
+        );
+      }
 
       const range = e.range;
       const sheet = range.getSheet();
@@ -446,6 +470,18 @@ var Lib = Lib || {};
       if (serviceSheetNames.includes(sheetName)) {
         if (sheetName === Lib.CONFIG.SHEETS.RULES) {
           _cachedSyncRules = null;
+          // PROGRESS: Rules cache cleared
+          if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+            Lib.logWithEmoji(
+              "Кэш правил очищен",
+              "DEBUG",
+              "",
+              "onEdit_internal_",
+              "Правила синхронизации были изменены, кэш сброшен",
+              "Sync",
+              "PROGRESS"
+            );
+          }
           Lib.logInfo("onEdit: правила изменились — кэш очищен.");
         }
         return;
@@ -453,6 +489,20 @@ var Lib = Lib || {};
 
       _processEditEvent(e);
     } catch (err) {
+      // ERROR: Log failure
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Критическая ошибка при обработке события редактирования",
+          "ERROR",
+          "",
+          "onEdit_internal_",
+          err && err.message ? err.message : String(err),
+          "Sync",
+          "ERROR",
+          null,
+          { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null }
+        );
+      }
       Lib.logError("onEdit_internal_: критическая ошибка", err);
     } finally {
       lock.releaseLock();
@@ -509,7 +559,12 @@ var Lib = Lib || {};
    */
   Lib.handleOnChange = function (e) {
     try {
+      // START: Function entry
       const changeType = e && e.changeType ? String(e.changeType) : "UNKNOWN";
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Обработка события изменения листа", "INFO", "", "handleOnChange", `Тип изменения: ${changeType}`, "Sync", "START", { changeType: changeType }, null);
+      }
+
 Lib.logDebug(`[onChange] ${changeType}`);
 
 if (!Lib.CONFIG || !Lib.CONFIG.SHEETS) {
@@ -547,7 +602,17 @@ if (ss) {
           );
         }
       });
+
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Обработка события изменения листа завершена успешно", "INFO", "", "handleOnChange", `Обновлены листы: ${touchedSheets.join(', ')}`, "Sync", "SUCCESS", { changeType: changeType }, { sheetsUpdated: touchedSheets.length, sheets: touchedSheets });
+      }
     } catch (err) {
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при обработке события изменения листа", "ERROR", "", "handleOnChange", err && err.message ? err.message : String(err), "Sync", "ERROR", { changeType: changeType }, { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null });
+      }
+
       Lib.logError("handleOnChange: критическая ошибка", err);
     }
   };
@@ -1507,10 +1572,37 @@ if (ss) {
   Lib.addArticleManually = function () {
     let ui = null;
     try { ui = SpreadsheetApp.getUi(); } catch (e) { console.warn("UI not available"); }
+
+    // START: Log function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Начало создания артикула вручную",
+        "INFO",
+        "",
+        "addArticleManually",
+        "Пользователь инициировал создание нового артикула",
+        "Article",
+        "START"
+      );
+    }
+
     try {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const sh = ss.getSheetByName(Lib.CONFIG.SHEETS.PRIMARY);
       if (!sh) throw new Error(`Лист "${Lib.CONFIG.SHEETS.PRIMARY}" не найден`);
+
+      // PROGRESS: Starting article generation logic
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Поиск максимального номера артикула",
+          "DEBUG",
+          "",
+          "addArticleManually",
+          "Анализ существующих артикулов для определения следующего номера",
+          "Article",
+          "PROGRESS"
+        );
+      }
 
       // найти максимальный номер по префиксу бренда
       const prefix = Lib.CONFIG.SETTINGS.BRAND_PREFIX;
@@ -1533,8 +1625,36 @@ if (ss) {
       const next = String(maxNum + 1).padStart(3, "0");
       const newId = `${prefix}${next}`;
 
+      // PROGRESS: Creating article row
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Добавление нового артикула в основной лист",
+          "DEBUG",
+          "",
+          "addArticleManually",
+          `Создание новой строки с ID: ${newId}`,
+          "Article",
+          "PROGRESS",
+          { newId: newId, prefix: prefix, number: maxNum + 1 }
+        );
+      }
+
       sh.appendRow([newId]);
       Lib.deleteKeyCacheForSheet(Lib.CONFIG.SHEETS.PRIMARY);
+
+      // PROGRESS: Triggering cascade and sync
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Запуск автосоздания и синхронизации",
+          "DEBUG",
+          "",
+          "addArticleManually",
+          `Имитирование события onEdit для артикула ${newId}`,
+          "Article",
+          "PROGRESS",
+          { newId: newId }
+        );
+      }
 
       // имитируем onEdit для автосоздания и синхронизации
       const e = {
@@ -1547,9 +1667,38 @@ if (ss) {
           Lib.onEdit_internal_(e);
       }
 
+      // SUCCESS: Log completion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Артикул создан и синхронизирован успешно",
+          "INFO",
+          "",
+          "addArticleManually",
+          `Новый артикул ${newId} создан и запущена синхронизация`,
+          "Article",
+          "SUCCESS",
+          { newId: newId },
+          { articleId: newId, cascadeTriggered: true, syncInitiated: !!Lib.onEdit_internal_ }
+        );
+      }
+
       if (ui) ui.alert(`Новый артикул ${newId} создан.`);
       console.log(`Новый артикул ${newId} создан.`);
     } catch (err) {
+      // ERROR: Log failure with full context
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при создании артикула",
+          "ERROR",
+          "",
+          "addArticleManually",
+          err && err.message ? err.message : String(err),
+          "Article",
+          "ERROR",
+          null,
+          { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null }
+        );
+      }
       console.error("addArticleManually error: " + err.message);
       if (ui) ui.alert(`Ошибка: ${err.message}`);
       Lib.logError("addArticleManually: ошибка", err);
@@ -1572,52 +1721,172 @@ if (ss) {
 
     const sheet = ss.getActiveSheet();
     const sheetName = sheet.getName();
-    const sheetsConfig = (Lib.CONFIG && Lib.CONFIG.SHEETS) || {};
-    if (!sheetsConfig || Object.keys(sheetsConfig).length === 0) {
-      ui.alert("Конфигурация проекта не загружена. Обновите библиотеку.");
-      return;
-    }
-    const service = [
-      sheetsConfig.RULES,
-      sheetsConfig.LOG,
-      sheetsConfig.EXTERNAL_DOCS,
-    ].filter(Boolean);
-    if (service.includes(sheetName)) {
-      ui.alert("Нельзя удалять строки на служебных листах.");
-      return;
-    }
 
-    const rows = new Set();
-    sel.getRanges().forEach((r) => {
-      for (let i = r.getRow(); i <= r.getLastRow(); i++) if (i > 1) rows.add(i);
-    });
-    const rowsSorted = Array.from(rows).sort((a, b) => b - a);
-    if (rowsSorted.length === 0) {
-      ui.alert("Нет строк данных для удаления");
-      return;
+    // START: Log function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Начало удаления выбранных строк с синхронизацией",
+        "INFO",
+        "",
+        "deleteSelectedRowsWithSync",
+        `Пользователь инициировал удаление строк на листе "${sheetName}"`,
+        "Delete",
+        "START",
+        { sheetName: sheetName, selection: "active" }
+      );
     }
 
-    const confirm = ui.alert(
-      "Подтверждение",
-      `Удалить ${rowsSorted.length} строк(и) на листе "${sheetName}" и синхронно в связанных?`,
-      ui.ButtonSet.YES_NO
-    );
-    if (confirm !== ui.Button.YES) return;
+    try {
+      const sheetsConfig = (Lib.CONFIG && Lib.CONFIG.SHEETS) || {};
+      if (!sheetsConfig || Object.keys(sheetsConfig).length === 0) {
+        ui.alert("Конфигурация проекта не загружена. Обновите библиотеку.");
+        return;
+      }
+      const service = [
+        sheetsConfig.RULES,
+        sheetsConfig.LOG,
+        sheetsConfig.EXTERNAL_DOCS,
+      ].filter(Boolean);
 
-    // собираем ID и удаляем локально
-    const ids = [];
-    rowsSorted.forEach((r) => {
-      const id = String(sheet.getRange(r, 1).getValue() || "").trim();
-      if (id) ids.push(id);
-      sheet.deleteRow(r);
-    });
-    Lib.deleteKeyCacheForSheet(sheetName);
+      // WARNING: If trying to delete from service sheets
+      if (service.includes(sheetName)) {
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Попытка удаления из служебного листа",
+            "WARN",
+            "",
+            "deleteSelectedRowsWithSync",
+            `Попытка удаления строк из служебного листа: ${sheetName}`,
+            "Delete",
+            "WARNING"
+          );
+        }
+        ui.alert("Нельзя удалять строки на служебных листах.");
+        return;
+      }
 
-    if (ids.length > 0) {
-      const res = Lib.processBatchDeletion_(ids);
-      ui.alert(res.message);
-    } else {
-      ui.alert(`Удалено ${rowsSorted.length} строк(и).`);
+      const rows = new Set();
+      sel.getRanges().forEach((r) => {
+        for (let i = r.getRow(); i <= r.getLastRow(); i++) if (i > 1) rows.add(i);
+      });
+      const rowsSorted = Array.from(rows).sort((a, b) => b - a);
+      if (rowsSorted.length === 0) {
+        ui.alert("Нет строк данных для удаления");
+        return;
+      }
+
+      // PROGRESS: Before confirmation
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Подготовка к удалению строк",
+          "DEBUG",
+          "",
+          "deleteSelectedRowsWithSync",
+          `Выбрано ${rowsSorted.length} строк для удаления`,
+          "Delete",
+          "PROGRESS",
+          null,
+          { rowsToDelete: rowsSorted.length, sheetName: sheetName }
+        );
+      }
+
+      const confirm = ui.alert(
+        "Подтверждение",
+        `Удалить ${rowsSorted.length} строк(и) на листе "${sheetName}" и синхронно в связанных?`,
+        ui.ButtonSet.YES_NO
+      );
+      if (confirm !== ui.Button.YES) return;
+
+      // PROGRESS: Before actual deletion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Выполнение удаления строк",
+          "DEBUG",
+          "",
+          "deleteSelectedRowsWithSync",
+          `Удаление ${rowsSorted.length} строк из листа ${sheetName}`,
+          "Delete",
+          "PROGRESS"
+        );
+      }
+
+      // собираем ID и удаляем локально
+      const ids = [];
+      rowsSorted.forEach((r) => {
+        const id = String(sheet.getRange(r, 1).getValue() || "").trim();
+        if (id) ids.push(id);
+        sheet.deleteRow(r);
+      });
+      Lib.deleteKeyCacheForSheet(sheetName);
+
+      // PROGRESS: Before batch deletion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Синхронизация удаления в связанных листах",
+          "DEBUG",
+          "",
+          "deleteSelectedRowsWithSync",
+          `Синхронизация удаления ${ids.length} ID в целевых листах`,
+          "Delete",
+          "PROGRESS",
+          null,
+          { deletedIds: ids }
+        );
+      }
+
+      let resultMessage = `Удалено ${rowsSorted.length} строк(и).`;
+      if (ids.length > 0) {
+        const res = Lib.processBatchDeletion_(ids);
+        resultMessage = res.message;
+
+        // SUCCESS: Log completion with results
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Удаление строк с синхронизацией завершено успешно",
+            "INFO",
+            "",
+            "deleteSelectedRowsWithSync",
+            `Удалено ${rowsSorted.length} строк, синхронизировано ${ids.length} записей`,
+            "Delete",
+            "SUCCESS",
+            { sheetName: sheetName, rowCount: rowsSorted.length },
+            { deletedRows: rowsSorted.length, deletedIds: ids.length }
+          );
+        }
+      } else {
+        // SUCCESS: Log completion without batch sync
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Удаление строк завершено",
+            "INFO",
+            "",
+            "deleteSelectedRowsWithSync",
+            `Удалено ${rowsSorted.length} строк без ID для синхронизации`,
+            "Delete",
+            "SUCCESS",
+            { sheetName: sheetName, rowCount: rowsSorted.length },
+            { deletedRows: rowsSorted.length }
+          );
+        }
+      }
+      ui.alert(resultMessage);
+
+    } catch (err) {
+      // ERROR: Log failure with full context
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при удалении строк с синхронизацией",
+          "ERROR",
+          "",
+          "deleteSelectedRowsWithSync",
+          err && err.message ? err.message : String(err),
+          "Delete",
+          "ERROR",
+          { sheetName: sheetName },
+          { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null }
+        );
+      }
+      ui.alert(`Ошибка: ${err.message}`);
     }
   };
 
@@ -1645,6 +1914,20 @@ if (ss) {
     );
     if (resp !== ui.Button.YES) return;
 
+    // START: Log function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji(
+        "Начало синхронизации выбранных строк",
+        "INFO",
+        "",
+        "syncSelectedRow",
+        `Пользователь инициировал синхронизацию ${range.getNumRows()} строк на листе "${sheet.getName()}"`,
+        "Sync",
+        "START",
+        { sheetName: sheet.getName(), rowCount: range.getNumRows(), startRow: range.getRow(), endRow: range.getLastRow() }
+      );
+    }
+
     try {
       SpreadsheetApp.getActiveSpreadsheet().toast(
         `Синхронизация...`,
@@ -1652,7 +1935,35 @@ if (ss) {
         2
       );
       const rules = _loadSyncRules(true);
+
+      // PROGRESS: Log rules loaded
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Правила синхронизации загружены",
+          "DEBUG",
+          "",
+          "syncSelectedRow",
+          `Загружено ${rules.length} правил синхронизации`,
+          "Sync",
+          "PROGRESS",
+          null,
+          { rulesCount: rules.length }
+        );
+      }
+
       if (rules.length === 0) {
+        // WARNING: No rules found
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Нет активных правил синхронизации",
+            "WARN",
+            "",
+            "syncSelectedRow",
+            "В системе не найдено активных правил для выполнения синхронизации",
+            "Sync",
+            "WARNING"
+          );
+        }
         ui.alert("Нет активных правил");
         return;
       }
@@ -1667,6 +1978,21 @@ if (ss) {
       const rows = [];
       for (let r = range.getRow(); r <= range.getLastRow(); r++)
         if (r > 1) rows.push(r);
+
+      // PROGRESS: Log before sync loop
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Начало обработки строк",
+          "DEBUG",
+          "",
+          "syncSelectedRow",
+          `Обработка ${rows.length} строк по ${rules.length} правилам`,
+          "Sync",
+          "PROGRESS",
+          null,
+          { rowsCount: rows.length, rulesCount: rules.length }
+        );
+      }
 
       let counter = 0;
       rows.forEach((row) => {
@@ -1701,6 +2027,21 @@ if (ss) {
         });
       });
 
+      // SUCCESS: Log completion
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Синхронизация выбранных строк завершена успешно",
+          "INFO",
+          "",
+          "syncSelectedRow",
+          `Обработано ${counter} полей на ${rows.length} строках`,
+          "Sync",
+          "SUCCESS",
+          { sheetName: sheet.getName(), rowCount: rows.length },
+          { fieldsProcessed: counter, rowsProcessed: rows.length, rulesApplied: rules.length }
+        );
+      }
+
       SpreadsheetApp.getActiveSpreadsheet().toast(
         `Готово. Обработано ${counter} полей.`,
         "Готово",
@@ -1708,6 +2049,20 @@ if (ss) {
       );
       ui.alert(`Синхронизация завершена. Полей: ${counter}`);
     } catch (err) {
+      // ERROR: Log failure with full context
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Ошибка при синхронизации выбранных строк",
+          "ERROR",
+          "",
+          "syncSelectedRow",
+          err && err.message ? err.message : String(err),
+          "Sync",
+          "ERROR",
+          { sheetName: sheet.getName(), rowCount: range.getNumRows() },
+          { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null }
+        );
+      }
       Lib.logError("syncSelectedRow: ошибка", err);
       ui.alert(`Ошибка: ${err.message}`);
       SpreadsheetApp.getActiveSpreadsheet().toast('Ошибка синхронизации', 'Ошибка', 3);
@@ -1729,6 +2084,11 @@ if (ss) {
     }
 
     try {
+      // START: Function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Синхронизация нескольких строк начата", "INFO", "", "syncMultipleRows", `Синхронизация ${rowNumbers.length} строк`, "Sync", "START", { rowCount: rowNumbers.length, sheetName: sheetName }, null);
+      }
+
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const targetSheetName = sheetName || (global.CONFIG && global.CONFIG.SHEETS && global.CONFIG.SHEETS.PRIMARY) || "Главная";
       const sheet = ss.getSheetByName(targetSheetName);
@@ -1810,7 +2170,17 @@ if (ss) {
       if (typeof Lib.updateOrderFormBorders === 'function') {
         Lib.updateOrderFormBorders();
       }
+
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Синхронизация нескольких строк завершена успешно", "INFO", "", "syncMultipleRows", `Синхронизировано ${rowNumbers.length} строк, обработано ${counter} полей`, "Sync", "SUCCESS", { rowCount: rowNumbers.length, sheetName: targetSheetName }, { rowsSynced: rowNumbers.length, fieldsProcessed: counter });
+      }
     } catch (err) {
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при синхронизации нескольких строк", "ERROR", "", "syncMultipleRows", err && err.message ? err.message : String(err), "Sync", "ERROR", { rowCount: rowNumbers.length, sheetName: sheetName }, { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null });
+      }
+
       Lib.logError("syncMultipleRows: ошибка", err);
     }
   };
@@ -1821,6 +2191,12 @@ if (ss) {
   Lib.runManualCascadeOnCertification = function () {
     const ui = SpreadsheetApp.getUi();
     const name = Lib.CONFIG.SHEETS.CERTIFICATION;
+
+    // START: Function entry
+    if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+      Lib.logWithEmoji("Запуск каскадов на листе Сертификация", "INFO", "", "runManualCascadeOnCertification", `Пересчёт всех строк на листе "${name}"`, "Certificate", "START", { sheetName: name }, null);
+    }
+
     const resp = ui.alert(
       "Пересчёт каскадов",
       `Пересчитать все строки на листе "${name}"?`,
@@ -1847,11 +2223,22 @@ if (ss) {
         2
       );
       const fakeHeader = "Объём"; // триггерим полный пересчёт
+      const rowsProcessed = last - 1; // минус заголовок
       for (let r = 2; r <= last; r++)
         _runCertificationCascade(sh, r, fakeHeader);
       SpreadsheetApp.getActiveSpreadsheet().toast("Готово!", "OK", 5);
       ui.alert("Каскады пересчитаны.");
+
+      // SUCCESS: Function completed successfully
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Пересчёт каскадов завершён успешно", "INFO", "", "runManualCascadeOnCertification", `Пересчитано ${rowsProcessed} строк на листе "${name}"`, "Certificate", "SUCCESS", { sheetName: name }, { rowsProcessed: rowsProcessed, status: "completed" });
+      }
     } catch (err) {
+      // ERROR: Enhanced error logging
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji("Ошибка при пересчёте каскадов", "ERROR", "", "runManualCascadeOnCertification", err && err.message ? err.message : String(err), "Certificate", "ERROR", { sheetName: name }, { error: err ? err.toString() : "Unknown error", stack: err && err.stack ? err.stack : null });
+      }
+
       Lib.logError("runManualCascadeOnCertification: ошибка", err);
       ui.alert(`Ошибка: ${err.message}`);
       SpreadsheetApp.getActiveSpreadsheet().toast('Ошибка пересчёта', 'Ошибка', 3);
@@ -2891,8 +3278,33 @@ if (ss) {
       );
       if (resp !== ui.Button.YES) return;
 
+      // START: Log function entry
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Запуск полной синхронизации",
+          "INFO",
+          "",
+          "runFullSync",
+          "Пользователь инициировал полную синхронизацию всех правил",
+          "Sync",
+          "START"
+        );
+      }
+
       const lock = LockService.getScriptLock();
       if (!lock.tryLock(15000)) {
+        // WARNING: Lock acquisition failed
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Процесс синхронизации уже выполняется",
+            "WARN",
+            "",
+            "runFullSync",
+            "Не удалось получить блокировку - другой процесс ещё работает",
+            "Sync",
+            "WARNING"
+          );
+        }
         ui.alert("Процесс уже выполняется.");
         return;
       }
@@ -2930,7 +3342,35 @@ if (ss) {
             (!r.isExternal ||
               (typeof r.targetDocId === "string" && r.targetDocId))
         );
+
+        // PROGRESS: Log rules loaded
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Правила синхронизации загружены",
+            "DEBUG",
+            "",
+            "runFullSync",
+            `Всего правил загружено: ${allRulesRaw.length}, из них валидных: ${allRules.length}`,
+            "Sync",
+            "PROGRESS",
+            null,
+            { totalLoaded: allRulesRaw.length, validRules: allRules.length }
+          );
+        }
+
         if (allRules.length === 0) {
+          // WARNING: No valid rules found
+          if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+            Lib.logWithEmoji(
+              "Активные валидные правила не найдены",
+              "WARN",
+              "",
+              "runFullSync",
+              "В системе нет активных правил синхронизации для обработки",
+              "Sync",
+              "WARNING"
+            );
+          }
           ui.alert("Активные валидные правила не найдены.");
           return;
         }
@@ -2942,6 +3382,18 @@ if (ss) {
         }, {});
         const sheetsToProcess = Object.keys(rulesBySourceSheet);
         if (sheetsToProcess.length === 0) {
+          // WARNING: No source sheets to process
+          if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+            Lib.logWithEmoji(
+              "Нет листов-источников для проверки",
+              "WARN",
+              "",
+              "runFullSync",
+              "После фильтрации правил не осталось листов-источников",
+              "Sync",
+              "WARNING"
+            );
+          }
           ui.alert("Нет листов-источников для проверки.");
           return;
         }
@@ -2961,15 +3413,57 @@ if (ss) {
           JSON.stringify(state)
         );
 
+        // PROGRESS: Log state initialization
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Инициализация полной синхронизации",
+            "DEBUG",
+            "",
+            "runFullSync",
+            `К обработке ${sheetsToProcess.length} листов-источников`,
+            "Sync",
+            "PROGRESS",
+            null,
+            { sheetsCount: sheetsToProcess.length, totalRules: allRules.length, startedAt: state.startedAtUtc }
+          );
+        }
+
         ss.toast(
           `Старт полной синхронизации… (${sheetsToProcess.length} листов)`,
           "Full Sync",
           8
         );
 
+        // PROGRESS: Before first iteration
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Начало обработки листов",
+            "DEBUG",
+            "",
+            "runFullSync",
+            `Запуск обработки ${sheetsToProcess.length} листов по ${allRules.length} правилам`,
+            "Sync",
+            "PROGRESS"
+          );
+        }
+
         // 5) Первая итерация (дальше _continueFullSync сама поставит таймер, если надо)
         Lib._continueFullSync();
       } catch (e) {
+        // ERROR: Log failure with full context
+        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+          Lib.logWithEmoji(
+            "Ошибка запуска полной синхронизации",
+            "ERROR",
+            "",
+            "runFullSync",
+            e && e.message ? e.message : String(e),
+            "Sync",
+            "ERROR",
+            null,
+            { error: e ? e.toString() : "Unknown error", stack: e && e.stack ? e.stack : null }
+          );
+        }
         Lib.logError("[FullSync] Ошибка запуска runFullSync", e);
         ui.alert(`Ошибка запуска: ${e && e.message ? e.message : e}`);
       } finally {
@@ -3211,6 +3705,24 @@ if (ss) {
 
       // всё готово
       props.deleteProperty(STATE_KEY);
+
+      // SUCCESS: Log completion with full statistics
+      const totalCorrections = state.totalCorrections || 0;
+      const processingTimeMs = new Date().getTime() - new Date(state.startedAtUtc).getTime();
+      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
+        Lib.logWithEmoji(
+          "Полная синхронизация завершена успешно",
+          "INFO",
+          "",
+          "_continueFullSync",
+          `Обработано ${state.sheetIndex} листов, выполнено ${totalCorrections} исправлений`,
+          "Sync",
+          "SUCCESS",
+          null,
+          { sheetsProcessed: state.sheetIndex, totalCorrections: totalCorrections, processingTimeMs: processingTimeMs, startedAt: state.startedAtUtc }
+        );
+      }
+
       SpreadsheetApp.getActiveSpreadsheet().toast(
         `Полная синхронизация завершена. Исправлений: ${
           state.totalCorrections || 0

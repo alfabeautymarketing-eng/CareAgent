@@ -31,7 +31,10 @@ var Lib = Lib || {};
             };
             
             let finalEndpoint = endpoint;
-            if (!finalEndpoint.startsWith("/api/v1")) {
+            if (finalEndpoint.startsWith("//")) {
+                // Если начинается с //, считаем это путем от корня (без /api/v1)
+                finalEndpoint = finalEndpoint.substring(1);
+            } else if (!finalEndpoint.startsWith("/api/v1")) {
                 if (!finalEndpoint.startsWith("/")) finalEndpoint = "/" + finalEndpoint;
                 finalEndpoint = "/api/v1" + finalEndpoint;
             }
@@ -418,4 +421,343 @@ var Lib = Lib || {};
         }
     };
 
+    // --- OVERRIDE: Collect Documents ---
+    Lib.collectAndCopyDocuments = function() {
+        const ui = SpreadsheetApp.getUi();
+        const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+        const brandPrefix = (Lib.CONFIG && Lib.CONFIG.SETTINGS && Lib.CONFIG.SETTINGS.BRAND_PREFIX) || "MT";
+
+        try {
+            ui.toast("Сбор документов на сервере...", "Агент", 30);
+            const res = Lib.callServer("/documents/collect", {
+                spreadsheet_id: ssId,
+                target_sheet: "Для инвойса",
+                brand_prefix: brandPrefix
+            });
+
+            ui.alert("Операция завершена!", res.data.message, ui.ButtonSet.OK);
+        } catch (e) {
+            ui.alert("Ошибка сбора документов", e.message, ui.ButtonSet.OK);
+        }
+    };
+
+    Lib.collectAndCopyDocuments_proxy = function() {
+        return Lib.collectAndCopyDocuments();
+    };
+
+    // --- ARCHIVED: LOG SHEET FUNCTIONS (removed - all logging is server-side now) ---
+    // Previously: quickCleanLogSheet(), recreateLogSheet(), recreateDebugLogSheet()
+    // These tried to manage local Google Sheets logging
+    // Now: All logging is server-side only
+
+    // --- OVERRIDE: Archive Logs ---
+    Lib.manualArchiveLogs_proxy = function() {
+        const ui = SpreadsheetApp.getUi();
+        const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+        
+        try {
+            ui.toast("Архивация логов на сервере...", "Агент", 30);
+            const res = Lib.callServer("/logs/archive", {
+                spreadsheet_id: ssId
+            });
+            
+            ui.alert("Архивация завершена!", `Записано ${res.data.total_rows} строк в ${res.data.archive_name}`, ui.ButtonSet.OK);
+        } catch (e) {
+            ui.alert("Ошибка архивации", e.message, ui.ButtonSet.OK);
+        }
+    };
+
+    // --- OVERRIDE: Archive Status ---
+    Lib.showArchiveStatus_proxy = function() {
+        const ui = SpreadsheetApp.getUi();
+        const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+        
+        try {
+            const res = Lib.callServer("/logs/archive/status", {
+                spreadsheet_id: ssId
+            }, "GET");
+            
+            if (!res || !res.data) throw new Error("Нет данных от сервера");
+            
+            const data = res.data;
+            let status = `Архив: ${data.archive_name}\n`;
+            status += `Существует: ${data.exists ? "✅ Да" : "❌ Нет"}\n`;
+            if (data.exists && data.last_modified) {
+                status += `Изменен: ${data.last_modified}`;
+            }
+            
+            ui.alert("Статус архива", status, ui.ButtonSet.OK);
+        } catch (e) {
+            ui.alert("Ошибка статуса", e.message, ui.ButtonSet.OK);
+        }
+    };
+
+    // --- REMOVED: Local sheet navigation functions (now server-side only) ---
+    // Previously: showLogJournal(), showSyncJournal() tried to navigate to local sheets
+    // Now: All logging is server-side, access via server URLs
+
+    /**
+     * Проверка статуса всех внешних сервисов с детальным логированием.
+     */
+    Lib.showAllServicesStatus = function() {
+        const ui = SpreadsheetApp.getUi();
+        SpreadsheetApp.getActive().toast("Проверка статуса всех сервисов...", "Экосистема", 5);
+
+        // START: Логируем начало процесса
+        if (Lib.logWithEmoji) {
+            Lib.logWithEmoji(
+                "Запуск полной диагностики системы", 
+                "INFO", 
+                "🚀", 
+                "showAllServicesStatus", 
+                "Начата проверка всех внешних сервисов", 
+                "System", 
+                "START"
+            );
+        }
+
+        try {
+            const checkResults = {
+                server: { status: "PENDING", message: "" },
+                gemini: { status: "PENDING", message: "" },
+                drive: { status: "PENDING", message: "" }
+            };
+
+            // 1. Проверка основного сервера
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Проверка связи с основным сервером...", "DEBUG", "⏳", "showAllServicesStatus", "Вызов //health", "API", "PROGRESS");
+            }
+
+            let serverStatus = "🔴 Ошибка";
+            try {
+                const res = Lib.callServer("//health", {}, "GET");
+                if (res && res.status === "healthy") {
+                    serverStatus = "🟢 OK";
+                    checkResults.server = { status: "OK", message: "Healthy", details: res };
+                    if (Lib.logWithEmoji) {
+                        Lib.logWithEmoji("Сервер доступен", "INFO", "✅", "showAllServicesStatus", "Ответ HEALTHY получен", "API", "SUCCESS", null, res);
+                    }
+                } else {
+                    checkResults.server = { status: "ERROR", message: "Invalid Response", details: res };
+                    if (Lib.logWithEmoji) {
+                        Lib.logWithEmoji("Некорректный ответ сервера", "WARN", "⚠️", "showAllServicesStatus", "Статус не healthy", "API", "WARNING", null, res);
+                    }
+                }
+            } catch(e) { 
+                serverStatus = "🔴 " + e.message;
+                checkResults.server = { status: "ERROR", message: e.message };
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Ошибка связи с сервером", "ERROR", "❌", "showAllServicesStatus", e.message, "API", "ERROR", null, {error: e.toString()});
+                }
+            }
+            
+            // 2. Проверка Gemini/AI
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Проверка статуса Gemini AI...", "DEBUG", "⏳", "showAllServicesStatus", "Вызов /ai/status", "API", "PROGRESS");
+            }
+
+            let geminiStatus = "🔴 Ошибка";
+            try {
+                const res = Lib.callServer("/ai/status", {}, "GET");
+                if (res && res.status === "online") {
+                    geminiStatus = "🟢 OK";
+                    checkResults.gemini = { status: "OK", message: "Online", model: res.model };
+                    if (Lib.logWithEmoji) {
+                        Lib.logWithEmoji("Gemini AI доступен", "INFO", "✅", "showAllServicesStatus", `Модель: ${res.model}`, "API", "SUCCESS", null, res);
+                    }
+                } else {
+                    checkResults.gemini = { status: "ERROR", message: "Offline/Error", details: res };
+                    if (Lib.logWithEmoji) {
+                        Lib.logWithEmoji("Gemini AI вернул ошибку", "WARN", "⚠️", "showAllServicesStatus", `Статус: ${res.status}, Ошибка: ${res.error}`, "API", "WARNING", null, res);
+                    }
+                }
+            } catch(e) { 
+                geminiStatus = "🔴 " + e.message;
+                checkResults.gemini = { status: "ERROR", message: e.message };
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Ошибка проверки Gemini AI", "ERROR", "❌", "showAllServicesStatus", e.message, "API", "ERROR", null, {error: e.toString()});
+                }
+            }
+            
+            // 3. Проверка Google Drive
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji("Проверка доступа к Google Drive...", "DEBUG", "⏳", "showAllServicesStatus", "Получение корневой папки", "Storage", "PROGRESS");
+            }
+
+            let driveStatus = "🟢 OK";
+            try {
+                const root = DriveApp.getRootFolder();
+                checkResults.drive = { status: "OK", message: "Access Granted", name: root.getName() };
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Google Drive доступен", "INFO", "✅", "showAllServicesStatus", "Корневая папка получена", "Storage", "SUCCESS");
+                }
+            } catch(e) { 
+                driveStatus = "🔴 " + e.message;
+                checkResults.drive = { status: "ERROR", message: e.message };
+                if (Lib.logWithEmoji) {
+                    Lib.logWithEmoji("Ошибка доступа к Google Drive", "ERROR", "❌", "showAllServicesStatus", e.message, "Storage", "ERROR", null, {error: e.toString()});
+                }
+            }
+            
+            const resultsSummary = `Основной сервер: ${serverStatus}\nGemini AI: ${geminiStatus}\nGoogle Drive: ${driveStatus}`;
+            ui.alert("Статус сервисов", resultsSummary, ui.ButtonSet.OK);
+            
+            // SUCCESS: Итоговый лог
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji(
+                    "Диагностика завершена", 
+                    "INFO", 
+                    "🏁", 
+                    "showAllServicesStatus", 
+                    resultsSummary.replace(/\n/g, ", "), 
+                    "System", 
+                    "SUCCESS", 
+                    null, 
+                    checkResults
+                );
+            }
+
+        } catch(e) {
+            ui.alert("Ошибка при проверке", e.message, ui.ButtonSet.OK);
+            // ERROR: Итоговый лог
+            if (Lib.logWithEmoji) {
+                Lib.logWithEmoji(
+                    "Критическая ошибка диагностики", 
+                    "ERROR", 
+                    "📛", 
+                    "showAllServicesStatus", 
+                    e.message, 
+                    "System", 
+                    "ERROR", 
+                    null, 
+                    {error: e.toString()}
+                );
+            }
+        }
+    };
+
+    // --- REMOVED: Local dashboard navigation (now server-side only) ---
+    // Previously: openLogDashboard() tried to create/open local sheet
+    // Now: Dashboard is accessed via server URL
+
+    /**
+     * Opens the server-hosted logging dashboard
+     */
+    Lib.openServerDashboard = function() {
+        const ui = SpreadsheetApp.getUi();
+        const serverUrl = (Lib.CONFIG && Lib.CONFIG.SERVER_URL) || "http://localhost:5000";
+        const dashboardUrl = serverUrl + "/logs-ui";
+
+        ui.alert(
+            "📊 Открыть Дашборд",
+            "Дашборд логов доступен по адресу:\n\n" + dashboardUrl + "\n\nСкопируйте ссылку в браузер.",
+            ui.ButtonSet.OK
+        );
+
+        // Log the action
+        if (Lib.logWithEmoji) {
+            Lib.logWithEmoji(
+                "Запрос открытия дашборда",
+                "INFO",
+                "",
+                "openServerDashboard",
+                "Пользователь открыл дашборд с сервера",
+                "System",
+                "SUCCESS",
+                {},
+                { url: dashboardUrl }
+            );
+        }
+    };
+
+    /**
+     * Opens the server-hosted logs journal
+     */
+    Lib.openServerLogsJournal = function() {
+        const ui = SpreadsheetApp.getUi();
+        const serverUrl = (Lib.CONFIG && Lib.CONFIG.SERVER_URL) || "http://localhost:5000";
+        const logsUrl = serverUrl + "/logs-ui";
+
+        ui.alert(
+            "📝 Открыть Журнал логов",
+            "Журнал логов доступен по адресу:\n\n" + logsUrl + "\n\nСкопируйте ссылку в браузер.",
+            ui.ButtonSet.OK
+        );
+
+        // Log the action
+        if (Lib.logWithEmoji) {
+            Lib.logWithEmoji(
+                "Запрос открытия журнала логов",
+                "INFO",
+                "",
+                "openServerLogsJournal",
+                "Пользователь открыл журнал логов с сервера",
+                "System",
+                "SUCCESS",
+                {},
+                { url: logsUrl }
+            );
+        }
+    };
+
+    /**
+     * Opens the server-hosted sync journal
+     */
+    Lib.openServerSyncJournal = function() {
+        const ui = SpreadsheetApp.getUi();
+        const serverUrl = (Lib.CONFIG && Lib.CONFIG.SERVER_URL) || "http://localhost:5000";
+        const syncUrl = serverUrl + "/logs-ui";
+
+        ui.alert(
+            "🔄 Открыть Журнал синхронизации",
+            "Журнал синхронизации доступен по адресу:\n\n" + syncUrl + "\n\nСкопируйте ссылку в браузер.",
+            ui.ButtonSet.OK
+        );
+
+        // Log the action
+        if (Lib.logWithEmoji) {
+            Lib.logWithEmoji(
+                "Запрос открытия журнала синхро",
+                "INFO",
+                "",
+                "openServerSyncJournal",
+                "Пользователь открыл журнал синхронизации с сервера",
+                "System",
+                "SUCCESS",
+                {},
+                { url: syncUrl }
+            );
+        }
+    };
+
+    // --- PROXY FUNCTIONS FOR MENU ---
+    Lib.showAllServicesStatus_proxy = function() {
+        return Lib.showAllServicesStatus();
+    };
+
+    // --- NEW: Server-based dashboard and journal accessors ---
+    // These functions open server URLs instead of local sheets
+
+    Lib.openServerDashboard_proxy = function() {
+        return Lib.openServerDashboard();
+    };
+
+    Lib.openServerLogsJournal_proxy = function() {
+        return Lib.openServerLogsJournal();
+    };
+
+    Lib.openServerSyncJournal_proxy = function() {
+        return Lib.openServerSyncJournal();
+    };
+
+    // --- ARCHIVED: LOG_DEBUG Sheet Structure (All removed - server-side logging only) ---
+    // NOTE: All local Google Sheets logging has been removed
+    // Logging is now exclusively server-side
+    // Dashboard and journals are accessed via server URLs
+
 })(Lib);
+
+// ============= ARCHIVED: GLOBAL PROXY FUNCTIONS (removed - server-side logging only) =============
+// Previously: callServerLogCommand(), callServerRecreateDebugLog(), Lib.refreshLogs()
+// These tried to manage local Google Sheets logging
+// Now: All logging is server-side only - access via server URLs
