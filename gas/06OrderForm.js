@@ -1951,7 +1951,7 @@ var Lib = Lib || {};
    */
   Lib.showAllOrderData = function() {
     var ui = SpreadsheetApp.getUi();
-    var menuTitle = "Стадии по заказ";
+    var menuTitle = "Сортировка";
 
     try {
       Lib.logInfo("[OrderStages] Показать все данные: старт");
@@ -1996,7 +1996,7 @@ var Lib = Lib || {};
    */
   Lib.showOrderStage = function() {
     var ui = SpreadsheetApp.getUi();
-    var menuTitle = "Стадии по заказ";
+    var menuTitle = "Сортировка";
 
     try {
       Lib.logInfo("[OrderStages] Показать стадию 'Заказ': старт");
@@ -2061,7 +2061,7 @@ var Lib = Lib || {};
    */
   Lib.showPromotionsStage = function() {
     var ui = SpreadsheetApp.getUi();
-    var menuTitle = "Стадии по заказ";
+    var menuTitle = "Сортировка";
 
     try {
       Lib.logInfo("[OrderStages] Показать стадию 'Акции': старт");
@@ -2128,7 +2128,7 @@ var Lib = Lib || {};
    */
   Lib.showSetStage = function() {
     var ui = SpreadsheetApp.getUi();
-    var menuTitle = "Стадии по заказ";
+    var menuTitle = "Сортировка";
 
     try {
       Lib.logInfo("[OrderStages] Показать стадию 'Набор': старт");
@@ -2195,7 +2195,7 @@ var Lib = Lib || {};
    */
   Lib.showPriceStage = function() {
     var ui = SpreadsheetApp.getUi();
-    var menuTitle = "Стадии по заказ";
+    var menuTitle = "Сортировка";
 
     try {
       Lib.logInfo("[OrderStages] Показать стадию 'Прайс': старт");

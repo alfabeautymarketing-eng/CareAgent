@@ -3,6 +3,7 @@ Configuration management using pydantic-settings.
 """
 
 
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
 
     # Google
     google_credentials_file: str = "config/credentials.json"
-    google_credentials_base64: str | None = None
+    google_credentials_base64: Optional[str] = None
 
     # Gemini AI
     gemini_api_key: str = ""
@@ -44,15 +45,15 @@ class Settings(BaseSettings):
     cache_ttl: int = 3600
 
     # Supabase
-    supabase_url: str | None = None
-    supabase_service_key: str | None = None
+    supabase_url: Optional[str] = None
+    supabase_service_key: Optional[str] = None
 
     # Webhook
     webhook_secret: str = ""
 
     # Notifications
-    telegram_bot_token: str | None = None
-    telegram_chat_id: str | None = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
 
     # Sync log storage
     sync_log_data_dir: str = "data/sync_logs"

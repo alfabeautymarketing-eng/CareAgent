@@ -4,10 +4,24 @@ Price Processor Service
 Handles parsing and processing of supplier price lists (Б/З поставщик).
 Replaces GAS functions: processMtMainPrice, processMtTesterPrice, processMtSamplesPrice,
 processSkPriceSheet, processSkPriceProbes, processSsPriceSheet.
+
+Full processing flow (matches original GAS logic):
+1. Create snapshot in source document
+2. Parse data from source
+3. Clear ID-P, ID-G, and price columns
+4. Sync with main sheet (Главная)
+5. Fill ID-G for rows without ID-P
+6. Fill ID-P on all sheets
+7. Copy prices to related sheets
+8. Apply formulas on Динамика цены and Расчет цены
+9. Replicate new articles
+10. Update statuses (samples mode only)
 """
 
+import asyncio
 import yaml
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
@@ -15,6 +29,11 @@ from dataclasses import dataclass, field
 from src.utils.logger import logger
 from src.services.sheets import SheetsService
 from src.services.product_matcher import ProductMatcher
+from src.models.product import (
+    Product, ProjectCode, SupplierInfo, LocalizationInfo, 
+    PriceInfo, ProductStatus, ProductType
+)
+from src.storage.supabase_store import get_supabase_product_store
 
 
 @dataclass
@@ -144,6 +163,112 @@ class PriceProcessor:
 
         return parser_config
 
+    async def process_all(
+        self,
+        project: str,
+        spreadsheet_id: str,
+        source_doc_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Run ALL processing cycles for a project sequentially.
+
+        Matches GAS behavior where each project has multiple processing stages:
+        - MT: main (Б/З поставщик) → tester (Тестер) → samples (Пробники)
+        - SK: main (Б/З поставщик) → probes (Пробники)
+        - SS: main (Б/З поставщик)
+
+        Each cycle runs to completion before the next one starts.
+        """
+        project = project.lower()
+        config = self.load_config(project)
+
+        cycles = config.get("processing_cycles", [])
+        if not cycles:
+            # Fallback: single main cycle
+            cycles = [{"mode": "main"}]
+
+        self._log(
+            spreadsheet_id,
+            "ПРАЙС",
+            f"Полная обработка {project.upper()}",
+            f"Циклов: {len(cycles)} ({', '.join(c['mode'] for c in cycles)})",
+            "🚀"
+        )
+
+        results = []
+        total_rows = 0
+        total_new = 0
+
+        for i, cycle in enumerate(cycles):
+            cycle_mode = cycle["mode"]
+            cycle_num = i + 1
+
+            self._log(
+                spreadsheet_id,
+                "ПРАЙС",
+                f"Цикл {cycle_num}/{len(cycles)}: {cycle_mode}",
+                f"Старт",
+                "🔄"
+            )
+
+            try:
+                result = await self.process(
+                    project=project,
+                    mode=cycle_mode,
+                    spreadsheet_id=spreadsheet_id,
+                    source_doc_id=source_doc_id,
+                    dry_run=False
+                )
+                results.append(result)
+                total_rows += result.get("processed_rows", 0)
+                total_new += result.get("new_articles", 0)
+
+                self._log(
+                    spreadsheet_id,
+                    "ПРАЙС",
+                    f"Цикл {cycle_num}/{len(cycles)}: {cycle_mode} завершён",
+                    f"Строк: {result.get('processed_rows', 0)}",
+                    "✅"
+                )
+
+                # Pause between cycles to avoid rate limiting (60 req/min quota)
+                if i < len(cycles) - 1:
+                    logger.info(f"Pausing 15s before next cycle to avoid rate limits...")
+                    await asyncio.sleep(15)
+
+            except Exception as e:
+                logger.error(f"Cycle {cycle_mode} failed: {e}", exc_info=True)
+                self._log(
+                    spreadsheet_id,
+                    "ПРАЙС",
+                    f"Цикл {cycle_num}/{len(cycles)}: {cycle_mode} ОШИБКА",
+                    str(e),
+                    "❌"
+                )
+                results.append({
+                    "status": "error",
+                    "mode": cycle_mode,
+                    "message": str(e),
+                    "processed_rows": 0
+                })
+
+        self._log(
+            spreadsheet_id,
+            "ПРАЙС",
+            f"Полная обработка {project.upper()} завершена",
+            f"Циклов: {len(cycles)}, строк: {total_rows}, новых: {total_new}",
+            "🏁"
+        )
+
+        return {
+            "status": "success",
+            "message": f"Полная обработка {project.upper()}: {len(cycles)} циклов, {total_rows} строк",
+            "cycles": len(cycles),
+            "total_rows": total_rows,
+            "total_new": total_new,
+            "results": results
+        }
+
     async def process(
         self,
         project: str,
@@ -153,7 +278,23 @@ class PriceProcessor:
         dry_run: bool = False
     ) -> Dict[str, Any]:
         """
-        Main processing method.
+        Main processing method - FULL GAS LOGIC IMPLEMENTATION.
+
+        Workflow (matches original GAS processMtMainPrice):
+        1. Load config and parser settings
+        2. Create snapshot in source document (NEW)
+        3. Read source data
+        4. Parse data based on project/mode
+        5. If dry_run, return preview
+        6. Clear columns: ID-P (5 sheets), ЦЕНА EXW, ID-G (main mode only)
+        7. Sync with main sheet (Главная)
+        8. Fill ID-G for rows without ID-P (NEW)
+        9. Fill ID-P on ALL sheets (optimized)
+        10. Copy prices to related sheets
+        11. Apply REAL formulas on Динамика цены (NEW)
+        12. Apply INDEX/MATCH formulas on Расчет цены (NEW)
+        13. Replicate new articles
+        14. Update statuses (samples mode only)
 
         Args:
             project: Project code (mt, sk, ss)
@@ -168,14 +309,43 @@ class PriceProcessor:
         project = project.lower()
         mode = mode.lower()
 
-        self._log(spreadsheet_id, "ПРАЙС", f"Обработка {project.upper()} {mode}", "Старт", "🚀")
+        self._log(spreadsheet_id, "ПРАЙС", f"Обработка {project.upper()} {mode}", "Старт (полная логика GAS)", "🚀")
 
         try:
             # 1. Load config
             config = self.load_config(project)
             parser_config = self.get_parser_config(project, mode)
 
-            # 2. Read source data
+            # Get source document ID
+            actual_source_doc_id = source_doc_id
+            if not actual_source_doc_id:
+                source_config = config.get("source", {})
+                actual_source_doc_id = source_config.get("doc_id", spreadsheet_id)
+
+            # Get source sheet name - priority order:
+            # 1. processing_cycles[].source_sheet (from YAML cycles config)
+            # 2. source.sheets.{mode} (from YAML source section)
+            # 3. fallback to "-Б/З поставщик"
+            # NOTE: parser_config.sheet_name is parser description, NOT the actual source sheet
+            cycles = config.get("processing_cycles", [])
+            cycle_config = next((c for c in cycles if c.get("mode") == mode), {})
+            source_sheet_name = cycle_config.get("source_sheet")
+            if not source_sheet_name:
+                source_sheets = config.get("source", {}).get("sheets", {})
+                source_sheet_name = source_sheets.get(mode, "-Б/З поставщик")
+
+            # 2. Create snapshot in source document (NEW - matches GAS)
+            if not dry_run and actual_source_doc_id:
+                try:
+                    await self._create_source_snapshot(
+                        actual_source_doc_id,
+                        source_sheet_name,
+                        spreadsheet_id
+                    )
+                except Exception as e:
+                    logger.warning(f"Snapshot creation failed (non-critical): {e}")
+
+            # 3. Read source data
             source_data = await self._read_source_data(
                 spreadsheet_id,
                 project,
@@ -191,7 +361,7 @@ class PriceProcessor:
                     "processed_rows": 0
                 }
 
-            # 3. Parse data based on project/mode
+            # 4. Parse data based on project/mode
             processed = self._parse_data(
                 source_data["values"],
                 project,
@@ -207,7 +377,7 @@ class PriceProcessor:
                     "processed_rows": 0
                 }
 
-            # 4. If dry_run, return preview
+            # 5. If dry_run, return preview
             if dry_run:
                 preview = [
                     {
@@ -227,12 +397,17 @@ class PriceProcessor:
                     "preview": preview
                 }
 
-            # 5. Clear ID-P columns (only for main mode)
+            # 6. CLEAR operations (only for main mode - tester/samples continue numbering)
             if mode == "main":
+                self._log(spreadsheet_id, "ПРАЙС", "Очистка столбцов", "ID-P, ЦЕНА EXW, ID-G", "🧹")
+                # Clear ID-P on all 5 sheets
                 await self._clear_idp_columns(spreadsheet_id, config)
+                # Clear ЦЕНА EXW из Б/З
                 await self._clear_price_exw_columns(spreadsheet_id, config)
+                # Clear ID-G on main sheet (NEW)
+                await self._clear_idg_column_on_main(spreadsheet_id, config)
 
-            # 5. Sync with main sheet
+            # 7. Sync with main sheet (Главная)
             sync_result = await self._sync_with_main(
                 spreadsheet_id,
                 processed,
@@ -240,26 +415,57 @@ class PriceProcessor:
                 project,
                 product_matcher=ProductMatcher(spreadsheet_id)
             )
-            
-            # 6. Replicate new articles across all sheets
-            if sync_result.new_articles:
-                self._log(spreadsheet_id, "АРТИКУЛ", "Синхронизация новых артикулов со всеми листами", f"Количество: {len(sync_result.new_articles)}", "🔄")
-                await self.sync_service.replicate_new_articles(spreadsheet_id, sync_result.new_articles)
 
-            # 7. Apply assigned ID-P to processed data
+            # 8. Fill ID-G for rows without ID-P (NEW - matches GAS _fillIdgForRowsWithoutIdp)
+            await self._fill_idg_for_rows_without_idp(spreadsheet_id, config)
+
+            # 9. Apply assigned ID-P to processed data
             self._apply_assigned_idp(processed, sync_result)
 
-            # 8. Fill ID-P on other sheets
-            await self._fill_idp_on_sheets(spreadsheet_id, config)
+            # Build ID → ID-P mapping for optimized fill
+            id_to_idp: Dict[str, str] = {}
+            try:
+                primary_sheet = config.get("sheets", {}).get("primary", "Главная")
+                ws = self.sheets.get_worksheet(spreadsheet_id, primary_sheet)
+                values = ws.get_all_values()
+                if values:
+                    headers = values[0]
+                    id_col = self._find_column_index(headers, "ID", -1)
+                    idp_col = self._find_column_index(headers, "ID-P", -1)
+                    if id_col >= 0 and idp_col >= 0:
+                        for row in values[1:]:
+                            id_val = self._as_trimmed_string(self._safe_get(row, id_col))
+                            idp_val = self._as_trimmed_string(self._safe_get(row, idp_col))
+                            if id_val and idp_val:
+                                id_to_idp[id_val] = idp_val
+            except Exception as e:
+                logger.warning(f"Failed to build ID→ID-P mapping: {e}")
 
-            # 9. Copy prices to related sheets
+            # 10. Fill ID-P on ALL sheets (OPTIMIZED - single batch)
+            await self._fill_idp_on_all_sheets_optimized(spreadsheet_id, config, id_to_idp)
+
+            # 11. Copy prices to related sheets
             price_multiplier = parser_config.get("price_multiplier", 1)
             await self._copy_prices_to_sheets(spreadsheet_id, processed, config, price_multiplier)
 
-            # 10. Recalculate formulas
-            await self._recalculate_formulas(spreadsheet_id, config)
+            # 12. Apply REAL formulas on Динамика цены (NEW - not just refresh)
+            await self._apply_price_dynamics_formulas(spreadsheet_id, config)
 
-            # 11. Update statuses (only for samples mode)
+            # 13. Apply INDEX/MATCH formulas on Расчет цены (NEW)
+            await self._apply_price_calculation_formulas(spreadsheet_id, config)
+
+            # 14. Replicate new articles across all sheets
+            if sync_result.new_articles:
+                self._log(
+                    spreadsheet_id,
+                    "АРТИКУЛ",
+                    "Синхронизация новых артикулов",
+                    f"Количество: {len(sync_result.new_articles)}",
+                    "🔄"
+                )
+                await self.sync_service.replicate_new_articles(spreadsheet_id, sync_result.new_articles)
+
+            # 15. Update statuses (only for samples mode)
             if mode == "samples" and parser_config.get("update_statuses_after"):
                 await self._update_statuses(spreadsheet_id, config)
 
@@ -267,18 +473,19 @@ class PriceProcessor:
                 spreadsheet_id,
                 "ПРАЙС",
                 f"Обработка {project.upper()} {mode} завершена",
-                f"Строк: {len(processed.rows)}, групп: {processed.unique_groups}",
+                f"Строк: {len(processed.rows)}, групп: {processed.unique_groups}, новых: {len(sync_result.created_rows)}",
                 "✅"
             )
 
             return {
                 "status": "success",
-                "message": f"Обработано {len(processed.rows)} артикулов",
+                "message": f"Обработано {len(processed.rows)} артикулов (полная логика GAS)",
                 "processed_rows": len(processed.rows),
                 "groups_found": processed.unique_groups,
                 "new_articles": len(sync_result.created_rows),
                 "updated_articles": len(sync_result.updated_rows),
                 "barcode_mismatches": len(sync_result.barcode_mismatches),
+                "idp_filled": len(id_to_idp),
                 "errors": []
             }
 
@@ -332,8 +539,13 @@ class PriceProcessor:
             sheet_name = parser_config["sheet_name"]
 
         try:
+            logger.info(f"Reading source data: doc={source_doc_id}, sheet='{sheet_name}', mode={mode}")
             ws = self.sheets.get_worksheet(source_doc_id, sheet_name)
             values = ws.get_all_values()
+            logger.info(f"Source sheet '{sheet_name}': {len(values)} rows, {len(values[0]) if values else 0} cols")
+            if values and len(values) > 1:
+                logger.info(f"Source sheet '{sheet_name}' row[0] (headers): {values[0][:8]}")
+                logger.info(f"Source sheet '{sheet_name}' row[1] (first data): {values[1][:8]}")
 
             # Try to get backgrounds for color-based parsing (SK)
             backgrounds = None
@@ -351,7 +563,7 @@ class PriceProcessor:
             }
 
         except Exception as e:
-            logger.error(f"Failed to read source data: {e}")
+            logger.error(f"Failed to read source data from sheet '{sheet_name}': {e}")
             raise ValueError(f"Не удалось прочитать данные из листа '{sheet_name}': {e}")
 
     def _parse_data(
@@ -388,20 +600,26 @@ class PriceProcessor:
 
         # Find header row
         header_row_index = self._find_header_row(values)
+        logger.info(f"_parse_mt_data mode={mode}: header_row_index={header_row_index}, total_rows={len(values)}")
         if header_row_index == -1:
             raise ValueError("Не найдена строка заголовков с CODE и DESCRIPTION")
 
         headers = values[header_row_index]
+        logger.info(f"_parse_mt_data mode={mode}: headers={headers[:8]}")
 
         # Get column indices
         excel_cols = parser_config.get("excel_columns", self.DEFAULT_EXCEL_COLUMNS)
         code_idx = self._find_column_index(headers, "CODE", excel_cols.get("CODE", 0))
-        category_idx = self._find_column_index(headers, "CATEGORY", excel_cols.get("CATEGORY", 1))
+        # CATEGORY is optional (e.g. -Тестер sheet has no CATEGORY column)
+        # Pass default=-1 so it returns -1 when not found, instead of falling back to index 1
+        category_idx = self._find_column_index(headers, "CATEGORY", -1)
         desc_idx = self._find_column_index(headers, "DESCRIPTION", excel_cols.get("DESCRIPTION", 2))
         format_idx = self._find_column_index(headers, "FORMAT", excel_cols.get("FORMAT", 3))
         units_idx = self._find_column_index(headers, "UNITS", excel_cols.get("UNITS", 4))
         price_idx = self._find_column_index(headers, "PRICE", excel_cols.get("PRICE", 5))
         ean_idx = self._find_column_index(headers, "EAN", excel_cols.get("EAN", 6))
+
+        logger.info(f"_parse_mt_data mode={mode}: code_idx={code_idx}, category_idx={category_idx}, desc_idx={desc_idx}, price_idx={price_idx}")
 
         if code_idx == -1 or desc_idx == -1:
             raise ValueError("Не найдены обязательные столбцы CODE и DESCRIPTION")
@@ -413,15 +631,27 @@ class PriceProcessor:
         price_multiplier = parser_config.get("price_multiplier", 1)
 
         # Parse rows
+        skipped_no_code = 0
+        skipped_no_desc = 0
+        group_rows = 0
         for i in range(header_row_index + 1, len(values)):
             row = values[i]
             code_value = self._as_trimmed_string(self._safe_get(row, code_idx))
             category_value = self._as_trimmed_string(self._safe_get(row, category_idx)) if category_idx != -1 else ""
             desc_value = self._as_trimmed_string(self._safe_get(row, desc_idx))
 
+            if not code_value:
+                skipped_no_code += 1
+                continue
+
             # Group detection: CODE exists AND CATEGORY empty
             if code_value and not category_value and not desc_value:
                 current_group = code_value
+                group_rows += 1
+                continue
+
+            if not desc_value:
+                skipped_no_desc += 1
                 continue
 
             # Article detection: CODE and DESCRIPTION exist
@@ -448,6 +678,13 @@ class PriceProcessor:
                 rows.append(parsed_row)
                 articles.append(code_value)
                 groups.append(group)
+
+        logger.info(
+            f"_parse_mt_data mode={mode} result: "
+            f"parsed={len(rows)}, groups={group_rows}, "
+            f"skipped_no_code={skipped_no_code}, skipped_no_desc={skipped_no_desc}, "
+            f"total_data_rows={len(values) - header_row_index - 1}"
+        )
 
         return ProcessedData(
             headers=self.OUTPUT_HEADERS.copy(),
@@ -768,7 +1005,7 @@ class PriceProcessor:
 
         self._log(spreadsheet_id, "ПРАЙС", "Очистка ID-P", f"Листы: {', '.join(sheets_to_clear)}", "🔄")
 
-        for sheet_name in sheets_to_clear:
+        for idx, sheet_name in enumerate(sheets_to_clear):
             try:
                 ws = self.sheets.get_worksheet(spreadsheet_id, sheet_name)
                 headers = ws.row_values(1)
@@ -784,6 +1021,10 @@ class PriceProcessor:
                     if num_rows > 1:
                         # Clear ID-P column (from row 2 to end)
                         ws.batch_clear([f"{chr(64 + idp_col)}2:{chr(64 + idp_col)}{num_rows}"])
+
+                # Delay between sheets to avoid rate limits
+                if idx < len(sheets_to_clear) - 1:
+                    await asyncio.sleep(2)
 
             except Exception as e:
                 logger.warning(f"Failed to clear ID-P on {sheet_name}: {e}")
@@ -826,7 +1067,9 @@ class PriceProcessor:
 
         result = SyncResult()
         primary_sheet = config.get("sheets", {}).get("primary", "Главная")
-        prefix = config.get("project", {}).get("code", project).upper() + "-"
+        # ID-P = plain numbers (1, 2, 3...) — NO prefix (matches GAS behavior)
+        # ID = project prefix for display (MT-001, SK-001...)
+        id_prefix = config.get("project", {}).get("code", project).upper() + "-"
 
         try:
             ws = self.sheets.get_worksheet(spreadsheet_id, primary_sheet)
@@ -847,6 +1090,26 @@ class PriceProcessor:
             units_col = self._find_column_index(headers, "шт./уп", 13)
             price_col = self._find_column_index(headers, "ЦЕНА EXW", -1)
             group_col = self._find_column_index(headers, "Группа", 16)
+            
+            # Additional columns for Supabase sync
+            idg_col = self._find_column_index(headers, "ID-G", -1)
+            idl_col = self._find_column_index(headers, "ID-L", -1)
+            
+            nameru_col = self._find_column_index(headers, "Название (рус)", -1)
+            if nameru_col == -1:
+                nameru_col = self._find_column_index(headers, "Название RUS", -1)
+                
+            line_col = self._find_column_index(headers, "Линия", -1)
+            if line_col == -1:
+                line_col = self._find_column_index(headers, "Линейка", -1)
+
+            # Prepare for Supabase sync
+            products_to_sync: List[Product] = []
+            try:
+                project_enum = ProjectCode(project.lower())
+            except ValueError:
+                project_enum = ProjectCode.MT # Default fallback
+
 
             # Build article -> row index map
             article_map: Dict[str, int] = {}
@@ -859,20 +1122,26 @@ class PriceProcessor:
             max_idp = 0
             max_id = 0
             for row in all_values[1:]:
-                # ID-P
+                # ID-P — plain numbers (1, 2, 3...)
                 idp_val = self._as_trimmed_string(self._safe_get(row, idp_col))
-                if idp_val and idp_val.startswith(prefix):
+                if idp_val:
                     try:
-                        num = int(idp_val[len(prefix):])
+                        num = int(idp_val)
                         max_idp = max(max_idp, num)
                     except ValueError:
-                        pass
-                
-                # ID
+                        # Try stripping old prefix if any legacy data
+                        if "-" in idp_val:
+                            try:
+                                num = int(idp_val.split("-")[-1])
+                                max_idp = max(max_idp, num)
+                            except ValueError:
+                                pass
+
+                # ID — has project prefix (MT-001, SK-001...)
                 id_val = self._as_trimmed_string(self._safe_get(row, id_col))
-                if id_val and id_val.startswith(prefix):
+                if id_val and id_val.startswith(id_prefix):
                     try:
-                        num = int(id_val[len(prefix):])
+                        num = int(id_val[len(id_prefix):])
                         max_id = max(max_id, num)
                     except ValueError:
                         pass
@@ -905,11 +1174,11 @@ class PriceProcessor:
                             "newValue": parsed_row.barcode
                         })
 
-                    # Assign ID-P if empty
+                    # Assign ID-P if empty (plain number, no prefix)
                     existing_idp = self._as_trimmed_string(self._safe_get(existing_row, idp_col))
                     if not existing_idp:
                         max_idp += 1
-                        new_idp = f"{prefix}{max_idp}"
+                        new_idp = str(max_idp)
                         result.assigned_idp[article] = new_idp
                         updates.append({
                             "range": f"{chr(65 + idp_col)}{row_idx}",
@@ -929,10 +1198,10 @@ class PriceProcessor:
                 else:
                     # Create new row
                     max_idp += 1
-                    new_idp = f"{prefix}{max_idp}"
-                    
+                    new_idp = str(max_idp)  # ID-P = plain number
+
                     max_id += 1
-                    new_id = f"{prefix}{max_id:03d}"  # Format as MT-001
+                    new_id = f"{id_prefix}{max_id:03d}"  # ID = MT-001 (with prefix)
                     
                     result.assigned_idp[article] = new_idp
 
@@ -947,12 +1216,13 @@ class PriceProcessor:
                         else:
                             self._log(spreadsheet_id, "Smart Match", "Соответствие не найдено или низкая уверенность", f"Цель: {parsed_row.name_eng}", "ℹ️")
 
-                    # Build new row data
+                    # Detect new_row initialization
                     new_row = [""] * len(headers)
                     if id_col >= 0:
                         new_row[id_col] = new_id
                     if idp_col >= 0:
                         new_row[idp_col] = new_idp
+
                     if article_col >= 0:
                         new_row[article_col] = article
                     if name_col >= 0:
@@ -979,6 +1249,67 @@ class PriceProcessor:
                         "name_eng": parsed_row.name_eng,
                         "match_info": match_info
                     })
+
+                # --- Create Product object for Supabase sync ---
+                try:
+                    # Determine values
+                    final_idp = new_idp if 'new_idp' in locals() else existing_idp
+
+                    if final_idp:
+                        # Values from existing row (if update) or empty (if new)
+                        val_idg = ""
+                        val_idl = ""
+                        val_nameru = ""
+                        val_line = ""
+
+                        if 'existing_row' in locals():
+                            val_idg = self._as_trimmed_string(self._safe_get(existing_row, idg_col)) if idg_col >= 0 else ""
+                            val_idl = self._as_trimmed_string(self._safe_get(existing_row, idl_col)) if idl_col >= 0 else ""
+                            val_nameru = self._as_trimmed_string(self._safe_get(existing_row, nameru_col)) if nameru_col >= 0 else ""
+                            val_line = self._as_trimmed_string(self._safe_get(existing_row, line_col)) if line_col >= 0 else ""
+
+                        # If smart match found something (for new rows), override NameRU
+                        if 'match_info' in locals() and match_info and match_info.get("match_found"):
+                             details = match_info.get("matched_product_details", {})
+                             if details.get("Наименования рус по ДС"):
+                                 val_nameru = details.get("Наименования рус по ДС")
+
+                        # Supplier info from parsed row (always available)
+                        sup_units = 1
+                        if parsed_row.units_per_pack and str(parsed_row.units_per_pack).isdigit():
+                             sup_units = int(parsed_row.units_per_pack)
+                             
+                        supplier_info = SupplierInfo(
+                            article=parsed_row.article,
+                            name_original=parsed_row.name_eng,
+                            barcode=parsed_row.barcode,
+                            units_per_pack=sup_units,
+                            group=parsed_row.group,
+                            line=val_line
+                        )
+
+                        prod = Product(
+                            id=final_idp,
+                            id_g=val_idg,
+                            id_l=val_idl,
+                            project=project_enum,
+                            supplier=supplier_info,
+                            localization=LocalizationInfo(name_ru=val_nameru, name_en=parsed_row.name_eng),
+                            price=PriceInfo(base_price=float(parsed_row.price)),
+                            volume=parsed_row.volume,
+                            status=ProductStatus.ACTIVE,
+                            product_type=ProductType.MAIN
+                        )
+                        products_to_sync.append(prod)
+
+                except Exception as ex_prod:
+                    logger.warning(f"Failed to create Product object for {parsed_row.article}: {ex_prod}")
+                
+                # Cleanup locals for next iteration
+                if 'new_idp' in locals(): del new_idp
+                if 'existing_row' in locals(): del existing_row
+                if 'new_id' in locals(): del new_id
+
 
             # Apply updates
             if updates:
@@ -1066,7 +1397,7 @@ class PriceProcessor:
 
                         if id_val and id_val in id_to_idp and not current_idp:
                             updates.append({
-                                "range": f"'{sheet_name}'!{idp_col_letter}{row_idx}",
+                                "range": f"{idp_col_letter}{row_idx}",
                                 "values": [[id_to_idp[id_val]]]
                             })
 
@@ -1159,7 +1490,7 @@ class PriceProcessor:
 
                     if idp_val and idp_val in idp_to_price:
                         updates.append({
-                            "range": f"'{sheet_name}'!{price_col_letter}{row_idx}",
+                            "range": f"{price_col_letter}{row_idx}",
                             "values": [[idp_to_price[idp_val]]]
                         })
 
@@ -1240,7 +1571,7 @@ class PriceProcessor:
                 # If ID-P exists but status is empty, set to "New в работу"
                 if idp_val and not status_val:
                     updates.append({
-                        "range": f"'{primary_sheet}'!{status_col_letter}{row_idx}",
+                        "range": f"{status_col_letter}{row_idx}",
                         "values": [[status_new]]
                     })
 
@@ -1256,6 +1587,470 @@ class PriceProcessor:
         except Exception as e:
             logger.error(f"Update statuses failed: {e}", exc_info=True)
 
+    # ============================================================================
+    # NEW METHODS - Full GAS Logic Implementation
+    # ============================================================================
+
+    async def _create_source_snapshot(
+        self,
+        source_doc_id: str,
+        sheet_name: str,
+        spreadsheet_id: str
+    ) -> str:
+        """
+        Create a snapshot of the source sheet with current date.
+        Matches GAS behavior: creates "{sheet_name} {dd.MM.yy}" in source document.
+
+        Args:
+            source_doc_id: Source document ID
+            sheet_name: Base sheet name (e.g., "-Б/З поставщик")
+            spreadsheet_id: Target spreadsheet ID (for logging)
+
+        Returns:
+            Name of created snapshot sheet
+        """
+        try:
+            # Format date like GAS: dd.MM.yy
+            date_str = datetime.now().strftime("%d.%m.%y")
+            snapshot_name = f"{sheet_name} {date_str}"
+
+            self._log(spreadsheet_id, "ПРАЙС", "Создание snapshot", f"Лист: {snapshot_name}", "📸")
+
+            # Get source spreadsheet
+            source_ss = self.sheets.open_by_key(source_doc_id)
+
+            # Read original sheet data
+            original_ws = source_ss.worksheet(sheet_name)
+            original_values = original_ws.get_all_values()
+
+            # Delete old snapshots with same base name
+            all_sheets = source_ss.worksheets()
+            for ws in all_sheets:
+                ws_name = ws.title
+                if ws_name.startswith(f"{sheet_name} ") and ws_name != snapshot_name:
+                    try:
+                        source_ss.del_worksheet(ws)
+                        logger.info(f"Deleted old snapshot: {ws_name}")
+                    except Exception:
+                        pass
+
+            # Create or get snapshot sheet
+            try:
+                snapshot_ws = source_ss.worksheet(snapshot_name)
+                snapshot_ws.clear()
+            except Exception:
+                snapshot_ws = source_ss.add_worksheet(
+                    title=snapshot_name,
+                    rows=max(len(original_values), 100),
+                    cols=max(len(original_values[0]) if original_values else 10, 26)
+                )
+
+            # Copy data to snapshot
+            if original_values:
+                snapshot_ws.update(
+                    range_name='A1',
+                    values=original_values,
+                    value_input_option='RAW'
+                )
+
+            logger.info(f"Created snapshot: {snapshot_name}")
+            return snapshot_name
+
+        except Exception as e:
+            logger.warning(f"Failed to create snapshot: {e}")
+            return sheet_name  # Return original name if snapshot fails
+
+    async def _clear_idg_column_on_main(self, spreadsheet_id: str, config: Dict):
+        """
+        Clear ID-G column on main sheet (Главная).
+        Matches GAS: _clearIdgColumnOnMain()
+        """
+        primary_sheet = config.get("sheets", {}).get("primary", "Главная")
+
+        self._log(spreadsheet_id, "ПРАЙС", "Очистка ID-G", f"Лист: {primary_sheet}", "🔄")
+
+        try:
+            ws = self.sheets.get_worksheet(spreadsheet_id, primary_sheet)
+            headers = ws.row_values(1)
+
+            idg_col = self._find_column_index(headers, "ID-G", -1)
+            if idg_col < 0:
+                logger.warning("ID-G column not found in primary sheet")
+                return
+
+            num_rows = ws.row_count
+            if num_rows > 1:
+                col_letter = self._col_index_to_letter(idg_col)
+                ws.batch_clear([f"{col_letter}2:{col_letter}{num_rows}"])
+                logger.info(f"Cleared ID-G column on {primary_sheet}")
+
+        except Exception as e:
+            logger.warning(f"Failed to clear ID-G on main: {e}")
+
+    async def _fill_idg_for_rows_without_idp(self, spreadsheet_id: str, config: Dict):
+        """
+        Fill ID-G for rows where ID-P is empty.
+        Matches GAS: _fillIdgForRowsWithoutIdp()
+
+        Logic:
+        - Build map of group → ID-G from existing data
+        - For rows without ID-P: assign ID-G based on group
+        - Create new ID-G values for new groups
+        """
+        primary_sheet = config.get("sheets", {}).get("primary", "Главная")
+
+        self._log(spreadsheet_id, "ПРАЙС", "Заполнение ID-G", f"Для строк без ID-P", "🔄")
+
+        try:
+            ws = self.sheets.get_worksheet(spreadsheet_id, primary_sheet)
+            values = ws.get_all_values()
+
+            if not values:
+                return
+
+            headers = values[0]
+            idp_col = self._find_column_index(headers, "ID-P", -1)
+            idg_col = self._find_column_index(headers, "ID-G", -1)
+            group_col = self._find_column_index(headers, "Группа", -1)
+
+            if idg_col < 0 or group_col < 0:
+                logger.warning("ID-G or Группа column not found")
+                return
+
+            # Build map group → ID-G from existing data
+            group_to_idg: Dict[str, str] = {}
+            max_idg = 0
+
+            for row in values[1:]:
+                idg = self._as_trimmed_string(self._safe_get(row, idg_col))
+                group = self._as_trimmed_string(self._safe_get(row, group_col))
+
+                if idg and group:
+                    group_to_idg[group] = idg
+                    try:
+                        num = int(idg)
+                        max_idg = max(max_idg, num)
+                    except ValueError:
+                        pass
+
+            # Fill ID-G for rows without ID-P
+            updates = []
+            idg_letter = self._col_index_to_letter(idg_col)
+
+            for row_idx, row in enumerate(values[1:], start=2):
+                idp = self._as_trimmed_string(self._safe_get(row, idp_col)) if idp_col >= 0 else ""
+                idg = self._as_trimmed_string(self._safe_get(row, idg_col))
+                group = self._as_trimmed_string(self._safe_get(row, group_col))
+
+                # Fill ID-G only if: no ID-P, no ID-G, but has group
+                if not idp and not idg and group:
+                    if group in group_to_idg:
+                        new_idg = group_to_idg[group]
+                    else:
+                        max_idg += 1
+                        new_idg = str(max_idg)
+                        group_to_idg[group] = new_idg
+
+                    updates.append({
+                        "range": f"{idg_letter}{row_idx}",
+                        "values": [[new_idg]]
+                    })
+
+            if updates:
+                # Batch update in chunks
+                chunk_size = 500
+                for i in range(0, len(updates), chunk_size):
+                    chunk = updates[i:i + chunk_size]
+                    ws.batch_update(chunk, value_input_option="RAW")
+
+                logger.info(f"Filled {len(updates)} ID-G values")
+                self._log(spreadsheet_id, "ПРАЙС", "ID-G заполнен", f"Записей: {len(updates)}", "✅")
+
+        except Exception as e:
+            logger.error(f"Fill ID-G failed: {e}", exc_info=True)
+
+    def _find_year_column(self, headers: List[str], prefix: str, year: int) -> int:
+        """Find column index for a year-specific header like 'EXW 2025, €'"""
+        year_str = str(year)
+        for i, h in enumerate(headers):
+            h_upper = str(h or "").upper()
+            if prefix.upper() in h_upper and year_str in h_upper:
+                return i
+        return -1
+
+    async def _apply_price_dynamics_formulas(self, spreadsheet_id: str, config: Dict):
+        """
+        Apply real formulas on 'Динамика цены' sheet.
+        Matches GAS: Lib.recalculatePriceDynamicsFormulas()
+
+        Formulas:
+        - EXW ALFASPA = EXW * (1 - СКИДКА)
+        - Закупочная цена = EXW ALFASPA * курс
+        - DDP-МОСКВА = Закупочная * коэффициент
+        - Прирост = (текущий - предыдущий) / предыдущий
+        """
+        sheet_name = config.get("sheets", {}).get("price_dynamics", "Динамика цены")
+
+        self._log(spreadsheet_id, "ПРАЙС", "Применение формул", f"Лист: {sheet_name}", "📊")
+
+        try:
+            ws = self.sheets.get_worksheet(spreadsheet_id, sheet_name)
+            values = ws.get_all_values()
+
+            if not values or len(values) < 2:
+                return
+
+            headers = values[0]
+            current_year = datetime.now().year
+
+            # Get exchange rate and DDP coefficient from config
+            exchange_rate = config.get("constants", {}).get("exchange_rate", 100)
+            ddp_coefficient = config.get("constants", {}).get("ddp_coefficient", 1.5)
+
+            # Find year-specific columns
+            exw_col = self._find_year_column(headers, "EXW", current_year)
+            discount_col = self._find_year_column(headers, "СКИДКА ОТ EXW", current_year)
+            exw_alfaspa_col = self._find_year_column(headers, "EXW ALFASPA", current_year)
+            purchase_col = self._find_year_column(headers, "Закупочная цена", current_year)
+            ddp_col = self._find_year_column(headers, "DDP-МОСКВА", current_year)
+
+            # Also try without year suffix for growth columns
+            growth_exw_col = self._find_column_index(headers, "Прирост EXW", -1)
+            growth_ddp_col = self._find_column_index(headers, "Прирост DDP", -1)
+
+            # Find previous year columns for growth calculation
+            prev_year = current_year - 1
+            prev_exw_alfaspa_col = self._find_year_column(headers, "EXW ALFASPA", prev_year)
+            prev_ddp_col = self._find_year_column(headers, "DDP-МОСКВА", prev_year)
+
+            updates = []
+            num_rows = len(values)
+
+            for row_idx in range(2, num_rows + 1):
+                # EXW ALFASPA = EXW * (1 - СКИДКА)
+                if exw_col >= 0 and discount_col >= 0 and exw_alfaspa_col >= 0:
+                    exw_letter = self._col_index_to_letter(exw_col)
+                    discount_letter = self._col_index_to_letter(discount_col)
+                    alfaspa_letter = self._col_index_to_letter(exw_alfaspa_col)
+                    formula = f'=IF({exw_letter}{row_idx}<>"",{exw_letter}{row_idx}*(1-{discount_letter}{row_idx}),"")'
+                    updates.append({
+                        "range": f"{alfaspa_letter}{row_idx}",
+                        "values": [[formula]]
+                    })
+
+                # Закупочная цена = EXW ALFASPA * курс
+                if exw_alfaspa_col >= 0 and purchase_col >= 0:
+                    alfaspa_letter = self._col_index_to_letter(exw_alfaspa_col)
+                    purchase_letter = self._col_index_to_letter(purchase_col)
+                    formula = f'=IF({alfaspa_letter}{row_idx}<>"",{alfaspa_letter}{row_idx}*{exchange_rate},"")'
+                    updates.append({
+                        "range": f"{purchase_letter}{row_idx}",
+                        "values": [[formula]]
+                    })
+
+                # DDP-МОСКВА = Закупочная * коэффициент
+                if purchase_col >= 0 and ddp_col >= 0:
+                    purchase_letter = self._col_index_to_letter(purchase_col)
+                    ddp_letter = self._col_index_to_letter(ddp_col)
+                    formula = f'=IF({purchase_letter}{row_idx}<>"",{purchase_letter}{row_idx}*{ddp_coefficient},"")'
+                    updates.append({
+                        "range": f"{ddp_letter}{row_idx}",
+                        "values": [[formula]]
+                    })
+
+                # Прирост EXW = (текущий - предыдущий) / предыдущий
+                if growth_exw_col >= 0 and exw_alfaspa_col >= 0 and prev_exw_alfaspa_col >= 0:
+                    curr_letter = self._col_index_to_letter(exw_alfaspa_col)
+                    prev_letter = self._col_index_to_letter(prev_exw_alfaspa_col)
+                    growth_letter = self._col_index_to_letter(growth_exw_col)
+                    formula = f'=IF(AND({curr_letter}{row_idx}<>"",{prev_letter}{row_idx}<>"",{prev_letter}{row_idx}<>0),({curr_letter}{row_idx}-{prev_letter}{row_idx})/{prev_letter}{row_idx},"")'
+                    updates.append({
+                        "range": f"{growth_letter}{row_idx}",
+                        "values": [[formula]]
+                    })
+
+                # Прирост DDP = (текущий - предыдущий) / предыдущий
+                if growth_ddp_col >= 0 and ddp_col >= 0 and prev_ddp_col >= 0:
+                    curr_letter = self._col_index_to_letter(ddp_col)
+                    prev_letter = self._col_index_to_letter(prev_ddp_col)
+                    growth_letter = self._col_index_to_letter(growth_ddp_col)
+                    formula = f'=IF(AND({curr_letter}{row_idx}<>"",{prev_letter}{row_idx}<>"",{prev_letter}{row_idx}<>0),({curr_letter}{row_idx}-{prev_letter}{row_idx})/{prev_letter}{row_idx},"")'
+                    updates.append({
+                        "range": f"{growth_letter}{row_idx}",
+                        "values": [[formula]]
+                    })
+
+            if updates:
+                # Batch update in chunks to avoid quota limits
+                chunk_size = 500
+                for i in range(0, len(updates), chunk_size):
+                    chunk = updates[i:i + chunk_size]
+                    ws.batch_update(chunk, value_input_option="USER_ENTERED")
+
+                logger.info(f"Applied {len(updates)} formulas on {sheet_name}")
+                self._log(spreadsheet_id, "ПРАЙС", "Формулы применены", f"Динамика цены: {len(updates)} ячеек", "✅")
+
+        except Exception as e:
+            logger.error(f"Apply price dynamics formulas failed: {e}", exc_info=True)
+
+    async def _apply_price_calculation_formulas(self, spreadsheet_id: str, config: Dict):
+        """
+        Apply INDEX/MATCH formulas on 'Расчет цены' sheet.
+        Matches GAS: Lib.updatePriceCalculationFormulas()
+
+        Pulls data from 'Динамика цены' by ID-P lookup.
+        """
+        sheet_name = config.get("sheets", {}).get("price_calculation", "Расчет цены")
+        dynamics_sheet = config.get("sheets", {}).get("price_dynamics", "Динамика цены")
+
+        self._log(spreadsheet_id, "ПРАЙС", "Применение INDEX/MATCH", f"Лист: {sheet_name}", "📊")
+
+        try:
+            ws = self.sheets.get_worksheet(spreadsheet_id, sheet_name)
+            values = ws.get_all_values()
+
+            if not values or len(values) < 2:
+                return
+
+            headers = values[0]
+
+            # Find ID-P column
+            idp_col = self._find_column_index(headers, "ID-P", -1)
+            if idp_col < 0:
+                logger.warning("ID-P column not found in price calculation sheet")
+                return
+
+            idp_letter = self._col_index_to_letter(idp_col)
+
+            # Columns to pull from Динамика цены via INDEX/MATCH
+            # Format: (target_column_keyword, source_column_keyword)
+            formula_mappings = [
+                ("EXW  текущая", "EXW ALFASPA"),
+                ("EXW  ALFASPA  текущая", "EXW ALFASPA"),
+                ("Закупочная цена", "Закупочная цена"),
+                ("DDP  -МОСКВА", "DDP-МОСКВА"),
+            ]
+
+            updates = []
+            num_rows = len(values)
+
+            for target_keyword, source_keyword in formula_mappings:
+                target_col = self._find_column_index(headers, target_keyword, -1)
+                if target_col < 0:
+                    continue
+
+                target_letter = self._col_index_to_letter(target_col)
+
+                # INDEX/MATCH formula to pull data from Динамика цены
+                # =IFERROR(INDEX('Динамика цены'!$A:$ZZ,MATCH($B2,'Динамика цены'!$B:$B,0),MATCH("source_keyword",'Динамика цены'!$1:$1,0)),"")
+                for row_idx in range(2, num_rows + 1):
+                    formula = f'=IFERROR(INDEX(\'{dynamics_sheet}\'!$A:$ZZ,MATCH({idp_letter}{row_idx},\'{dynamics_sheet}\'!$B:$B,0),MATCH("{source_keyword}",\'{dynamics_sheet}\'!$1:$1,0)),"")'
+                    updates.append({
+                        "range": f"{target_letter}{row_idx}",
+                        "values": [[formula]]
+                    })
+
+            if updates:
+                # Batch update in chunks
+                chunk_size = 500
+                for i in range(0, len(updates), chunk_size):
+                    chunk = updates[i:i + chunk_size]
+                    ws.batch_update(chunk, value_input_option="USER_ENTERED")
+
+                logger.info(f"Applied {len(updates)} INDEX/MATCH formulas on {sheet_name}")
+                self._log(spreadsheet_id, "ПРАЙС", "INDEX/MATCH применены", f"Расчет цены: {len(updates)} ячеек", "✅")
+
+        except Exception as e:
+            logger.error(f"Apply price calculation formulas failed: {e}", exc_info=True)
+
+    async def _fill_idp_on_all_sheets_optimized(
+        self,
+        spreadsheet_id: str,
+        config: Dict,
+        id_to_idp: Dict[str, str]
+    ):
+        """
+        Fill ID-P on ALL sheets.
+        Each sheet is updated separately to avoid gspread range issues.
+
+        Args:
+            spreadsheet_id: Target spreadsheet
+            config: Project configuration
+            id_to_idp: Mapping of ID → ID-P values
+        """
+        if not id_to_idp:
+            return
+
+        # All sheets that need ID-P filling
+        all_sheets = list(config.get("base_sheets_for_creation", []))
+        primary = config.get("sheets", {}).get("primary", "Главная")
+        if primary not in all_sheets:
+            all_sheets.append(primary)
+
+        self._log(
+            spreadsheet_id,
+            "ПРАЙС",
+            "Заполнение ID-P",
+            f"Листы: {', '.join(all_sheets)}",
+            "🔄"
+        )
+
+        total_updates = 0
+
+        for sheet_name in all_sheets:
+            try:
+                ws = self.sheets.get_worksheet(spreadsheet_id, sheet_name)
+                values = ws.get_all_values()
+
+                if not values:
+                    continue
+
+                headers = values[0]
+                id_col = self._find_column_index(headers, "ID", -1)
+                idp_col = self._find_column_index(headers, "ID-P", -1)
+
+                if id_col < 0 or idp_col < 0:
+                    logger.warning(f"ID or ID-P column not found in {sheet_name}")
+                    continue
+
+                idp_letter = self._col_index_to_letter(idp_col)
+
+                # Collect updates for THIS sheet only (no sheet name in range)
+                sheet_updates = []
+                for row_idx, row in enumerate(values[1:], start=2):
+                    id_val = self._as_trimmed_string(self._safe_get(row, id_col))
+                    current_idp = self._as_trimmed_string(self._safe_get(row, idp_col))
+
+                    if id_val and id_val in id_to_idp and not current_idp:
+                        sheet_updates.append({
+                            "range": f"{idp_letter}{row_idx}",
+                            "values": [[id_to_idp[id_val]]]
+                        })
+
+                # Update this sheet
+                if sheet_updates:
+                    chunk_size = 500
+                    for i in range(0, len(sheet_updates), chunk_size):
+                        chunk = sheet_updates[i:i + chunk_size]
+                        ws.batch_update(chunk, value_input_option="RAW")
+                    total_updates += len(sheet_updates)
+                    logger.info(f"Filled {len(sheet_updates)} ID-P values on {sheet_name}")
+
+                # Small delay between sheets to avoid rate limits
+                await asyncio.sleep(2)
+
+            except Exception as e:
+                logger.warning(f"Error processing sheet {sheet_name}: {e}")
+
+        if total_updates > 0:
+            self._log(
+                spreadsheet_id,
+                "ПРАЙС",
+                "ID-P заполнен",
+                f"Всего: {total_updates} ячеек на {len(all_sheets)} листах",
+                "✅"
+            )
+
 
 # Singleton instance
 _price_processor: Optional[PriceProcessor] = None
@@ -1267,3 +2062,10 @@ def get_price_processor(sheets_service: SheetsService, sync_service: Any, loggin
     if _price_processor is None:
         _price_processor = PriceProcessor(sheets_service, sync_service, logging_service)
     return _price_processor
+
+# Export for modular routes
+from src.services.sheets_service import sheets_service
+from src.services.sync_service import sync_service
+from src.services.logging_service import logging_service
+
+price_processor = get_price_processor(sheets_service, sync_service, logging_service)

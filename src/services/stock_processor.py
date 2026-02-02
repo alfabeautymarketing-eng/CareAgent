@@ -278,3 +278,9 @@ class StockProcessor:
             return float(s)
         except:
             return 0.0
+
+# Export for modular routes
+from src.services.sheets_service import sheets_service
+from src.services.logging_service import logging_service
+
+stock_processor = StockProcessor(sheets_service, logging_service)

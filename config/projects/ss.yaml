@@ -58,10 +58,11 @@ columns:
     - "Форма выпуска"
     - "шт./уп."
     - "Категория товара"
-    - "Линия"
     - "Группа"
+    - "Линия"
     - "BAR CODE"
-    # Нет ID-G и ID-L - не используются в SS
+    - "ID-G"
+    - "ID-L"
 
 # ============================================================
 # Маппинг колонок
@@ -149,6 +150,16 @@ sync_order:
     description: "Обновление статусов"
 
 # ============================================================
+# Processing cycles - порядок обработки при нажатии кнопки
+# ============================================================
+processing_cycles:
+  - mode: main
+    source_sheet: "-Б/З поставщик"
+    clear_columns: true
+    price_multiplier: 1
+    update_statuses_after: true # SS: единственный цикл, обновляет статусы
+
+# ============================================================
 # Features - SS minimal
 # ============================================================
 features:
@@ -173,6 +184,9 @@ features:
 constants:
   not_found_text: "!!! НЕ НАЙДЕНО !!!"
   default_number_format: "#,##0.00"
+  # Pricing constants for formula calculation
+  exchange_rate: 100 # EUR to RUB exchange rate
+  ddp_coefficient: 1.5 # Coefficient for DDP-МОСКВА calculation
   statuses:
     new: "New в работу"
     active: "Активный"

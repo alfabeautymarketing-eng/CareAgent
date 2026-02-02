@@ -4,7 +4,7 @@ Replaces the slow GAS structureMultipleSheets function.
 """
 
 from typing import Dict, List, Any, Optional, Tuple
-from src.services.sheets import SheetsService
+from src.services.sheets import SheetsService, retry_with_backoff
 from src.utils.logger import logger
 
 
@@ -41,18 +41,19 @@ class SortingService:
     def __init__(self):
         self.sheets_service = SheetsService()
 
-    def sort_sheets(self, spreadsheet_id: str, mode: str) -> Dict[str, Any]:
+    def sort_sheets(self, spreadsheet_id: str, mode: str, group_header_color: Optional[str] = None) -> Dict[str, Any]:
         """
         Sort multiple sheets by manufacturer or price.
         
         Args:
             spreadsheet_id: Google Sheets document ID
             mode: 'byManufacturer' or 'byPrice'
+            group_header_color: Optional hex color for group headers
             
         Returns:
             Dict with status and details
         """
-        logger.info("sort_sheets_start", spreadsheet_id=spreadsheet_id, mode=mode)
+        logger.info("sort_sheets_start", spreadsheet_id=spreadsheet_id, mode=mode, custom_color=group_header_color)
         
         results = {
             "mode": mode,
@@ -94,7 +95,8 @@ class SortingService:
                         spreadsheet_id,
                         sheet_name,
                         sorted_data,
-                        mode
+                        mode,
+                        group_header_color=group_header_color
                     )
                     
                     results["sheets_processed"].append({
@@ -106,7 +108,7 @@ class SortingService:
                     logger.info("sheet_sorted", sheet=sheet_name, groups=len(sorted_data["groups"]))
                     
                 except Exception as e:
-                    logger.error("sheet_sort_failed", sheet=sheet_name, error=str(e))
+                    logger.error("sheet_sort_failed", sheet=sheet_name, error=str(e), stack=True)
                     results["errors"].append(f"{sheet_name}: {str(e)}")
             
             results["total_time_ms"] = int((time.time() - start_time) * 1000)
@@ -121,6 +123,14 @@ class SortingService:
             logger.error("sort_sheets_failed", error=str(e))
             raise
 
+    def _normalize_header(self, header: str) -> str:
+        """Normalize header for robust comparison (strip spaces and lowercase)."""
+        if not header:
+            return ""
+        # Remove all whitespace and lowercase
+        return "".join(str(header).split()).lower()
+
+    @retry_with_backoff(retries=3, backoff_in_seconds=2)
     def _load_all_sheet_data(self, spreadsheet_id: str) -> Dict[str, Dict]:
         """Load all required sheets in batch."""
         gc = self.sheets_service.gc
@@ -129,6 +139,9 @@ class SortingService:
         data = {}
         sheets_to_load = self.SHEETS_TO_SORT + [self.PRIMARY_SHEET, self.PRICE_SHEET]
         
+        # Build normalized field map for reverse lookup
+        norm_fields = {self._normalize_header(v): k for k, v in self.FIELDS.items()}
+        
         for sheet_name in sheets_to_load:
             try:
                 ws = spreadsheet.worksheet(sheet_name)
@@ -136,7 +149,17 @@ class SortingService:
                 
                 if all_values and len(all_values) > 0:
                     headers = [str(h).strip() for h in all_values[0]]
-                    header_map = {name: idx for idx, name in enumerate(headers) if name}
+                    
+                    # Robust header mapping using normalized names
+                    header_map = {}
+                    for idx, h in enumerate(headers):
+                        if not h:
+                            continue
+                        norm_h = self._normalize_header(h)
+                        # Check if this normalized header matches any of our known fields
+                        for field_key, field_val in self.FIELDS.items():
+                            if norm_h == self._normalize_header(field_val):
+                                header_map[field_val] = idx
                     
                     data[sheet_name] = {
                         "headers": headers,
@@ -144,7 +167,7 @@ class SortingService:
                         "rows": all_values[1:],  # Skip header row
                         "worksheet": ws,
                     }
-                    logger.debug("sheet_loaded", sheet=sheet_name, rows=len(all_values)-1)
+                    logger.debug("sheet_loaded", sheet=sheet_name, rows=len(all_values)-1, mapped_cols=list(header_map.keys()))
             except Exception as e:
                 logger.warning("sheet_load_failed", sheet=sheet_name, error=str(e))
         
@@ -239,10 +262,15 @@ class SortingService:
         id_idx = header_map.get(self.FIELDS["ID"])
         idp_idx = header_map.get(self.FIELDS["IDP"])
         ds_name_idx = header_map.get(self.FIELDS["DS_NAME"])
-        title_idx = header_map.get(self.FIELDS["TITLE"], 0)
+        
+        # Find TITLE column robustly
+        title_idx = header_map.get(self.FIELDS["TITLE"])
+        if title_idx is None:
+            # Fallback to column 5 (index 5) as often seen in structural sorting
+            title_idx = 5 if len(headers) > 5 else 0
         
         if id_idx is None:
-            raise ValueError(f"Column '{self.FIELDS['ID']}' not found")
+            raise ValueError(f"Column '{self.FIELDS['ID']}' not found in headers: {headers}")
         
         groups = {}
         
@@ -300,11 +328,12 @@ class SortingService:
                 with_idp.sort(key=lambda r: r["idp"])
                 without_idp.sort(key=lambda r: r["original_idx"])
                 
-                # Try to insert without_idp after matching ds_name
+                # Try to insert without_idp after matching ds_name (GAS logic)
                 arranged = with_idp.copy()
                 for item in without_idp:
                     inserted = False
                     if item["ds_name"]:
+                        # Look for last match from the end
                         for i in range(len(arranged) - 1, -1, -1):
                             if arranged[i]["ds_name"] == item["ds_name"]:
                                 arranged.insert(i + 1, item)
@@ -372,8 +401,9 @@ class SortingService:
             return (0, group["sort_value"], key)  # Numeric first
         return (1, 0, key)  # String keys in middle
 
-    def _write_sorted_data(self, spreadsheet_id: str, sheet_name: str, sorted_data: Dict, mode: str):
-        """Write sorted data back to sheet with batch operations."""
+    @retry_with_backoff(retries=3, backoff_in_seconds=2)
+    def _write_sorted_data(self, spreadsheet_id: str, sheet_name: str, sorted_data: Dict, mode: str, group_header_color: Optional[str] = None):
+        """Write sorted data back to sheet with batch operations and formatting."""
         gc = self.sheets_service.gc
         spreadsheet = gc.open_by_key(spreadsheet_id)
         ws = spreadsheet.worksheet(sheet_name)
@@ -381,53 +411,78 @@ class SortingService:
         headers = sorted_data["headers"]
         groups = sorted_data["groups"]
         title_idx = sorted_data["title_idx"]
-        num_cols = len(headers)
+        num_cols = ws.col_count # Use actual sheet width for clearing
         
-        # Clear existing data (keep headers)
+        # Step 1: Clear existing data AND formatting (keep headers)
         last_row = ws.row_count
         if last_row > 1:
-            # Clear from row 2 onwards
+            logger.info("clearing_formatting", sheet=sheet_name, rows=last_row, cols=num_cols)
+            # Clear range from A2 to end of sheet
             clear_range = f"A2:{self._col_letter(num_cols)}{last_row}"
+            
+            # Batch clear content
             ws.batch_clear([clear_range])
+            
+            # Batch reset formatting (background and text)
+            try:
+                # Reset to white background and normal font
+                ws.format(clear_range, {
+                    "backgroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
+                    "textFormat": {"bold": False, "foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0}}
+                })
+            except Exception as e:
+                logger.warning("formatting_reset_failed", error=str(e))
         
-        # Prepare all data for batch write
+        # Step 2: Prepare all data for batch write
         all_rows = []
         header_row_indices = []  # Track which rows are group headers (0-indexed in all_rows)
         
+        data_num_cols = len(headers)
+        
         for group_key, group in groups.items():
             # Add group header row
-            header_row = [""] * num_cols
-            header_row[title_idx] = group["title"]
+            header_row = [""] * data_num_cols
+            if title_idx < len(header_row):
+                header_row[title_idx] = group["title"]
             all_rows.append(header_row)
             header_row_indices.append(len(all_rows) - 1)
             
             # Add data rows
             for row_entry in group["rows"]:
-                # Ensure row has correct number of columns
                 row_values = list(row_entry["values"])
-                while len(row_values) < num_cols:
+                # Trim or pad to match header length
+                if len(row_values) > data_num_cols:
+                    row_values = row_values[:data_num_cols]
+                while len(row_values) < data_num_cols:
                     row_values.append("")
-                all_rows.append(row_values[:num_cols])
+                all_rows.append(row_values)
         
-        # Batch write all data starting from row 2
+        # Step 3: Batch write all data starting from row 2
         if all_rows:
-            write_range = f"A2:{self._col_letter(num_cols)}{len(all_rows) + 1}"
+            write_range = f"A2:{self._col_letter(data_num_cols)}{len(all_rows) + 1}"
             ws.update(write_range, all_rows, value_input_option="USER_ENTERED")
             
-            # Apply formatting to header rows (batch)
-            bg_color = self.GROUP_HEADER_BG_PRICE if mode == "byPrice" else self.GROUP_HEADER_BG_MANUFACTURER
+            # Step 4: Apply formatting to header rows (batch)
+            # Use project-specific color if provided, otherwise default to mode color
+            bg_color_hex = group_header_color
+            if not bg_color_hex:
+                bg_color_hex = self.GROUP_HEADER_BG_PRICE if mode == "byPrice" else self.GROUP_HEADER_BG_MANUFACTURER
             
-            # Build format requests
+            logger.info("applying_header_formatting", color=bg_color_hex)
+            
             format_requests = []
+            bg_color_rgb = self._parse_hex_color(bg_color_hex)
+            text_color_rgb = self._parse_hex_color(self.GROUP_HEADER_FONT)
+            
             for idx in header_row_indices:
-                actual_row = idx + 2  # +2 because row 1 is headers, and we're 0-indexed
+                actual_row = idx + 2
                 format_requests.append({
-                    "range": f"A{actual_row}:{self._col_letter(num_cols)}{actual_row}",
+                    "range": f"A{actual_row}:{self._col_letter(data_num_cols)}{actual_row}",
                     "format": {
-                        "backgroundColor": self._parse_hex_color(bg_color),
+                        "backgroundColor": bg_color_rgb,
                         "textFormat": {
                             "bold": True,
-                            "foregroundColor": self._parse_hex_color(self.GROUP_HEADER_FONT),
+                            "foregroundColor": text_color_rgb,
                         }
                     }
                 })
@@ -448,7 +503,11 @@ class SortingService:
 
     def _parse_hex_color(self, hex_color: str) -> Dict:
         """Convert hex color to RGB dict for gspread."""
+        if not hex_color:
+            return {"red": 1.0, "green": 1.0, "blue": 1.0}
         hex_color = hex_color.lstrip("#")
+        if len(hex_color) == 3:
+            hex_color = "".join([c*2 for c in hex_color])
         return {
             "red": int(hex_color[0:2], 16) / 255,
             "green": int(hex_color[2:4], 16) / 255,
@@ -464,7 +523,9 @@ class SortingService:
         if value is None or value == "":
             return False
         try:
-            float(value)
+            # Handle string numbers like "1,234.56" if needed, but gspread usually gives floats or standard strings
+            val_str = str(value).replace(",", "")
+            float(val_str)
             return True
         except (ValueError, TypeError):
             return False

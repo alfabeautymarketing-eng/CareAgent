@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Union
 
 from supabase import Client, create_client
 
@@ -86,6 +86,24 @@ class SupabaseService:
 
         response = self.client.table(table_name).select("*").limit(limit).execute()
         return response.data
+
+    def upsert_data(self, table_name: str, data: Union[dict[str, Any], list[dict[str, Any]]], on_conflict: str = 'id') -> dict[str, Any]:
+        """
+        Upsert data into a table.
+        Args:
+            table_name: Name of the table
+            data: Dictionary or list of dictionaries to upsert
+            on_conflict: Column to check for conflicts (default: 'id')
+        """
+        if not self.client:
+             raise Exception("Supabase client not configured")
+        
+        try:
+            response = self.client.table(table_name).upsert(data, on_conflict=on_conflict).execute()
+            return {"data": response.data, "count": len(response.data) if response.data else 0}
+        except Exception as e:
+            logger.error("supabase_upsert_failed", table=table_name, error=str(e))
+            raise e
 
 _supabase_service = None
 

@@ -70,25 +70,66 @@ from fastapi.responses import RedirectResponse, HTMLResponse
 
 @app.get("/", include_in_schema=False)
 async def root():
-    """Перенаправление на Rules UI или главную страницу."""
+    """Перенаправление на интерфейсы управления или главную страницу."""
     return HTMLResponse(content=f"""
         <!DOCTYPE html>
-        <html>
+        <html lang="ru">
         <head>
+            <meta charset="UTF-8">
             <title>AgentCare Server</title>
             <style>
-                body {{ font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #0f172a; color: white; }}
-                .card {{ background: #1e293b; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 15px rgba(0,0,0,0.5); text-align: center; }}
-                a {{ color: #0d9488; text-decoration: none; font-weight: bold; font-size: 1.2rem; }}
-                a:hover {{ text-decoration: underline; }}
+                body {{ 
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                    display: flex; 
+                    justify-content: center; 
+                    align-items: center; 
+                    height: 100vh; 
+                    margin: 0;
+                    background: #0f172a; 
+                    color: white; 
+                }}
+                .card {{ 
+                    background: #1e293b; 
+                    padding: 3rem; 
+                    border-radius: 1.5rem; 
+                    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5), 0 10px 10px -5px rgba(0,0,0,0.4); 
+                    text-align: center;
+                    max-width: 400px;
+                    width: 90%;
+                }}
+                h1 {{ margin-top: 0; color: #f8fafc; font-size: 2rem; }}
+                .status {{ color: #10b981; font-weight: bold; margin-bottom: 2rem; display: block; }}
+                .links {{ display: flex; flex-direction: column; gap: 1rem; }}
+                a {{ 
+                    color: #fff; 
+                    background: #0d9488;
+                    text-decoration: none; 
+                    font-weight: 600; 
+                    padding: 1rem;
+                    border-radius: 0.75rem;
+                    transition: all 0.2s;
+                }}
+                a:hover {{ 
+                    background: #0f766e;
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);
+                }}
+                a.secondary {{
+                    background: #334155;
+                }}
+                a.secondary:hover {{
+                    background: #475569;
+                }}
             </style>
         </head>
         <body>
             <div class="card">
-                <h1>🚀 AgentCare Server</h1>
-                <p>Status: <span style="color: #10b981;">Running</span></p>
-                <br>
-                <a href="/api/v1/rules-ui">打开 Rules Manager →</a>
+                <h1>🚀 AgentCare</h1>
+                <span class="status">● Сервер запущен</span>
+                <div class="links">
+                    <a href="/api/v1/rules-ui">Управление правилами</a>
+                    <a href="/api/v1/logs-ui" class="secondary">Журнал синхронизации</a>
+                </div>
             </div>
         </body>
         </html>

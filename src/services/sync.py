@@ -10,6 +10,8 @@ from src.services.function_log_service import FunctionLogService, FunctionLogCon
 from src.utils.logger import logger
 import gspread
 from gspread.utils import rowcol_to_a1
+from src.models.product import Product, ProjectCode
+from src.storage.supabase_store import get_supabase_product_store
 
 class SyncRule(BaseModel):
     """Модель правила синхронизации с поддержкой bidirectional режима."""
@@ -36,6 +38,28 @@ class SyncRule(BaseModel):
     target_doc_id: Optional[str] = None
 
 class SyncService:
+    def _sync_row_to_supabase_internal(self, row_data: Dict[str, Any], project: str):
+        """Internal helper to sync row data to Supabase."""
+        try:
+            # Check for ID-P (required for Product mapping)
+            id_p = row_data.get("ID-P")
+            if not id_p:
+                # If "ID-P" header missing or value empty, cannot sync to Supabase (PK missing)
+                return
+
+            proj_enum = ProjectCode(project.lower()) if project else ProjectCode.MT
+            try:
+                prod = Product.from_sheets_row(row_data, proj_enum)
+                # Save
+                get_supabase_product_store().save(prod)
+            except ValueError as ve:
+                # Likely enum error or missing field
+                logger.warning(f"Skipping Supabase sync for {id_p}: {ve}")
+                
+        except Exception as e:
+            logger.error(f"Error syncing to Supabase: {e}")
+            raise e
+
     def __init__(
         self,
         logging_service: Optional[Any] = None,
@@ -372,6 +396,13 @@ class SyncService:
         if self.logging_service:
             self.logging_service.add_log(spreadsheet_id, "СИНХРО", "Проверка правил", f"Найдено {len(effective_rules)} активных правил для листа {sheet_name}", "ℹ️ ИНФО")
 
+        # --- Supabase Sync Check ---
+        supabase_sync_task = None
+        if sheet_name == "Главная":
+             # We initiate Supabase sync for this row
+             pass # Logic will be applied after fetching data
+
+
         results = []
         
         # 2. Get Source Data
@@ -413,6 +444,22 @@ class SyncService:
             res = self._apply_rule_extended(spreadsheet_id, rule, row_key, val, sheet_name, project=project)
             results.append(res)
             
+            results.append(res)
+            
+        # --- Perform Supabase Sync ---
+        if sheet_name == "Главная":
+            try:
+                # Assuming row_data is populated and valid
+                if row_data:
+                    # Async or sync? sync_row is sync, so run sync.
+                    # Or fire and forget?
+                    # Ideally we want to ensure it is saved.
+                    self._sync_row_to_supabase_internal(row_data, project)
+                    results.append({"status": "success", "target": "Supabase"})
+            except Exception as e:
+                logger.error(f"Supabase sync failed in sync_row: {e}")
+                results.append({"status": "failed", "target": "Supabase", "error": str(e)})
+
         if self.logging_service:
             self.logging_service.add_log(spreadsheet_id, "СИНХРО", "Синхронизация строки завершена", f"Обработано {len(effective_rules)} правил для ID={row_key}. Успешно: {len([r for r in results if r.get('status') == 'success'])}", "✅ УСПЕХ")
         return {"status": "success", "results": results}
@@ -659,6 +706,8 @@ class SyncService:
         new_value = event_data.get("value")
         row_key = event_data.get("row_key")
         project = event_data.get("project")
+        
+        row_data_full = None # Initialize for potential usage
 
         # 0. Log Reception (Log "RECEIVED")
         self._log_sync_journal(
@@ -793,10 +842,24 @@ class SyncService:
              # Fetch ID if missing
              try:
                  ws = self.sheets_service.get_worksheet(spreadsheet_id, sheet_name)
-                 row_key = ws.cell(row, 1).value
+                 row_key = ws.cell(row_idx, 1).value
                  logger.info("fetched_missing_key", key=row_key)
              except Exception:
                  pass
+                 
+        # --- Trigger Supabase Sync for Main Sheet Edits ---
+        if sheet_name == "Главная":
+             try:
+                 if not row_data_full:
+                      ws_temp = self.sheets_service.get_worksheet(spreadsheet_id, sheet_name)
+                      row_values = ws_temp.row_values(row_idx)
+                      headers = ws_temp.row_values(1)
+                      row_data_full = {h: v for h, v in zip(headers, row_values)}
+                 
+                 self._sync_row_to_supabase_internal(row_data_full, project)
+             except Exception as e:
+                 logger.error(f"Supabase sync on event failed: {e}")
+
                  
         if not row_key:
              return {"status": "skipped", "reason": "No row key provided"}
@@ -848,7 +911,8 @@ class SyncService:
         # Verify arguments to avoid TypeError
         if source_header:
             try:
-                self._handle_cascades(spreadsheet_id, sheet_name, row, source_header)
+                # Use row_idx instead of undefined row
+                self._handle_cascades(spreadsheet_id, sheet_name, row_idx, source_header)
             except Exception as e:
                 logger.error("cascade_invocation_failed", error=str(e))
                 # Do not re-raise to avoid blocking response
@@ -856,7 +920,8 @@ class SyncService:
         # 6. Handle Deadline Autofill (Migration from GAS)
         if source_header:
             try:
-                self._check_and_update_deadlines(spreadsheet_id, sheet_name, row, source_header)
+                # Use row_idx instead of undefined row
+                self._check_and_update_deadlines(spreadsheet_id, sheet_name, row_idx, source_header)
             except Exception as e:
                 logger.error("deadline_autofill_failed", error=str(e))
 
@@ -1243,6 +1308,36 @@ class SyncService:
                 
         if self.logging_service:
              self.logging_service.add_log(spreadsheet_id, "АРТИКУЛ", f"Процесс завершен: {article}", f"Результатов: {len(results)}", "✅ ГОТОВО")
+
+        # --- Sync New Article to Supabase ---
+        if project != "UNKNOWN":
+            try:
+                from src.models.product import SupplierInfo, LocalizationInfo, PriceInfo, ProductStatus, ProductType
+                
+                proj_enum = ProjectCode(project.lower())
+                # Create stub product
+                prod = Product(
+                    id=article,
+                    project=proj_enum,
+                    supplier=SupplierInfo(
+                        article=article,
+                        name_original="New Article", # Placeholder
+                        group="New",
+                        line="",
+                        barcode="",
+                        units_per_pack=1
+                    ),
+                    localization=LocalizationInfo(name_ru="", name_en=""),
+                    price=PriceInfo(base_price=0.0),
+                    volume="",
+                    status=ProductStatus.ACTIVE,
+                    product_type=ProductType.MAIN
+                )
+                get_supabase_product_store().save(prod)
+                if self.logging_service:
+                    self.logging_service.add_log(spreadsheet_id, "SUPABASE", "Создана запись", f"ID: {article}", "☁️")
+            except Exception as e:
+                logger.error(f"Failed to create Supabase record for new article {article}: {e}")
 
         return {"status": "success", "article": article, "details": results}
 

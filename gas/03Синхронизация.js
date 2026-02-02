@@ -472,26 +472,32 @@ var Lib = Lib || {};
       // Удаляем старые триггеры, связанные с нашими функциями
       triggers.forEach((t) => {
         const handler = t.getHandlerFunction();
-        if (handler === "handleOnChange" || handler === "handleOnEdit") {
+        if (handler === "handleOnChange" || handler === "handleOnEdit" || handler === "handleOnOpen") {
           ScriptApp.deleteTrigger(t);
           count++;
         }
       });
       
-      // 1. Installable onEdit (для надежной обработки, вставок и т.д.)
-      ScriptApp.newTrigger("handleOnEdit")
+      // 1. Installable onOpen (для создания меню и инициализации)
+      ScriptApp.newTrigger("handleOnOpen")
         .forSpreadsheet(ss)
-        .onEdit()
+        .onOpen()
         .create();
 
-      // 2. Installable onChange (для структурных изменений)
+      // 2. Installable onEdit (для надежной обработки, вставок и т.д.)
       ScriptApp.newTrigger("handleOnChange")
         .forSpreadsheet(ss)
         .onChange()
         .create();
+
+      // 3. Installable onEdit (для надежной синхронизации)
+      ScriptApp.newTrigger("handleOnEdit")
+        .forSpreadsheet(ss)
+        .onEdit()
+        .create();
         
-      Lib.logInfo(`[SetupTriggers] Удалено старых: ${count}. Созданы новые: handleOnEdit, handleOnChange.`);
-      return `Триггеры переустановлены. (Удалено: ${count}, Создано: 2)`;
+      Lib.logInfo(`[SetupTriggers] Удалено старых: ${count}. Созданы новые: handleOnOpen, handleOnChange, handleOnEdit.`);
+      return `Триггеры переустановлены. (Удалено: ${count}, Создано: 3)`;
     } catch (e) {
       Lib.logError("setupTriggers: ошибка", e);
       throw e;

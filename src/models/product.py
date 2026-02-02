@@ -70,6 +70,10 @@ class Product(BaseModel):
     # Primary identification
     id: str = Field(..., description="Unique product ID (e.g., MT-123)")
     project: ProjectCode
+    
+    # Grouping IDs
+    id_g: Optional[str] = Field(None, description="Group ID")
+    id_l: Optional[str] = Field(None, description="Line ID")
 
     # Supplier data (from price list)
     supplier: SupplierInfo
@@ -130,6 +134,8 @@ class Product(BaseModel):
         """Flatten nested structure for sheets export."""
         return {
             "ID-P": self.id,
+            "ID-G": self.id_g or "",
+            "ID-L": self.id_l or "",
             "Артикул": self.supplier.article,
             "Название (англ)": self.supplier.name_original,
             "Название (рус)": self.localization.name_ru or "",
@@ -137,7 +143,7 @@ class Product(BaseModel):
             "Штрих-код": self.supplier.barcode or "",
             "Кол-во в уп.": self.supplier.units_per_pack,
             "Группа": self.supplier.group,
-            "Линейка": self.supplier.line,
+            "Линия": self.supplier.line,  # Changed from "Линейка" to "Линия" per standard
             "Цена": self.price.base_price,
             "Статус": self.status.value,
             "Тип": self.product_type.value,
@@ -163,6 +169,8 @@ class Product(BaseModel):
         """
         mapping = column_mapping or {
             "ID-P": "id",
+            "ID-G": "id_g",
+            "ID-L": "id_l",
             "Артикул": "article",
             "Название (англ)": "name_original",
             "Название (рус)": "name_ru",
@@ -170,7 +178,8 @@ class Product(BaseModel):
             "Штрих-код": "barcode",
             "Кол-во в уп.": "units_per_pack",
             "Группа": "group",
-            "Линейка": "line",
+            "Линия": "line",
+            "Линейка": "line",  # Fallback for old name
             "Цена": "base_price",
         }
 
@@ -183,7 +192,7 @@ class Product(BaseModel):
             barcode=row.get("Штрих-код", row.get("barcode")),
             units_per_pack=int(row.get("Кол-во в уп.", row.get("units_per_pack", 1)) or 1),
             group=row.get("Группа", row.get("group", "")),
-            line=row.get("Линейка", row.get("line", "")),
+            line=row.get("Линия", row.get("line", row.get("Линейка", ""))), # Support both new and old headers
         )
 
         localization = LocalizationInfo(
@@ -197,6 +206,8 @@ class Product(BaseModel):
 
         return cls(
             id=product_id,
+            id_g=row.get("ID-G", row.get("id_g")),
+            id_l=row.get("ID-L", row.get("id_l")),
             project=project,
             supplier=supplier,
             localization=localization,

@@ -4,6 +4,30 @@ from src.utils.config import settings
 from typing import List, Dict, Any, Optional
 from src.utils.logger import logger
 from src.utils.cache import cache_service
+import time
+import random
+
+def retry_with_backoff(retries=5, backoff_in_seconds=1):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            x = 0
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    # Check for 429 or 503 errors (Quota or Service Unavailable)
+                    is_quota = "429" in str(e) or "quota" in str(e).lower()
+                    is_server_error = "500" in str(e) or "502" in str(e) or "503" in str(e) or "timed out" in str(e).lower()
+                    
+                    if (is_quota or is_server_error) and x < retries:
+                        sleep = (backoff_in_seconds * 2 ** x + random.uniform(0, 1))
+                        logger.warning(f"Google API rate limit/error, retrying in {sleep:.2f}s...", error=str(e))
+                        time.sleep(sleep)
+                        x += 1
+                    else:
+                        raise
+        return wrapper
+    return decorator
 
 class SheetsService:
     def __init__(self):
@@ -19,15 +43,22 @@ class SheetsService:
             logger.error("google_sheets_connection_failed", error=str(e))
             raise
 
+    @retry_with_backoff(retries=5, backoff_in_seconds=2)
+    def open_by_key(self, spreadsheet_id: str):
+        """Open a spreadsheet by its ID."""
+        return self.gc.open_by_key(spreadsheet_id)
+
+    @retry_with_backoff(retries=5, backoff_in_seconds=2)
     def get_worksheet(self, spreadsheet_id: str, sheet_name: str):
         """Get a worksheet object."""
         try:
-            sh = self.gc.open_by_key(spreadsheet_id)
+            sh = self.open_by_key(spreadsheet_id)
             return sh.worksheet(sheet_name)
         except Exception as e:
             logger.error("worksheet_not_found", spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, error=str(e))
             raise
 
+    @retry_with_backoff(retries=3, backoff_in_seconds=1)
     def get_worksheet_headers(self, spreadsheet_id: str, sheet_name: str, force_reload: bool = False) -> list:
         """Get worksheet headers with caching."""
         cache_key = f"headers:{spreadsheet_id}:{sheet_name}"
@@ -40,6 +71,23 @@ class SheetsService:
         headers = ws.row_values(1)
         cache_service.set(cache_key, headers, ttl=3600)  # 1 hour
         return headers
+
+    @retry_with_backoff(retries=3, backoff_in_seconds=1)
+    async def get_sheet_metadata(self, spreadsheet_id: str, sheet_name: str) -> Dict[str, Any]:
+        """Get sheet metadata (id, grid properties)."""
+        try:
+            ws = self.get_worksheet(spreadsheet_id, sheet_name)
+            return {
+                "sheetId": ws.id,
+                "title": ws.title,
+                "gridProperties": {
+                    "rowCount": ws.row_count,
+                    "columnCount": ws.col_count
+                }
+            }
+        except Exception as e:
+            logger.error("get_sheet_metadata_failed", error=str(e))
+            raise
 
     def get_row_by_id(self, spreadsheet_id: str, sheet_name: str, row_id: str, force_reload: bool = False) -> Optional[int]:
         """Find row index by ID in Column A with caching."""
@@ -74,6 +122,7 @@ class SheetsService:
             logger.error("create_worksheet_failed", spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, error=str(e))
             raise
 
+    @retry_with_backoff(retries=3, backoff_in_seconds=1)
     def sort_by_header(self, spreadsheet_id: str, sheet_name: str, header_name: str, ascending: bool = True):
         """
         Sort a sheet by a specific header column.

@@ -30,8 +30,8 @@ rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '.venv' --exclude 
     -e "ssh -o StrictHostKeyChecking=no" \
     ./ ${SERVER_USER}@${SERVER_IP}:~/AgentCare/
 
-# Ensure correct permissions on the server (appuser needs to read config files)
-ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} "chmod -R 755 ~/AgentCare && chown -R root:root ~/AgentCare"
+# Ensure correct permissions on the server (appuser needs to write logs)
+ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} "chmod -R 755 ~/AgentCare && chown -R 1000:1000 ~/AgentCare && mkdir -p ~/AgentCare/logs && chmod 777 ~/AgentCare/logs"
 
 echo "✅ Project files synced"
 

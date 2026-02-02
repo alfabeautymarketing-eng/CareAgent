@@ -64,8 +64,8 @@ columns:
     - "Форма выпуска"
     - "шт./уп."
     - "Категория товара"
-    - "Линия"
     - "Группа"
+    - "Линия"
     - "BAR CODE"
     - "ID-G"
     - "ID-L"
@@ -376,6 +376,25 @@ sync_order:
     condition: "samples_mode_only"
 
 # ============================================================
+# Processing cycles - порядок обработки при нажатии кнопки
+# Каждый цикл выполняется последовательно
+# ============================================================
+processing_cycles:
+  - mode: main
+    source_sheet: "-Б/З поставщик"
+    clear_columns: true # Очищает ID-P, ЦЕНА EXW, ID-G
+    price_multiplier: 1
+  - mode: tester
+    source_sheet: "-Тестер"
+    clear_columns: false # Продолжает нумерацию
+    price_multiplier: 1
+  - mode: samples
+    source_sheet: "-Пробники"
+    clear_columns: false # Продолжает нумерацию
+    price_multiplier: 10 # ВАЖНО: цена × 10
+    update_statuses_after: true # Только на последнем шаге
+
+# ============================================================
 # Features
 # ============================================================
 features:
@@ -395,6 +414,9 @@ features:
 constants:
   not_found_text: "!!! НЕ НАЙДЕНО !!!"
   default_number_format: "#,##0.00"
+  # Pricing constants for formula calculation
+  exchange_rate: 100 # EUR to RUB exchange rate
+  ddp_coefficient: 1.5 # Coefficient for DDP-МОСКВА calculation
   statuses:
     new: "New в работу"
     active: "Активный"

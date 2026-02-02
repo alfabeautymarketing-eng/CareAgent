@@ -59,6 +59,82 @@ meta_cache_service = MetaCacheService()
 certification_service = CertificationService(sheets_service)
 stock_processor = StockProcessor(sheets_service, logging_service)
 
+# Project spreadsheet IDs mapping (matches GAS 01Config.js DOC_TO_PROJECT)
+PROJECT_IDS = {
+    # MT (Montibello)
+    "13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ": "MT", # Main
+    "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0": "MT", # Source
+    "1fMOjUE7oZV96fCY5j5rPxnhWGJkDqg-GfwPZ8jUVgPw": "MT", # Alt Main
+    "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g": "MT", # Legacy
+    
+    # SS (San)
+    "1Bq2Pq0P1SQZfJNBZC3yduYCJmnyc4L4vmbLtvsVUkcg": "SS", # Main
+    "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0": "SS", # Source
+    "12yIL1CuESZxeUUd-oKK2brtN1FnXE9q95N7SqzNc7vk": "SS", # Alt Main
+    "1sTgZa-n1aP7oIhyQfPeN8QDgDNnCubqMWAd-TKjKpJXWsQm_ZhXnojPD": "SS", # Scripts ID
+    
+    # SK (Carmado)
+    "1hSsS9_Iu_MgKWsoE19hAMouQInLGVFaBF6ZFG4Bsm1s": "SK", # Main
+    "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK", # Source
+    "1CpYYLvRYslsyCkuLzL9EbbjsvbNpWCEZcmhKqMoX5zw": "SK", # Alt Main
+    "1DJvK1vUT2OTubN0TLdZvsgYMSYByLHl8xTsus3K-KJ-VtJxgGnSw5Ih8": "SK", # Scripts ID
+}
+
+PROJECT_NAMES = {
+    "MT": "CosmeticaBar (MT)",
+    "SK": "Carmado (SK)",
+    "SS": "San (SS)",
+}
+
+# Settings submenu groups
+SETTINGS_SUBMENU_GROUPS: List[Dict[str, Any]] = [
+    # ============== ПОДМЕНЮ: СИНХРОНИЗАЦИЯ ==============
+    {
+        "title": "🔄 Синхронизация",
+        "items": [
+            {"label": "🔧 Обновить триггеры", "function_name": "setupTriggers"},
+            {"label": "📝 Настроить правила синхронизации", "function_name": "showSyncRulesManagerDialog"},
+            {"separator": True},
+            {"label": "➕ Добавить артикул", "function_name": "addArticleManually"},
+            {"label": "❌ Удалить артикул", "function_name": "deleteSelectedRowsWithSync"},
+            {"separator": True},
+            {"label": "🔄 Синхронизировать строку", "function_name": "syncSelectedRow"},
+            {"label": "🔄 Синхронизировать всю таблицу", "function_name": "runFullSync"},
+        ],
+    },
+    # ============== ПОДМЕНЮ: SUPABASE ==============
+    {
+        "title": "🗄️ Supabase",
+        "items": [
+            {"label": "🔗 Открыть Supabase Console", "function_name": "openSupabaseConsole"},
+            {"label": "📊 Просмотр данных (список таблиц)", "function_name": "showSupabaseTablesView"},
+            {"separator": True},
+            {"label": "🔍 Выполнить SQL запрос", "function_name": "executeSupabaseSqlQuery"},
+            {"label": "📥 Импортировать данные", "function_name": "importSupabaseData"},
+            {"label": "📤 Экспортировать данные", "function_name": "exportSupabaseData"},
+            {"separator": True},
+            {"label": "🔐 Управление правами доступа", "function_name": "manageSupabasePermissions"},
+            {"label": "⚙️ Настройки подключения Supabase", "function_name": "configureSupabaseConnection"},
+        ],
+    },
+    # ============== ПОДМЕНЮ: ECOSYSTEM ==============
+    {
+        "title": "🟢 Ecosystem",
+        "items": [
+            {"label": "🏠 Открыть Главную страницу", "function_name": "openServerMainPage"},
+            {"label": "📝 Открыть Правила (UI)", "function_name": "openServerRulesPage"},
+            {"label": "📜 Открыть Журнал (UI)", "function_name": "openLogDashboard_proxy"},
+            {"label": "📚 Открыть Swagger (API)", "function_name": "openServerDocsPage"},
+            {"separator": True},
+            {"label": "🔄 Обновить меню", "function_name": "refreshMenu"},
+            {"label": "📑 Упорядочить листы", "function_name": "reorderSheets"},
+            {"label": "🔄 Обновить данные", "function_name": "callServerLoadFunctions"},
+            {"label": "🟢 Статус сервера", "function_name": "checkServerStatus"},
+            {"label": "🐛 Debug: Spreadsheet ID", "function_name": "debugShowSpreadsheetId"},
+        ],
+    },
+]
+
 class RuleItem(BaseModel):
     mode: str = Field("unidirectional", description="Режим синхронизации: в одну сторону или в обе")
     enabled: bool = Field(True, description="Включено ли правило")
@@ -542,17 +618,41 @@ async def sync_batch_event(request: SyncBatchEventRequest, background_tasks: Bac
 
 # ============== Menu Management ==============
 
-class MenuConfigResponse(BaseModel):
-    """Complete menu configuration for a project."""
-    menu_title: str = Field(..., description="Project menu title")
-    order_sheet: str = Field(..., description="Order sheet name")
-    sort_columns: Dict[str, str] = Field(..., description="Sortable columns mapping")
-    primary_menu: MenuGroupModel = Field(..., description="Primary menu (🧾 Заказ)")
-    order_stages_menu: MenuGroupModel = Field(..., description="Order stages menu (📊 Стадии)")
-    menu_groups: List[MenuGroupModel] = Field(..., description="Static menu groups")
+class MenuItemModel(BaseModel):
+    """Элемент меню Google Таблицы."""
+    label: Optional[str] = Field(None, description="Заголовок пункта")
+    function_name: Optional[str] = Field(None, description="Имя функции GAS")
+    separator: bool = Field(False, description="Разделитель")
+    separator_after: bool = Field(False, description="Разделитель после")
+    submenu: Optional[str] = Field(None, description="Подменю")
+    items: Optional[List[Dict[str, Any]]] = Field(None, description="Вложенные элементы")
 
     class Config:
-        title = "Menu Configuration"
+        title = "Элемент меню"
+
+
+class MenuGroupModel(BaseModel):
+    """Группа элементов меню (подменю)."""
+    title: str = Field(..., description="Название группы")
+    items: List[MenuItemModel] = Field(..., description="Список элементов")
+
+    class Config:
+        title = "Группа меню"
+
+
+class MenuConfigResponse(BaseModel):
+    """Полная конфигурация меню для проекта."""
+    project: str = Field(..., description="Код проекта")
+    menu_title: str = Field(..., description="Заголовок меню проекта")
+    order_sheet: str = Field("Заказ", description="Имя листа заказа")
+    sort_columns: Dict[str, str] = Field(default_factory=dict, description="Настройки сортировки")
+    primary_menu: Optional[MenuGroupModel] = Field(None, description="Основное меню (🧾 Заказ)")
+    order_stages_menu: Optional[MenuGroupModel] = Field(None, description="Меню стадий (📊 Стадии)")
+    menu_groups: List[MenuGroupModel] = Field(default_factory=list, description="Группы меню")
+    menus: Optional[List[Dict[str, Any]]] = Field(None, description="Формат для GAS (устаревший)")
+
+    class Config:
+        title = "Конфигурация меню"
 
 
 @api_router.get("/menu/config", summary="Получить меню по spreadsheet_id (для GAS)")
@@ -606,7 +706,7 @@ async def get_menu_config_by_spreadsheet(spreadsheet_id: str):
                 stages_items.append({"label": label, "function_name": fn})
         if stages_items:
             menus.append({
-                "title": stages_cfg.get("title", "📊 Стадии по заказ"),
+                "title": stages_cfg.get("title", "🔄 Сортировка"),
                 "items": stages_items
             })
 
@@ -638,6 +738,19 @@ async def get_menu_config_by_spreadsheet(spreadsheet_id: str):
     except Exception as e:
         logger.error("Failed to get menu config by spreadsheet", spreadsheet_id=spreadsheet_id, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/menu/sort-config", summary="Конфиг сортировки")
+async def get_sort_config(spreadsheet_id: str):
+    """Возвращает настройки сортировки (колонки и листы) для конкретной таблицы."""
+    project = PROJECT_IDS.get(spreadsheet_id, "MT")
+    config = MENU_CONFIGS.get(project, MENU_CONFIGS["MT"])
+
+    return {
+        "project": project,
+        "order_sheet": config["order_sheet"],
+        "sort_columns": config["sort_columns"]
+    }
 
 
 @api_router.get("/menu/{project}", summary="Получить конфигурацию меню для проекта", response_model=MenuConfigResponse)
@@ -682,29 +795,44 @@ async def get_menu_config(project: str):
             group_items = []
             for item_cfg in group_cfg.get("items", []):
                 if item_cfg.get("separator"):
-                    continue
-                group_items.append(MenuItemModel(
-                    label=item_cfg.get("label", ""),
-                    function_name=item_cfg.get("function_name", "")
-                ))
+                    group_items.append(MenuItemModel(separator=True))
+                else:
+                    group_items.append(MenuItemModel(
+                        label=item_cfg.get("label", ""),
+                        function_name=item_cfg.get("function_name", "")
+                    ))
             if group_items:
                 menu_groups.append(MenuGroupModel(
                     title=group_cfg.get("title", ""),
                     items=group_items
                 ))
 
+        # Add Settings submenu (unified ecosystem)
+        settings_items = []
+        for sub_grp in SETTINGS_SUBMENU_GROUPS:
+             settings_items.append(MenuItemModel(
+                 submenu=sub_grp["title"],
+                 items=sub_grp["items"]
+             ))
+        
+        menu_groups.append(MenuGroupModel(
+            title="⚙️ Настройка",
+            items=settings_items
+        ))
+
         return MenuConfigResponse(
+            project=project,
             menu_title=config.get("menu_title", project),
             order_sheet=config.get("order_sheet", "Заказ"),
             sort_columns=config.get("sort_columns", {}),
             primary_menu=MenuGroupModel(
                 title=primary_cfg.get("title", "🧾 Заказ"),
                 items=primary_items
-            ),
+            ) if primary_items else None,
             order_stages_menu=MenuGroupModel(
-                title=stages_cfg.get("title", "📊 Стадии по заказ"),
+                title=stages_cfg.get("title", "🔄 Сортировка"),
                 items=order_stages_items
-            ),
+            ) if order_stages_items else None,
             menu_groups=menu_groups
         )
     except ValueError as e:
@@ -802,12 +930,14 @@ async def toggle_rule_endpoint(spreadsheet_id: str, rule_id: str, request: RuleT
 @api_router.get("/rules-ui", summary="Открыть интерфейс управления правилами")
 async def get_rules_ui():
     """Открывает встроенный веб-интерфейс (HTML) для наглядного управления правилами."""
+    logger.info("ui_access", path="/rules-ui")
     return FileResponse("config/rule_manager.html")
 
 
 @api_router.get("/logs-ui", summary="Открыть интерфейс журнала синхронизации")
 async def get_logs_ui():
     """Открывает встроенный веб-интерфейс (HTML) для просмотра логов синхронизации."""
+    logger.info("ui_access", path="/logs-ui")
     return FileResponse("config/logs_manager.html")
 
 
@@ -1366,7 +1496,16 @@ async def sort_structure(request: StructureSortRequest):
             "Листы: Заказ, Динамика цены, Расчет цены",
             "🔄"
         )
-        result = sorting_service.sort_sheets(request.spreadsheet_id, request.mode)
+        # Get project specific color if available
+        project = PROJECT_IDS.get(request.spreadsheet_id, "MT")
+        config = MENU_CONFIGS.get(project, {})
+        group_header_color = config.get("group_header_color")
+
+        result = sorting_service.sort_sheets(
+            request.spreadsheet_id, 
+            request.mode,
+            group_header_color=group_header_color
+        )
         return {
             "status": "success",
             "message": f"Sorted {len(result['sheets_processed'])} sheets",
@@ -1439,14 +1578,25 @@ async def process_price(
             return result
 
         # For actual processing, run in background
-        background_tasks.add_task(
-            price_processor.process,
-            project=project,
-            mode=request.mode,
-            spreadsheet_id=request.spreadsheet_id,
-            source_doc_id=request.source_doc_id,
-            dry_run=False
-        )
+        # "main" or "all" triggers full sequential processing (main → tester → samples etc.)
+        # Specific modes like "tester", "samples", "probes" run only that single cycle
+        if request.mode in ("main", "all"):
+            background_tasks.add_task(
+                price_processor.process_all,
+                project=project,
+                spreadsheet_id=request.spreadsheet_id,
+                source_doc_id=request.source_doc_id,
+            )
+        else:
+            # Run single specific mode (tester, samples, probes)
+            background_tasks.add_task(
+                price_processor.process,
+                project=project,
+                mode=request.mode,
+                spreadsheet_id=request.spreadsheet_id,
+                source_doc_id=request.source_doc_id,
+                dry_run=False
+            )
 
         return {
             "status": "queued",
@@ -2839,120 +2989,8 @@ async def get_task_status(task_id: str):
 
 # ============== Menu Configuration ==============
 
-class MenuItemModel(BaseModel):
-    """Элемент меню Google Таблицы."""
-    label: Optional[str] = Field(None, description="Заголовок пункта")
-    function_name: Optional[str] = Field(None, description="Имя функции GAS")
-    separator: bool = Field(False, description="Разделитель")
-    separator_after: bool = Field(False, description="Разделитель после")
-    submenu: Optional[str] = Field(None, description="Подменю")
-    items: Optional[List[dict]] = Field(None, description="Вложенные элементы")
 
-    class Config:
-        title = "Элемент меню"
-
-
-class MenuGroupModel(BaseModel):
-    """Группа элементов меню (подменю)."""
-    title: str = Field(..., description="Название группы")
-    items: List[MenuItemModel] = Field(..., description="Список элементов")
-
-    class Config:
-        title = "Группа меню"
-
-class MenuConfigResponse(BaseModel):
-    """Конфигурация меню для проекта."""
-    project: str = Field(..., description="Код проекта")
-
-    class Config:
-        title = "Ответ конфигурации меню"
-    project_name: str
-    menu_title: str
-    items: List[MenuItemModel] = []
-    menus: List[MenuGroupModel] = []
-
-# Project spreadsheet IDs mapping (matches GAS 01Config.js DOC_TO_PROJECT)
-PROJECT_IDS = {
-    # MT (Montibello)
-    "13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ": "MT", # Main
-    "1BW8Gk5_X2EZVjbnaa2yDm-bPzzlggwQrHepeNCcPCc0": "MT", # Source
-    "1fMOjUE7oZV96fCY5j5rPxnhWGJkDqg-GfwPZ8jUVgPw": "MT", # Alt Main
-    "199Np7xsBiBRQih5_tlUdpt6EmkfRGjZAhTvKm4Ua0Q6XEaMtvAmQUn0g": "MT", # Legacy
-    
-    # SS (San)
-    "1Bq2Pq0P1SQZfJNBZC3yduYCJmnyc4L4vmbLtvsVUkcg": "SS", # Main
-    "1J8Yzfz9621gqJkPh5ZKBa0v34nv3v9_7OL4JIROlHj0": "SS", # Source
-    "12yIL1CuESZxeUUd-oKK2brtN1FnXE9q95N7SqzNc7vk": "SS", # Alt Main
-    "1sTgZa-n1aP7oIhyQfPeN8QDgDNnCubqMWAd-TKjKpJXWsQm_ZhXnojPD": "SS", # Scripts ID
-    
-    # SK (Carmado)
-    "1hSsS9_Iu_MgKWsoE19hAMouQInLGVFaBF6ZFG4Bsm1s": "SK", # Main
-    "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs": "SK", # Source
-    "1CpYYLvRYslsyCkuLzL9EbbjsvbNpWCEZcmhKqMoX5zw": "SK", # Alt Main
-    "1DJvK1vUT2OTubN0TLdZvsgYMSYByLHl8xTsus3K-KJ-VtJxgGnSw5Ih8": "SK", # Scripts ID
-}
-
-PROJECT_NAMES = {
-    "MT": "CosmeticaBar (MT)",
-    "SK": "Carmado (SK)",
-    "SS": "San (SS)",
-}
-
-# Menu configurations are now imported from src.config.project_menus
-# Available as: PROJECT_MENUS, PRIMARY_DATA_MENU_ACTIONS, PRIMARY_DATA_MENU_ORDER, ORDER_STAGES_MENU_ORDER
-
-# Static menu groups are now available from src.config.project_menus
-# Use get_menu_groups(project) or PROJECT_MENUS["default"]["menu_groups"]
-
-# Settings submenu groups
-SETTINGS_SUBMENU_GROUPS: List[dict] = [
-    # ============== ПОДМЕНЮ: СИНХРОНИЗАЦИЯ ==============
-    {
-        "title": "🔄 Синхронизация",
-        "items": [
-            {"label": "🔧 Обновить триггеры", "function_name": "setupTriggers"},
-            {"label": "📝 Настроить правила синхронизации", "function_name": "showSyncRulesManagerDialog"},
-            {"separator": True},
-            {"label": "➕ Добавить артикул", "function_name": "addArticleManually"},
-            {"label": "❌ Удалить артикул", "function_name": "deleteSelectedRowsWithSync"},
-            {"separator": True},
-            {"label": "🔄 Синхронизировать строку", "function_name": "syncSelectedRow"},
-            {"label": "🔄 Синхронизировать всю таблицу", "function_name": "runFullSync"},
-        ],
-    },
-    # ============== ПОДМЕНЮ: SUPABASE ==============
-    {
-        "title": "🗄️ Supabase",
-        "items": [
-            {"label": "🔗 Открыть Supabase Console", "function_name": "openSupabaseConsole"},
-            {"label": "📊 Просмотр данных (список таблиц)", "function_name": "showSupabaseTablesView"},
-            {"separator": True},
-            {"label": "🔍 Выполнить SQL запрос", "function_name": "executeSupabaseSqlQuery"},
-            {"label": "📥 Импортировать данные", "function_name": "importSupabaseData"},
-            {"label": "📤 Экспортировать данные", "function_name": "exportSupabaseData"},
-            {"separator": True},
-            {"label": "🔐 Управление правами доступа", "function_name": "manageSupabasePermissions"},
-            {"label": "⚙️ Настройки подключения Supabase", "function_name": "configureSupabaseConnection"},
-        ],
-    },
-    # ============== ПОДМЕНЮ: ECOSYSTEM ==============
-    {
-        "title": "🟢 Ecosystem",
-        "items": [
-            {"label": "🏠 Открыть Главную страницу", "function_name": "openServerMainPage"},
-            {"label": "📝 Открыть Правила (UI)", "function_name": "openServerRulesPage"},
-            {"label": "📜 Открыть Журнал (UI)", "function_name": "openLogDashboard_proxy"},
-            {"label": "📚 Открыть Swagger (API)", "function_name": "openServerDocsPage"},
-            {"separator": True},
-            {"label": "🔄 Обновить меню", "function_name": "refreshMenu"},
-            {"label": "📑 Упорядочить листы", "function_name": "reorderSheets"},
-            {"label": "🔄 Обновить данные", "function_name": "callServerLoadFunctions"},
-            {"label": "🟢 Статус сервера", "function_name": "checkServerStatus"},
-            {"label": "🐛 Debug: Spreadsheet ID", "function_name": "debugShowSpreadsheetId"},
-        ],
-    },
-]
-
+# ============== Helper Functions ==============
 
 def _resolve_action_fn(action_def: dict, project: str) -> Optional[str]:
     """Pick correct function name for menu action."""
@@ -3014,7 +3052,7 @@ def _build_order_stages_menu(project: str) -> Optional[MenuGroupModel]:
     if not items:
         return None
 
-    return MenuGroupModel(title=stages_cfg.get("title", "📊 Стадии по заказ"), items=items)
+    return MenuGroupModel(title=stages_cfg.get("title", "🔄 Сортировка"), items=items)
 
 
 def _clone_base_group(group: dict) -> MenuGroupModel:
@@ -3089,17 +3127,6 @@ async def init_logs(request: LogInitRequest):
 # NOTE: /menu/config endpoint moved to line ~558 (before /menu/{project})
 
 
-@api_router.get("/menu/sort-config", summary="Конфиг сортировки")
-async def get_sort_config(spreadsheet_id: str):
-    """Возвращает настройки сортировки (колонки и листы) для конкретной таблицы."""
-    project = PROJECT_IDS.get(spreadsheet_id, "MT")
-    config = MENU_CONFIGS.get(project, MENU_CONFIGS["MT"])
-
-    return {
-        "project": project,
-        "order_sheet": config["order_sheet"],
-        "sort_columns": config["sort_columns"]
-    }
 
 
 # ============== Sheet Ordering ==============

@@ -4,9 +4,10 @@ Structured logging configuration.
 
 import logging
 import structlog
+from typing import Optional
 
 
-def setup_logging(level: str = "INFO", log_file: str | None = None):
+def setup_logging(level: str = "INFO", log_file: Optional[str] = None):
     """
     Configure structured logging with structlog.
 

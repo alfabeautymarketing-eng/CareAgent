@@ -23,11 +23,10 @@
  * Служит только для построения меню (часто из кэша).
  */
 function onOpen(e) {
-  // 1. Попытка построить меню (если сервер недоступен, будет взят кэш)
-  if (typeof createAgentMenu === 'function') {
-    // Simple trigger: запрещаем сетевые вызовы (UrlFetchApp) чтобы избежать ошибок прав.
-    createAgentMenu({ allowNetwork: false });
-  }
+  // Simple trigger: НЕ создаём меню здесь, чтобы избежать дублирования.
+  // Меню будет создано в installable trigger handleOnOpen() с полным доступом к сети.
+  // Если handleOnOpen не установлен - пользователь увидит только стандартное меню Google.
+  console.log('onOpen (simple trigger): skipping menu creation, waiting for handleOnOpen');
 }
 
 /**
@@ -614,7 +613,7 @@ function serverLoadStockData() {
       return callServerLoadStocks();
     }
     // Фолбэк на старую логику, если серверная не готова
-    var projectKey = (typeof getActiveProjectKey === 'function') ? getActiveProjectKey() : 'MT';
+    var projectKey = (typeof CONFIG !== 'undefined' && CONFIG.ACTIVE_PROJECT_KEY) ? CONFIG.ACTIVE_PROJECT_KEY : 'MT';
     if (Lib.loadStockData) {
       return Lib.loadStockData(projectKey);
     }
@@ -627,9 +626,9 @@ function serverLoadStockData() {
  */
 function serverProcessPrimaryData() {
   return _loggedCall_("serverProcessPrimaryData", function() {
-    var projectKey = (typeof getActiveProjectKey === 'function') ? getActiveProjectKey() : 'MT';
-    var mode = 'main'; // По умолчанию
-    
+    var projectKey = (typeof CONFIG !== 'undefined' && CONFIG.ACTIVE_PROJECT_KEY) ? CONFIG.ACTIVE_PROJECT_KEY : 'MT';
+    var mode = 'all'; // Запускает ВСЕ циклы обработки последовательно (main → tester → samples и т.д.)
+
     if (typeof callServerProcessPrice === 'function') {
       return callServerProcessPrice(projectKey.toLowerCase(), mode);
     }
@@ -900,7 +899,7 @@ function serverShowPriceStage() {
 function _callServerOrderFilter(stage) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();
-  const menuTitle = "Стадии по заказ";
+  const menuTitle = "Сортировка";
 
   ss.toast("Применяю фильтр '" + stage + "'...", menuTitle, 30);
 

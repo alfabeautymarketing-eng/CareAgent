@@ -1,112 +1,162 @@
-# 📘 Справочник ИИ Агента (AI Handbook)
+# AgentCare AI Development Handbook
 
-**Единый источник правды для всех AI агентов проекта AgentCare.**
-Этот файл заменяет собой `AI_RULES.md`, `AGENTS.md` и `AI_CENTRAL_COMMAND.md`.
-
----
-
-## 🎯 Главные Цели Проекта
-
-1. **Стабильность Кнопок**: Все кнопки в Google Sheets должны работать предсказуемо. Если кнопка сломана — это приоритет №1.
-2. **Рабочий процесс "Журнал"**:
-   - **Максимальная детализация**: Логирование должно быть подробным для каждой, даже самой мелкой функции. Сервер всегда должен видеть, что происходит.
-   - Главный инструмент отладки — **Логи**.
-   - Если пользователь говорит "Журнал" или "Ошибка", агент первым делом **проверяет логи** (через Journal UI или консоль), выявляет корневую причину и исправляет её.
-   - Слепая правка кода без анализа логов ЗАПРЕЩЕНА.
-3. **Надежная Синхронизация**:
-   - Синхронизация данных **через базу данных** (Supabase), подключенную к серверу.
-   - Данные в Sheets и БД должны быть согласованы.
-4. **Умный Агент**:
-   - Агент должен быть инициативным помощником, способным быстро обрабатывать информацию.
+**Version:** 4.0  
+**Last Updated:** 2026-01-29  
+**Architecture:** [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ---
 
-## 🛠 Рабочий Процесс (Workflow)
+## 🎯 Core Principles
 
-### 1. Начало Cессии: Beads (Задачи)
+### 1. Server-First Philosophy
+- **Python Server (FastAPI)** — единственный источник бизнес-логики
+- **Google Sheets (GAS)** — тонкий клиент, только UI и события
+- **Supabase** — хранилище логов, конфигурации, кэша
 
-**BEADS — ЕДИНСТВЕННЫЙ ИСТОЧНИК ЗАДАЧ.**
+### 2. Menu-Driven Architecture
+- **Структура кода = структура меню** — файлы роутеров соответствуют пунктам меню
+- **Правила именования**: `<номер>m-<название>.py` для функций меню, `s_<название>.py` для серверных функций
+- **Детали**: См. [docs/NAMING_CONVENTIONS.md](./docs/NAMING_CONVENTIONS.md)
 
-1. **ВСЕГДА** начинай сессию с проверки задач:
-   ```bash
-   bd ready --no-db --readonly
-   ```
-2. **Если Beads в режиме Read-Only**:
-   - Выведи список задач.
-   - Спроси ID задачи у пользователя.
-   - Назначь задачу себе: `bd pin <ID>`.
-3. **Работа без задачи ЗАПРЕЩЕНА**. Любое изменение кода должно быть привязано к задаче.
-
-### 2. В процессе работы
-
-- **Язык**: Русский.
-- **Инструменты**:
-  - `poetry run <command>` для Python.
-  - `bash scripts/push_all_gas.sh` для деплоя GAS (сразу во все проекты: MT, SS, SK).
-- **Автосохранение**:
-  - Регулярно запускай `bash git-autosave.sh` для сохранения прогресса.
-
-### 3. Завершение работы
-
-1. **Тесты**: Запусти тесты или скрипты проверки.
-2. **Линтеры**: Проверь код перед коммитом.
-3. **Пуш**:
-   ```bash
-   git pull --rebase
-   bd sync   # или попроси пользователя синхронизировать
-   git push
-   ```
-   **Работа не закончена, пока код не на сервере (remote).**
-    
----
-
-## ⌨️ Управление и Хоткеи (Hotkeys)
-
-Для ускорения разработки и соблюдения стандартов, используй следующие клавиатурные сокращения (настроены в `.vscode/tasks.json`):
-
-| Сочетание клавиш | Команда | Действие |
-|------------------|---------|----------|
-| **`⇧⌘B`** (Shift+Cmd+B) | `make deploy` | **Full Deploy**: Синхронизация кода и деплой на VPS + GAS |
-| **`⇧⌘N`** (Shift+Cmd+N) | `make restart-vps` | **Restart VPS**: Принудительная перезагрузка сервера на VPS |
-| **`⇧⌘M`** (Shift+Cmd+M) | `make dev` | **Local Session Start**: Запуск локального сервера + туннель + клиент |
-| **`Ctrl+C`** | (в терминале `make dev`) | **Stop Local Session**: Завершение локальной сессии и возврат на Production |
+### 3. Logging-First Debugging
+- Детальное логирование каждой функции
+- Журнал UI для анализа проблем
+- Правило: "Сначала лог, потом фикс"
 
 ---
 
-## 🏗 Архитектурные Принципы
+## 📂 Project Structure
 
-### 1. Server-First (Сервер Главнее)
-- **Вся логика на Python (FastAPI)**.
-- Сервер — "Мозг". Google Sheets — "Лицо".
-- ЗАПРЕЩЕНО писать сложную бизнес-логику на GAS.
-
-### 2. GAS как Тонкий Клиент (Thin Client)
-- Роль GAS:
-  - Поймать событие (`onEdit`, нажатие кнопки).
-  - Собрать данные из ячеек.
-  - Отправить `POST` запрос на сервер.
-  - Получить ответ и обновить ячейки/показать Toast.
-
-### 3. Логирование (Журнал)
-- **Приоритет №1**: Полная прозрачность работы сервера.
-- **Где искать**:
-  - Логи пишутся в стандартный вывод сервера (logger) и/или БД (Supabase).
-  - Лист "Логи" в Google Sheets **удален** для чистоты интерфейса.
-  - Для визуального контроля используй **"📜 Открыть Журнал (UI)"** в меню "🟢 Ecosystem" (открывает веб-интерфейс на сервере).
-- **Правило**: При миграции функции из GAS в Python старый код в GAS комментируется с пометкой `// MIGRATED TO SERVER`.
-
----
-
-## 🛡 Глобальные Правила (Rules)
-
-1. **!text!** (Восклицательные знаки): Текст в `!...!` — это строгий приказ пользователя. Нарушение недопустимо.
-2. **Уточняй**: Не уверен — спроси.
-3. **Атомарность Деплоя**: GAS код обновляется **во всех скриптах одновременно** (используй скрипты деплоя).
+```
+AgentCare/
+├── src/
+│   ├── api/
+│   │   ├── routes/
+│   │   │   ├── 01m-zakaz.py          # 🧾 Заказ
+│   │   │   ├── 02m-stadii_zakaza.py  # 📊 Стадии
+│   │   │   ├── ...                   # (8 файлов для меню)
+│   │   │   ├── s_sync.py             # Синхронизация
+│   │   │   └── s_*.py                # Серверные функции
+│   │   ├── models/                   # Pydantic модели
+│   │   ├── router.py                 # Главный роутер
+│   │   └── ...
+│   ├── services/                     # Бизнес-логика
+│   ├── config/                       # Конфигурация
+│   │   └── project_menus.py          # Структура меню
+│   └── main.py                       # Точка входа
+├── gas/                              # Google Apps Script
+├── docs/                             # Документация
+│   └── NAMING_CONVENTIONS.md         # Правила именования
+└── tests/                            # Тесты
+```
 
 ---
 
-## 📚 Ссылки
+## 🔧 Development Workflow
 
-- **API Документация**: `docs/API.md`
-- **Архитектура**: `ARCHITECTURE.md`
-- **Деплой**: `DEPLOY.md`
+### Before Starting Work
+
+1. **Check existing documentation:**
+   - Read [ARCHITECTURE.md](./ARCHITECTURE.md)
+   - Check [NAMING_CONVENTIONS.md](./docs/NAMING_CONVENTIONS.md)
+   - Review [task.md](./task.md) if exists
+
+2. **Understand the menu structure:**
+   - Open `src/config/project_menus.py`
+   - Find which menu group relates to your task
+   - Locate corresponding router file (`01m-zakaz.py`, etc.)
+
+3. **Create task.md** (if complex work):
+   - Break down work into checklist items
+   - Track progress as you go
+
+### During Development
+
+1. **Follow naming conventions:**
+   - Menu functions → `<номер>m-<название>.py`
+   - Server functions → `s_<название>.py`
+
+2. **Document everything:**
+   - Add docstrings with button mapping
+   - Explain what, why, and how
+   - Include example usage
+
+3. **Log extensively:**
+   - Use `logger.info()` for important steps
+   - Use `logger.error()` for failures
+   - Include context in logs
+
+4. **Test thoroughly:**
+   - Run existing tests: `pytest tests/`
+   - Test via GAS buttons
+   - Check `/docs` for API correctness
+
+### After Completion
+
+1. **Update documentation:**
+   - Update relevant .md files
+   - Keep ARCHITECTURE.md in sync
+
+2. **Verify backwards compatibility:**
+   - API paths unchanged
+   - JSON formats unchanged
+   - GAS functions still work
+
+---
+
+## 🚫 What NOT to Do
+
+1. ❌ **Never** put business logic in GAS
+2. ❌ **Never** change API paths without migration plan
+3. ❌ **Never** skip logging in critical functions
+4. ❌ **Never** create files without following naming conventions
+5. ❌ **Never** modify code without understanding menu structure
+
+---
+
+## 📋 Quick Reference
+
+### Finding Code by Menu Button
+
+1. Look at button label in Google Sheets menu
+2. Match to menu group in `src/config/project_menus.py`
+3. Open corresponding `<номер>m-*.py` file
+4. Search for function name from menu config
+
+**Example:**
+- Button: "📥 Обработка" in "🧾 Заказ" menu
+- Function: `serverProcessPrimaryData`
+- File: `src/api/routes/01m-zakaz.py`
+- Endpoint: `POST /api/v1/price/process/{project}`
+
+### Creating New Menu Function
+
+1. Add to `src/config/project_menus.py`
+2. Add endpoint to corresponding `<номер>m-*.py`
+3. Add function in GAS that calls endpoint
+4. Document mapping in router docstring
+
+### Creating New Server Function
+
+1. Create/update `s_<название>.py`
+2. Add endpoints with proper documentation
+3. Update router imports in `src/api/router.py`
+4. Add tests if needed
+
+---
+
+## 🔗 Important Links
+
+- [Architecture Overview](./ARCHITECTURE.md)
+- [Naming Conventions](./docs/NAMING_CONVENTIONS.md)
+- [API Documentation](./docs/API.md)
+- [Deployment Guide](./DEPLOYMENT_STATUS.md)
+
+---
+
+- Always check menu structure first
+- Use Context7 for library documentation
+- Follow the established patterns
+- When in doubt, ask the user
+- Keep changes minimal and focused
+- **Язык**: Всегда отвечать на русском. Планы (implementation_plan.md) и артефакты должны быть на русском языке.

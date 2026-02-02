@@ -1,7 +1,7 @@
 """
 Unified menu configuration for all projects.
 
-Combines static menu groups (BASE_MENU_GROUPS) with project-specific items (MENU_CONFIGS).
+Menu is served ONLY from server - no local GAS menu creation.
 Single source of truth for all menu structures across MT, SS, SK projects.
 """
 
@@ -10,7 +10,8 @@ from typing import Dict, List, Any
 # ============================================================================
 # UNIFIED PROJECT MENUS CONFIGURATION
 # ============================================================================
-# Merges BASE_MENU_GROUPS (static) + MENU_CONFIGS (project-specific)
+# All menus are served from server via /api/v1/menu/config endpoint
+# GAS loads this dynamically on document open
 
 PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
     # Default/fallback configuration (applies to all projects unless overridden)
@@ -20,20 +21,44 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
             "price": "Цена",
         },
         "order_sheet": "Заказ",
-        # Static menu groups (same for all projects)
+        # ========================================================================
+        # MENU GROUPS - same structure for ALL projects
+        # ========================================================================
         "menu_groups": [
-            # ============== ЦИКЛ 1: ПРАЙС-ЛИСТ ==============
+            # ============== ГРУППА 1: ЗАКАЗ ==============
+            # Единые кнопки, сервер определяет проект автоматически
+            {
+                "title": "🧾 Заказ",
+                "items": [
+                    {"label": "📥 Обработка", "function_name": "serverProcessPrimaryData"},
+                    {"label": "📊 Загрузить остатки", "function_name": "serverLoadStockData"},
+                ],
+            },
+            # ============== ГРУППА 2: СОРТИРОВКА ==============
+            {
+                "title": "🔄 Сортировка",
+                "items": [
+                    {"label": "Сортировать по производителю", "function_name": "sortByManufacturer"},
+                    {"label": "Сортировать по прайсу", "function_name": "sortByPrice"},
+                    {"separator": True},
+                    {"label": "1. Все данные", "function_name": "serverShowAllOrderData"},
+                    {"label": "2. Заказ", "function_name": "serverShowOrderStage"},
+                    {"label": "3. Акции", "function_name": "serverShowPromotionsStage"},
+                    {"label": "4. Набор", "function_name": "serverShowSetStage"},
+                    {"label": "5. Прайс", "function_name": "serverShowPriceStage"},
+                ],
+            },
+            # ============== ГРУППА 3: ПРАЙС-ЛИСТ ==============
             {
                 "title": "🏷️ Прайс-лист",
                 "items": [
-                    {"label": "📥 Загрузить и обработать прайс", "function_name": "serverProcessPrimaryData"},
-                    {"label": "📊 Загрузить остатки", "function_name": "serverLoadStockData"},
-                    {"separator": True},
                     {"label": "💰 Анализировать цены", "function_name": "menuAnalyzePrices"},
                     {"label": "✅ Сформировать свежий прайс", "function_name": "serverGenerateFreshPriceList"},
+                    {"separator": True},
+                    {"label": "📅 New год для динамика", "function_name": "serverAddNewYearColumns"},
                 ],
             },
-            # ============== ЦИКЛ 2: ЗАКАЗ & ДОКУМЕНТАЦИЯ ==============
+            # ============== ГРУППА 4: ЗАКАЗ & ДОКУМЕНТАЦИЯ ==============
             {
                 "title": "🛒 Заказ & Документация",
                 "items": [
@@ -53,7 +78,7 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
                     {"label": "🔄 Спирты - Пересчитать каскады", "function_name": "serverRecalculateCascades"},
                 ],
             },
-            # ============== ЦИКЛ 3: ЭКСПОРТ & ВЫГРУЗКА ==============
+            # ============== ГРУППА 5: ЭКСПОРТ & ВЫГРУЗКА ==============
             {
                 "title": "📦 Экспорт & Выгрузка",
                 "items": [
@@ -65,7 +90,7 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
                     {"label": "📄 Собрать документы для инвойса", "function_name": "collectAndCopyDocuments"},
                 ],
             },
-            # ============== ЦИКЛ 4: AI АГЕНТ ==============
+            # ============== ГРУППА 6: AI АГЕНТ ==============
             {
                 "title": "🤖 AI Агент",
                 "items": [
@@ -73,15 +98,18 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
                     {"label": "📋 Показать настройки AI", "function_name": "showGeminiSettings"},
                 ],
             },
-            # ============== ЦИКЛ 5: НАСТРОЙКА ==============
+            # ============== ГРУППА 7: НАСТРОЙКА ==============
             {
                 "title": "⚙️ Настройка",
                 "items": [
-                    {"label": "🔄 Синхронизировать конфиги", "function_name": "serverSyncConfigs"},
-                    {"label": "📊 Показать логи", "function_name": "serverShowLogs"},
+                    {"label": "⚙️ Настроить правила синхронизации", "function_name": "showSyncRulesManagerDialog"},
+                    {"label": "🔄 Установить триггеры", "function_name": "setupTriggers_proxy"},
+                    {"separator": True},
+                    {"label": "📜 Открыть Журнал (UI)", "function_name": "openLogDashboard_proxy"},
+                    {"label": "🔍 Проверить статус сервера", "function_name": "showAllServicesStatus_proxy"},
                 ],
             },
-            # ============== ЦИКЛ 6: РАЗРАБОТКА ==============
+            # ============== ГРУППА 8: РАЗРАБОТКА ==============
             {
                 "title": "🛠️ Инструменты разработчика",
                 "items": [
@@ -95,7 +123,7 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
         ],
     },
     # ========================================================================
-    # PROJECT-SPECIFIC OVERRIDES
+    # PROJECT-SPECIFIC CONFIGURATION (only metadata, NOT menu items)
     # ========================================================================
     "MT": {
         "menu_title": "MT CosmeticaBar",
@@ -104,20 +132,18 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
             "manufacturer": "Производитель",
             "price": "EXW ALFASPA текущая, €",
         },
-        # Project-specific submenu: 🧾 Заказ (part of primary_menu in MENU_CONFIGS)
         "primary_menu": {
             "title": "🧾 Заказ",
             "items": {
-                "MAIN": "Обработка Б/З поставщик",
-                "TESTER": "Обработка Тестер",
-                "SAMPLES": "Обработка Пробники",
-                "STOCKS": "Загрузить остатки",
-                "NEW_PRICE_YEAR": "New год для динамика",
-            },
+                "MAIN": "📥 Обработка Main",
+                "TESTER": "🧪 Обработка Tester",
+                "SAMPLES": "🎁 Обработка Samples",
+                "STOCKS": "📊 Загрузить остатки",
+                "NEW_PRICE_YEAR": "📅 New год для динамика",
+            }
         },
-        # Project-specific submenu: 📊 Стадии по заказ
         "order_stages_menu": {
-            "title": "📊 Стадии по заказ",
+            "title": "🔄 Сортировка",
             "items": {
                 "SORT_MANUFACTURER": "Сортировать по производителю",
                 "SORT_PRICE": "Сортировать по прайсу",
@@ -126,8 +152,8 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
                 "STAGE_PROMOTIONS": "3. Акции",
                 "STAGE_SET": "4. Набор",
                 "STAGE_PRICE": "5. Прайс",
-            },
-        },
+            }
+        }
     },
     "SK": {
         "menu_title": "SK Carmado",
@@ -139,14 +165,14 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
         "primary_menu": {
             "title": "🧾 Заказ",
             "items": {
-                "MAIN": "Обработка Б/З поставщик",
-                "PROBES": "Обработка пробники",
-                "STOCKS": "Загрузить остатки",
-                "NEW_PRICE_YEAR": "New год для динамика",
-            },
+                "MAIN": "📥 Обработка Б/З поставщик",
+                "PROBES": "🧪 Обработка пробники",
+                "STOCKS": "📊 Загрузить остатки",
+                "NEW_PRICE_YEAR": "📅 New год для динамика",
+            }
         },
         "order_stages_menu": {
-            "title": "📊 Стадии по заказ",
+            "title": "🔄 Сортировка",
             "items": {
                 "SORT_MANUFACTURER": "Сортировать по производителю",
                 "SORT_PRICE": "Сортировать по прайсу",
@@ -155,8 +181,8 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
                 "STAGE_PROMOTIONS": "3. Акции",
                 "STAGE_SET": "4. Набор",
                 "STAGE_PRICE": "5. Прайс",
-            },
-        },
+            }
+        }
     },
     "SS": {
         "menu_title": "SS San",
@@ -168,13 +194,13 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
         "primary_menu": {
             "title": "🧾 Заказ",
             "items": {
-                "MAIN": "Обработка Б/З поставщик",
-                "STOCKS": "Загрузить остатки",
-                "NEW_PRICE_YEAR": "New год для динамика",
-            },
+                "MAIN": "📥 Обработка Б/З поставщик",
+                "STOCKS": "📊 Загрузить остатки",
+                "NEW_PRICE_YEAR": "📅 New год для динамика",
+            }
         },
         "order_stages_menu": {
-            "title": "📊 Стадии по заказ",
+            "title": "🔄 Сортировка",
             "items": {
                 "SORT_MANUFACTURER": "Сортировать по производителю",
                 "SORT_PRICE": "Сортировать по прайсу",
@@ -183,66 +209,10 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
                 "STAGE_PROMOTIONS": "3. Акции",
                 "STAGE_SET": "4. Набор",
                 "STAGE_PRICE": "5. Прайс",
-            },
-        },
-    },
-}
-
-# ============================================================================
-# ACTION MAPPING (Function References)
-# ============================================================================
-# Maps menu item keys to their server function implementations
-# Replaces PRIMARY_DATA_MENU_ACTIONS from endpoints.py
-
-PRIMARY_DATA_MENU_ACTIONS = {
-    # Main processing functions (MAIN mode)
-    "MAIN": {
-        "fn_by_project": {
-            "SK": "serverProcessSkMain",
-            "SS": "serverProcessSsMain",
-            "MT": "serverProcessMtMain",
+            }
         }
     },
-    # Processing variants (TESTER, SAMPLES, PROBES) - project-specific
-    "TESTER": {"fn_by_project": {"MT": "serverProcessMtTester"}},
-    "SAMPLES": {"fn_by_project": {"MT": "serverProcessMtSamples"}},
-    "PROBES": {"fn_by_project": {"SK": "serverProcessSkProbes"}},
-    # Stock loading (project-specific)
-    "STOCKS": {
-        "fn_by_project": {
-            "SK": "loadSkStockData",
-            "SS": "loadSsStockData",
-            "MT": "loadMtStockData",
-        }
-    },
-    # Price/Date operations (generic)
-    "NEW_PRICE_YEAR": {"fn": "serverAddNewYearColumns"},
-    # Sorting operations (generic)
-    "SORT_MANUFACTURER": {"fn": "sortByManufacturer"},
-    "SORT_PRICE": {"fn": "sortByPrice"},
-    # Stage view operations (generic)
-    "STAGE_ALL": {"fn": "serverShowAllOrderData"},
-    "STAGE_ORDER": {"fn": "serverShowOrderStage"},
-    "STAGE_PROMOTIONS": {"fn": "serverShowPromotionsStage"},
-    "STAGE_SET": {"fn": "serverShowSetStage"},
-    "STAGE_PRICE": {"fn": "serverShowPriceStage"},
 }
-
-# ============================================================================
-# MENU ITEM ORDERING
-# ============================================================================
-# Defines the order in which menu items appear
-
-PRIMARY_DATA_MENU_ORDER = ["MAIN", "TESTER", "SAMPLES", "PROBES", "STOCKS", "NEW_PRICE_YEAR"]
-ORDER_STAGES_MENU_ORDER = [
-    "SORT_MANUFACTURER",
-    "SORT_PRICE",
-    "STAGE_ALL",
-    "STAGE_ORDER",
-    "STAGE_PROMOTIONS",
-    "STAGE_SET",
-    "STAGE_PRICE",
-]
 
 
 # ============================================================================
@@ -260,36 +230,24 @@ def get_project_menu(project: str) -> Dict[str, Any]:
     Returns:
         Merged configuration with project-specific overrides
     """
+
     if project not in PROJECT_MENUS:
         raise ValueError(f"Unknown project: {project}")
 
     # Start with default config
     config = PROJECT_MENUS["default"].copy()
 
-    # Merge project-specific config
+    # Merge project-specific config (metadata only)
     project_config = PROJECT_MENUS[project]
-    config.update(project_config)
+    for key, value in project_config.items():
+        config[key] = value
 
     return config
 
 
 def get_menu_groups(project: str) -> List[Dict[str, Any]]:
-    """Get static menu groups for a project (same for all projects)."""
+    """Get menu groups (same structure for all projects)."""
     return PROJECT_MENUS["default"]["menu_groups"]
-
-
-def get_primary_menu(project: str) -> Dict[str, Any]:
-    """Get project-specific primary menu (🧾 Заказ submenu)."""
-    if project not in PROJECT_MENUS:
-        raise ValueError(f"Unknown project: {project}")
-    return PROJECT_MENUS[project].get("primary_menu", {})
-
-
-def get_order_stages_menu(project: str) -> Dict[str, Any]:
-    """Get project-specific order stages menu (📊 Стадии по заказ submenu)."""
-    if project not in PROJECT_MENUS:
-        raise ValueError(f"Unknown project: {project}")
-    return PROJECT_MENUS[project].get("order_stages_menu", {})
 
 
 def get_menu_title(project: str) -> str:
@@ -299,37 +257,9 @@ def get_menu_title(project: str) -> str:
     return PROJECT_MENUS[project].get("menu_title", project)
 
 
-def get_menu_action(menu_key: str, project: str = None) -> Dict[str, Any]:
-    """
-    Get function action for a menu item.
-
-    Args:
-        menu_key: Menu item key (e.g., "MAIN", "STOCKS")
-        project: Project code (optional, required for project-specific functions)
-
-    Returns:
-        Action configuration with function name(s)
-    """
-    if menu_key not in PRIMARY_DATA_MENU_ACTIONS:
-        raise ValueError(f"Unknown menu action: {menu_key}")
-
-    action = PRIMARY_DATA_MENU_ACTIONS[menu_key]
-
-    # If it has project-specific functions, get the one for this project
-    if "fn_by_project" in action and project:
-        fn = action["fn_by_project"].get(project)
-        if not fn:
-            raise ValueError(f"No function for {menu_key} on project {project}")
-        return {"fn": fn}
-
-    # Otherwise return the generic function
-    return action
-
-
 # ============================================================================
 # EXPORT FOR BACKWARDS COMPATIBILITY
 # ============================================================================
-# Keep these exports for code that still references the old names
 
 BASE_MENU_GROUPS = PROJECT_MENUS["default"]["menu_groups"]
 MENU_CONFIGS = {
@@ -340,3 +270,86 @@ MENU_CONFIGS = {
     }
     for project in ["MT", "SS", "SK"]
 }
+
+# Legacy constants for endpoints.py compatibility - NOW UPDATED FOR FULL FUNCTIONALITY
+PRIMARY_DATA_MENU_ORDER = ["MAIN", "TESTER", "SAMPLES", "PROBES", "STOCKS", "NEW_PRICE_YEAR"]
+
+PRIMARY_DATA_MENU_ACTIONS = {
+    "MAIN": {
+        "fn_by_project": {
+            "SK": "processSkPriceSheet",
+            "SS": "processSsPriceSheet",
+            "MT": "processMtMainPrice"
+        }
+    },
+    "TESTER": {
+        "fn_by_project": {
+            "MT": "processMtTesterPrice"
+        }
+    },
+    "SAMPLES": {
+        "fn_by_project": {
+            "MT": "processMtSamplesPrice"
+        }
+    },
+    "PROBES": {
+        "fn_by_project": {
+            "SK": "processSkPriceProbes"
+        }
+    },
+    "STOCKS": {
+        "fn_by_project": {
+            "SK": "loadSkStockData",
+            "SS": "loadSsStockData",
+            "MT": "loadMtStockData"
+        }
+    },
+    "NEW_PRICE_YEAR": {
+        "fn": "serverAddNewYearColumns"
+    },
+    # Order Stages Actions
+    "SORT_MANUFACTURER": {
+        "fn_by_project": {
+            "SK": "sortSkOrderByManufacturer",
+            "SS": "sortSsOrderByManufacturer",
+            "MT": "sortMtOrderByManufacturer"
+        }
+    },
+    "SORT_PRICE": {
+        "fn_by_project": {
+            "SK": "sortSkOrderByPrice",
+            "SS": "sortSsOrderByPrice",
+            "MT": "sortMtOrderByPrice"
+        }
+    },
+    "STAGE_ALL": {"fn": "serverShowAllOrderData"},
+    "STAGE_ORDER": {"fn": "serverShowOrderStage"},
+    "STAGE_PROMOTIONS": {"fn": "serverShowPromotionsStage"},
+    "STAGE_SET": {"fn": "serverShowSetStage"},
+    "STAGE_PRICE": {"fn": "serverShowPriceStage"},
+}
+
+ORDER_STAGES_MENU_ORDER = ["SORT_MANUFACTURER", "SORT_PRICE", "STAGE_ALL", "STAGE_ORDER", "STAGE_PROMOTIONS", "STAGE_SET", "STAGE_PRICE"]
+
+
+def get_primary_menu(project: str) -> List[Dict[str, Any]]:
+    """
+    Legacy helper for endpoints.py.
+    This is not really used by new endpoints logic which builds properly,
+    but kept for potential backward compatibility or other consumers.
+    """
+    return []
+
+
+def get_order_stages_menu(project: str) -> List[Dict[str, Any]]:
+    """Legacy helper for endpoints.py"""
+    return []
+
+
+def get_menu_action(project: str, group_idx: int, item_idx: int) -> Dict[str, Any]:
+    """Get single menu item action."""
+    config = get_project_menu(project)
+    try:
+        return config["menu_groups"][group_idx]["items"][item_idx]
+    except (IndexError, KeyError):
+        return {"label": "Unknown", "function_name": "unknown"}
