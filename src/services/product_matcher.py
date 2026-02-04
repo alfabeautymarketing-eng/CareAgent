@@ -167,6 +167,7 @@ INSTRUCTIONS
 3. If a match is found, return the ID of the Base Product and a confidence score (0-100).
 4. If no match is found (confidence < 50), return null.
 5. Return ONLY valid JSON.
+6. EXPLANATION LANGUAGE: The 'reasoning' field MUST be in RUSSIAN.
 
 JSON FORMAT:
 {{

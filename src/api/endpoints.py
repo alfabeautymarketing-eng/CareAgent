@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, List, Any, Dict
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from src.utils.logger import logger
@@ -92,45 +92,53 @@ SETTINGS_SUBMENU_GROUPS: List[Dict[str, Any]] = [
     {
         "title": "🔄 Синхронизация",
         "items": [
-            {"label": "🔧 Обновить триггеры", "function_name": "setupTriggers"},
-            {"label": "📝 Настроить правила синхронизации", "function_name": "showSyncRulesManagerDialog"},
+            {"label": "🔄 Синхронизировать всё", "function_name": "runFullSync"},
+            {"label": "🔄 Синхронизировать строку", "function_name": "syncSelectedRow"},
             {"separator": True},
             {"label": "➕ Добавить артикул", "function_name": "addArticleManually"},
-            {"label": "❌ Удалить артикул", "function_name": "deleteSelectedRowsWithSync"},
+            {"label": "❌ Удалить строку с синхронизацией", "function_name": "deleteSelectedRowsWithSync"},
             {"separator": True},
-            {"label": "🔄 Синхронизировать строку", "function_name": "syncSelectedRow"},
-            {"label": "🔄 Синхронизировать всю таблицу", "function_name": "runFullSync"},
+            {"label": "📝 Правила синхронизации", "function_name": "showSyncRulesManagerDialog"},
         ],
     },
-    # ============== ПОДМЕНЮ: SUPABASE ==============
+    # ============== ПОДМЕНЮ: НАСТРОЙКИ СЕРВЕРА ==============
     {
-        "title": "🗄️ Supabase",
+        "title": "🛠️ Настройки сервера",
         "items": [
-            {"label": "🔗 Открыть Supabase Console", "function_name": "openSupabaseConsole"},
-            {"label": "📊 Просмотр данных (список таблиц)", "function_name": "showSupabaseTablesView"},
+            {"label": "🔧 Обновить триггеры", "function_name": "setupTriggers"},
+            {"label": "📋 Журнал синхронизации", "function_name": "showSyncLogDialog"},
             {"separator": True},
-            {"label": "🔍 Выполнить SQL запрос", "function_name": "executeSupabaseSqlQuery"},
-            {"label": "📥 Импортировать данные", "function_name": "importSupabaseData"},
-            {"label": "📤 Экспортировать данные", "function_name": "exportSupabaseData"},
-            {"separator": True},
-            {"label": "🔐 Управление правами доступа", "function_name": "manageSupabasePermissions"},
-            {"label": "⚙️ Настройки подключения Supabase", "function_name": "configureSupabaseConnection"},
+            {"label": "🔍 Проверить статус сервера", "function_name": "showAllServicesStatus_proxy"},
+            {"label": "🔗 Установить URL (ngrok)", "function_name": "serverSetLocalTunnel"},
+            {"label": "🚀 Reset to Production", "function_name": "serverResetToProduction"},
+            {"label": "🔄 Обновить меню", "function_name": "refreshMenu"},
         ],
     },
     # ============== ПОДМЕНЮ: ECOSYSTEM ==============
     {
         "title": "🟢 Ecosystem",
         "items": [
-            {"label": "🏠 Открыть Главную страницу", "function_name": "openServerMainPage"},
-            {"label": "📝 Открыть Правила (UI)", "function_name": "openServerRulesPage"},
-            {"label": "📜 Открыть Журнал (UI)", "function_name": "openLogDashboard_proxy"},
-            {"label": "📚 Открыть Swagger (API)", "function_name": "openServerDocsPage"},
+            {"label": "🏠 Главная страница", "function_name": "openServerMainPage"},
+            {"label": "📝 Правила (UI)", "function_name": "openServerRulesPage"},
+            {"label": "📜 Журнал (UI)", "function_name": "openLogDashboard_proxy"},
             {"separator": True},
-            {"label": "🔄 Обновить меню", "function_name": "refreshMenu"},
             {"label": "📑 Упорядочить листы", "function_name": "reorderSheets"},
             {"label": "🔄 Обновить данные", "function_name": "callServerLoadFunctions"},
-            {"label": "🟢 Статус сервера", "function_name": "checkServerStatus"},
-            {"label": "🐛 Debug: Spreadsheet ID", "function_name": "debugShowSpreadsheetId"},
+            {"label": "📚 API Docs (Swagger)", "function_name": "openServerDocsPage"},
+        ],
+    },
+    # ============== ПОДМЕНЮ: SUPABASE ==============
+    {
+        "title": "🗄️ Supabase",
+        "items": [
+            {"label": "🔗 Открыть Console", "function_name": "openSupabaseConsole"},
+            {"label": "📊 Просмотр данных", "function_name": "showSupabaseTablesView"},
+            {"separator": True},
+            {"label": "⚙️ Настройки подключения", "function_name": "configureSupabaseConnection"},
+            {"label": "🔐 Управление правами", "function_name": "manageSupabasePermissions"},
+            {"separator": True},
+            {"label": "📥 Импорт данных", "function_name": "importSupabaseData"},
+            {"label": "📤 Экспорт данных", "function_name": "exportSupabaseData"},
         ],
     },
 ]
@@ -727,6 +735,30 @@ async def get_menu_config_by_spreadsheet(spreadsheet_id: str):
                     "items": group_items
                 })
 
+        # 4. Settings main menu with submenus (Синхронизация, Supabase, Ecosystem)
+        settings_submenus = []
+        for sub_grp in SETTINGS_SUBMENU_GROUPS:
+            sub_items = []
+            for item_cfg in sub_grp.get("items", []):
+                if item_cfg.get("separator"):
+                    sub_items.append({"separator": True})
+                elif item_cfg.get("label") and item_cfg.get("function_name"):
+                    sub_items.append({
+                        "label": item_cfg["label"],
+                        "function_name": item_cfg["function_name"]
+                    })
+            if sub_items:
+                settings_submenus.append({
+                    "submenu": sub_grp.get("title", "Settings"),
+                    "items": sub_items
+                })
+        
+        if settings_submenus:
+            menus.append({
+                "title": "⚙️ Настройка",
+                "items": settings_submenus
+            })
+
         # Return GAS-compatible format
         return {
             "project": project,
@@ -938,7 +970,19 @@ async def get_rules_ui():
 async def get_logs_ui():
     """Открывает встроенный веб-интерфейс (HTML) для просмотра логов синхронизации."""
     logger.info("ui_access", path="/logs-ui")
-    return FileResponse("config/logs_manager.html")
+    
+    # Read HTML file directly to avoid ERR_CONTENT_LENGTH_MISMATCH with FileResponse
+    html_path = "config/logs_manager.html"
+    try:
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        logger.error("failed_to_load_logs_ui", error=str(e))
+        return HTMLResponse(
+            content=f"<html><body><h1>Ошибка загрузки интерфейса</h1><p>{str(e)}</p></body></html>",
+            status_code=500
+        )
 
 
 # ============== Sync Logs ==============
@@ -1545,17 +1589,14 @@ async def run_load_functions(request: LoadFunctionsRequest):
 async def process_price(
     project: str,
     request: PriceProcessRequest,
-    background_tasks: BackgroundTasks
 ):
     """
-    Запускает процесс обновления цен из прайс-листа поставщика (Б/З поставщик).
+    Обрабатывает прайс поставщика.
 
-    Аргументы:
-        project: Код проекта (mt, sk, ss)
-        request: Параметры обработки (spreadsheet_id, mode, dry_run)
+    mode="all" запускает ВСЕ циклы последовательно (main -> tester -> samples и т.д.)
+    mode="main"/"tester"/"samples"/"probes" запускает конкретный цикл.
 
-    Возвращает:
-        Результат обработки или предпросмотр, если dry_run=True
+    Выполняется синхронно, чтобы GAS получил результат или ошибку.
     """
     logger.info(
         "price_process_requested",
@@ -1566,44 +1607,26 @@ async def process_price(
     )
 
     try:
-        # For dry_run, process synchronously to return preview
-        if request.dry_run:
-            result = await price_processor.process(
+        if request.mode == "all":
+            # Run ALL processing cycles sequentially (main -> tester -> samples etc.)
+            if request.dry_run:
+                # For dry_run with "all", just preview the first cycle (main)
+                return await price_processor.process(
+                    project=project, mode="main", spreadsheet_id=request.spreadsheet_id,
+                    source_doc_id=request.source_doc_id, dry_run=True
+                )
+            result = await price_processor.process_all(
                 project=project,
-                mode=request.mode,
                 spreadsheet_id=request.spreadsheet_id,
-                source_doc_id=request.source_doc_id,
-                dry_run=True
+                source_doc_id=request.source_doc_id
             )
             return result
-
-        # For actual processing, run in background
-        # "main" or "all" triggers full sequential processing (main → tester → samples etc.)
-        # Specific modes like "tester", "samples", "probes" run only that single cycle
-        if request.mode in ("main", "all"):
-            background_tasks.add_task(
-                price_processor.process_all,
-                project=project,
-                spreadsheet_id=request.spreadsheet_id,
-                source_doc_id=request.source_doc_id,
-            )
         else:
-            # Run single specific mode (tester, samples, probes)
-            background_tasks.add_task(
-                price_processor.process,
-                project=project,
-                mode=request.mode,
-                spreadsheet_id=request.spreadsheet_id,
-                source_doc_id=request.source_doc_id,
-                dry_run=False
+            # Run a single specific cycle
+            return await price_processor.process(
+                project=project, mode=request.mode, spreadsheet_id=request.spreadsheet_id,
+                source_doc_id=request.source_doc_id, dry_run=request.dry_run
             )
-
-        return {
-            "status": "queued",
-            "message": f"Processing {project.upper()} {request.mode} started",
-            "task_id": f"price_{project}_{request.mode}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        }
-
     except Exception as e:
         logger.error("price_process_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))

@@ -1214,7 +1214,17 @@ if (ss) {
           if (r) rows.push(r);
         });
         if (rows.length > 0) {
-          rows.sort((a, b) => b - a).forEach((r) => sh.deleteRow(r));
+          // Удаляем блоками смежных строк (быстрее чем по одной)
+          rows.sort((a, b) => b - a);
+          for (var ri = 0; ri < rows.length; ) {
+            var startRow = rows[ri];
+            var cnt = 1;
+            while (ri + cnt < rows.length && rows[ri + cnt] === startRow - cnt) {
+              cnt++;
+            }
+            sh.deleteRows(startRow - cnt + 1, cnt);
+            ri += cnt;
+          }
           Lib.deleteKeyCacheForSheet(name);
           total += rows.length;
           Lib.logInfo(`Удалено ${rows.length} строк на "${name}"`);
@@ -1810,13 +1820,27 @@ if (ss) {
         );
       }
 
-      // собираем ID и удаляем локально
+      // собираем ID пакетно (один getValues вместо N getRange)
+      const allColA = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
       const ids = [];
       rowsSorted.forEach((r) => {
-        const id = String(sheet.getRange(r, 1).getValue() || "").trim();
+        const id = String((allColA[r - 1] && allColA[r - 1][0]) || "").trim();
         if (id) ids.push(id);
-        sheet.deleteRow(r);
       });
+
+      // Удаляем строки пакетно: группируем смежные и удаляем блоками
+      // rowsSorted уже отсортирован по убыванию (b - a)
+      ss.toast(`Удаление ${rowsSorted.length} строк...`, "Выполнение", 30);
+      for (let i = 0; i < rowsSorted.length; ) {
+        let startRow = rowsSorted[i];
+        let count = 1;
+        // Группируем смежные строки (идущие подряд при счёте сверху вниз)
+        while (i + count < rowsSorted.length && rowsSorted[i + count] === startRow - count) {
+          count++;
+        }
+        sheet.deleteRows(startRow - count + 1, count);
+        i += count;
+      }
       Lib.deleteKeyCacheForSheet(sheetName);
 
       // PROGRESS: Before batch deletion
@@ -3267,207 +3291,58 @@ if (ss) {
      * - сохраняет state в ScriptProperties;
      * - запускает первую итерацию Lib._continueFullSync().
      */
+    /**
+     * ЗАПУСК ПОЛНОЙ СИНХРОНИЗАЦИИ (SERVER-SIDE)
+     * Вызывает API сервера для глобальной синхронизации всех правил.
+     */
     Lib.runFullSync = function () {
       const ui = SpreadsheetApp.getUi();
       const ss = SpreadsheetApp.getActiveSpreadsheet();
 
       const resp = ui.alert(
         "Запуск полной синхронизации",
-        "Операция проверит и, при необходимости, исправит все несоответствия по активным правилам. Продолжить?",
+        "Операция запустит глобальную синхронизацию на сервере. Это может занять несколько минут. Продолжить?",
         ui.ButtonSet.YES_NO
       );
       if (resp !== ui.Button.YES) return;
 
-      // START: Log function entry
-      if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-        Lib.logWithEmoji(
-          "Запуск полной синхронизации",
-          "INFO",
-          "",
-          "runFullSync",
-          "Пользователь инициировал полную синхронизацию всех правил",
-          "Sync",
-          "START"
-        );
-      }
-
-      const lock = LockService.getScriptLock();
-      if (!lock.tryLock(15000)) {
-        // WARNING: Lock acquisition failed
-        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-          Lib.logWithEmoji(
-            "Процесс синхронизации уже выполняется",
-            "WARN",
-            "",
-            "runFullSync",
-            "Не удалось получить блокировку - другой процесс ещё работает",
-            "Sync",
-            "WARNING"
-          );
-        }
-        ui.alert("Процесс уже выполняется.");
-        return;
-      }
+      Lib.logStep("Sync", "Запуск полной синхронизации через сервер API...", "INFO");
+      ss.toast("🚀 Отправка запроса на сервер...", "Full Sync");
 
       try {
-        // 1) Сбросить прошлое состояние + удалить таймеры продолжения
-        PropertiesService.getScriptProperties().deleteProperty(STATE_KEY);
-        ScriptApp.getProjectTriggers().forEach((t) => {
-          try {
-            if (
-              typeof t.getHandlerFunction === "function" &&
-              t.getHandlerFunction() === CONTINUE_HANDLER
-            ) {
-              ScriptApp.deleteTrigger(t);
-            }
-          } catch (_) {
-            /* no-op */
-          }
-        });
+        // Определяем ID и Project
+        const spreadsheetId = ss.getId();
+        // Пытаемся получить код проекта из конфига или fallback
+        let project = "UNKNOWN";
+        if (Lib.CONFIG && Lib.CONFIG.PROJECT && Lib.CONFIG.PROJECT.CODE) {
+          project = Lib.CONFIG.PROJECT.CODE;
+        } else {
+           // Fallback logic if config is missing (unlikely)
+           project = "MT"; 
+        }
 
-        // 2) Загрузить и ОТФИЛЬТРОВАТЬ правила
-        const allRulesRaw = _loadSyncRules(true);
-        const allRules = (allRulesRaw || []).filter(
-          (r) =>
-            r &&
-            typeof r === "object" &&
-            typeof r.sourceSheet === "string" &&
-            r.sourceSheet &&
-            typeof r.sourceHeader === "string" &&
-            r.sourceHeader &&
-            typeof r.targetSheet === "string" &&
-            r.targetSheet &&
-            typeof r.targetHeader === "string" &&
-            r.targetHeader &&
-            (!r.isExternal ||
-              (typeof r.targetDocId === "string" && r.targetDocId))
+        // Вызов API
+        if (typeof ServerApi === 'undefined' || typeof ServerApi.syncFull !== 'function') {
+           throw new Error("ServerApi.syncFull не найден. Обновите библиотеку.");
+        }
+
+        const result = ServerApi.syncFull(spreadsheetId, project, "ALL");
+        
+        Lib.logStep("Sync", "Ответ сервера: " + JSON.stringify(result), "INFO");
+        ss.toast("✅ Синхронизация запущена на сервере!", "Full Sync");
+        
+        ui.alert(
+          "✅ Запрос успешно отправлен",
+          "Сервер начал обработку данных. Результаты появятся в таблице через некоторое время.\n\nTask ID: " + (result.task_id || "N/A"),
+          ui.ButtonSet.OK
         );
 
-        // PROGRESS: Log rules loaded
-        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-          Lib.logWithEmoji(
-            "Правила синхронизации загружены",
-            "DEBUG",
-            "",
-            "runFullSync",
-            `Всего правил загружено: ${allRulesRaw.length}, из них валидных: ${allRules.length}`,
-            "Sync",
-            "PROGRESS",
-            null,
-            { totalLoaded: allRulesRaw.length, validRules: allRules.length }
-          );
-        }
+        return result;
 
-        if (allRules.length === 0) {
-          // WARNING: No valid rules found
-          if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-            Lib.logWithEmoji(
-              "Активные валидные правила не найдены",
-              "WARN",
-              "",
-              "runFullSync",
-              "В системе нет активных правил синхронизации для обработки",
-              "Sync",
-              "WARNING"
-            );
-          }
-          ui.alert("Активные валидные правила не найдены.");
-          return;
-        }
-
-        // 3) Сгруппировать по исходному листу
-        const rulesBySourceSheet = allRules.reduce((acc, r) => {
-          (acc[r.sourceSheet] = acc[r.sourceSheet] || []).push(r);
-          return acc;
-        }, {});
-        const sheetsToProcess = Object.keys(rulesBySourceSheet);
-        if (sheetsToProcess.length === 0) {
-          // WARNING: No source sheets to process
-          if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-            Lib.logWithEmoji(
-              "Нет листов-источников для проверки",
-              "WARN",
-              "",
-              "runFullSync",
-              "После фильтрации правил не осталось листов-источников",
-              "Sync",
-              "WARNING"
-            );
-          }
-          ui.alert("Нет листов-источников для проверки.");
-          return;
-        }
-
-        // 4) Сохранить состояние
-        const state = {
-          version: 1,
-          sheets: sheetsToProcess, // список листов-источников
-          rulesBySheet: rulesBySourceSheet, // карта: источник -> массив правил
-          sheetIndex: 0, // текущий индекс листа
-          lastProcessedRow: 0, // от какой строки продолжать
-          totalCorrections: 0, // счётчик исправлений
-          startedAtUtc: new Date().toISOString(),
-        };
-        PropertiesService.getScriptProperties().setProperty(
-          STATE_KEY,
-          JSON.stringify(state)
-        );
-
-        // PROGRESS: Log state initialization
-        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-          Lib.logWithEmoji(
-            "Инициализация полной синхронизации",
-            "DEBUG",
-            "",
-            "runFullSync",
-            `К обработке ${sheetsToProcess.length} листов-источников`,
-            "Sync",
-            "PROGRESS",
-            null,
-            { sheetsCount: sheetsToProcess.length, totalRules: allRules.length, startedAt: state.startedAtUtc }
-          );
-        }
-
-        ss.toast(
-          `Старт полной синхронизации… (${sheetsToProcess.length} листов)`,
-          "Full Sync",
-          8
-        );
-
-        // PROGRESS: Before first iteration
-        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-          Lib.logWithEmoji(
-            "Начало обработки листов",
-            "DEBUG",
-            "",
-            "runFullSync",
-            `Запуск обработки ${sheetsToProcess.length} листов по ${allRules.length} правилам`,
-            "Sync",
-            "PROGRESS"
-          );
-        }
-
-        // 5) Первая итерация (дальше _continueFullSync сама поставит таймер, если надо)
-        Lib._continueFullSync();
       } catch (e) {
-        // ERROR: Log failure with full context
-        if (typeof Lib !== 'undefined' && typeof Lib.logWithEmoji === 'function') {
-          Lib.logWithEmoji(
-            "Ошибка запуска полной синхронизации",
-            "ERROR",
-            "",
-            "runFullSync",
-            e && e.message ? e.message : String(e),
-            "Sync",
-            "ERROR",
-            null,
-            { error: e ? e.toString() : "Unknown error", stack: e && e.stack ? e.stack : null }
-          );
-        }
-        Lib.logError("[FullSync] Ошибка запуска runFullSync", e);
-        ui.alert(`Ошибка запуска: ${e && e.message ? e.message : e}`);
-      } finally {
-        lock.releaseLock();
+        Lib.logError("[FullSync] Ошибка вызова сервера", e);
+        ui.alert(`❌ Ошибка запуска: ${e.message}`);
+        throw e;
       }
     };
 

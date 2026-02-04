@@ -195,7 +195,8 @@
             opacity: 0.5;
         }
 
-        .form-select, .form-input {
+        .form-select,
+        .form-input {
             background: rgba(15, 23, 42, 0.5);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 10px;
@@ -204,7 +205,8 @@
             font-size: 14px;
         }
 
-        .form-select:focus, .form-input:focus {
+        .form-select:focus,
+        .form-input:focus {
             border-color: var(--accent);
             outline: none;
         }
@@ -484,8 +486,13 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
         }
 
         @keyframes slideIn {
@@ -493,6 +500,7 @@
                 transform: translateX(100%);
                 opacity: 0;
             }
+
             to {
                 transform: translateX(0);
                 opacity: 1;
@@ -533,7 +541,7 @@
                 flex-direction: column;
             }
 
-            .filter-bar > * {
+            .filter-bar>* {
                 width: 100%;
             }
 
@@ -701,8 +709,39 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
+        // Global error handler to catch white screen issues
+        window.onerror = function (msg, url, line, col, error) {
+            const container = document.getElementById("toastContainer");
+            if (container) {
+                const t = document.createElement("div");
+                t.className = "toast error";
+                t.textContent = `CRITICAL ERROR: ${msg} (Line ${line})`;
+                t.style.backgroundColor = "#ef4444";
+                t.style.color = "white";
+                t.style.maxWidth = "none";
+                container.appendChild(t);
+            }
+
+            // Also show in table body if possible
+            const tbody = document.getElementById("logsTableBody");
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 40px; color: #ef4444;">
+                            <h3>🔥 Произошла критическая ошибка</h3>
+                            <pre style="text-align: left; background: rgba(0,0,0,0.2); padding: 10px; overflow: auto; border-radius: 6px;">${msg}\nLine: ${line}\nStack: ${error ? error.stack : 'N/A'}</pre>
+                            <p>Пожалуйста, попробуйте обновить страницу.</p>
+                        </td>
+                    </tr>
+                `;
+            }
+            return false;
+        };
+    </script>
+
+    <script>
         const state = {
-            spreadsheetId: "13kB77R67GJOZQ3vsLcwR1nUaRsupR8ZnEaTdDd66CTQ",
+            spreadsheetId: null, // Will be set from URL parameter in init()
             allLogs: [],
             filteredLogs: [],
             stats: {},
@@ -742,7 +781,27 @@
 
         async function init() {
             const urlParams = new URLSearchParams(window.location.search);
-            state.spreadsheetId = urlParams.get('id') || localStorage.getItem("last_ss_id") || state.spreadsheetId;
+            state.spreadsheetId = urlParams.get('id') || localStorage.getItem("last_ss_id");
+
+            if (!state.spreadsheetId) {
+                // Show error message instead of loading
+                const tbody = $("logsTableBody");
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            <div class="empty-state-icon">❌</div>
+                            <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">ID таблицы не указан</div>
+                            <div style="font-size: 14px; color: var(--muted);">
+                                Откройте журнал из меню Google Таблицы.<br>
+                                Прямой доступ к этой странице невозможен.
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                $("loadingStatus").style.display = "none";
+                return;
+            }
+
             localStorage.setItem("last_ss_id", state.spreadsheetId);
 
             await refreshData();

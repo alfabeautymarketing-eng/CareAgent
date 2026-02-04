@@ -83,6 +83,7 @@ class SyncResult:
     group_changes: List[Dict[str, Any]] = field(default_factory=list)
     barcode_mismatches: List[Dict[str, Any]] = field(default_factory=list)
     new_articles: List[Dict[str, Any]] = field(default_factory=list)
+    last_idp: int = 0  # Track last assigned ID-P for cycle continuation
 
 
 class PriceProcessor:
@@ -198,6 +199,7 @@ class PriceProcessor:
         results = []
         total_rows = 0
         total_new = 0
+        last_idp = 0  # Track ID-P across cycles for continuation
 
         for i, cycle in enumerate(cycles):
             cycle_mode = cycle["mode"]
@@ -207,7 +209,7 @@ class PriceProcessor:
                 spreadsheet_id,
                 "ПРАЙС",
                 f"Цикл {cycle_num}/{len(cycles)}: {cycle_mode}",
-                f"Старт",
+                f"Старт (last_idp={last_idp})",
                 "🔄"
             )
 
@@ -217,17 +219,22 @@ class PriceProcessor:
                     mode=cycle_mode,
                     spreadsheet_id=spreadsheet_id,
                     source_doc_id=source_doc_id,
-                    dry_run=False
+                    dry_run=False,
+                    start_idp=last_idp
                 )
                 results.append(result)
                 total_rows += result.get("processed_rows", 0)
                 total_new += result.get("new_articles", 0)
+                # Update last_idp for next cycle continuation
+                cycle_last_idp = result.get("last_idp", 0)
+                if cycle_last_idp > last_idp:
+                    last_idp = cycle_last_idp
 
                 self._log(
                     spreadsheet_id,
                     "ПРАЙС",
                     f"Цикл {cycle_num}/{len(cycles)}: {cycle_mode} завершён",
-                    f"Строк: {result.get('processed_rows', 0)}",
+                    f"Строк: {result.get('processed_rows', 0)}, last_idp={last_idp}",
                     "✅"
                 )
 
@@ -252,20 +259,38 @@ class PriceProcessor:
                     "processed_rows": 0
                 })
 
-        self._log(
-            spreadsheet_id,
-            "ПРАЙС",
-            f"Полная обработка {project.upper()} завершена",
-            f"Циклов: {len(cycles)}, строк: {total_rows}, новых: {total_new}",
-            "🏁"
-        )
+        # Check if any cycles had errors
+        failed_cycles = [r for r in results if r.get("status") == "error"]
+        has_errors = len(failed_cycles) > 0
+        final_status = "error" if has_errors and total_rows == 0 else "success"
+
+        if has_errors:
+            error_messages = [f"{r.get('mode', '?')}: {r.get('message', '?')}" for r in failed_cycles]
+            summary_msg = f"Ошибки в циклах: {'; '.join(error_messages)}"
+            self._log(
+                spreadsheet_id,
+                "ПРАЙС",
+                f"Полная обработка {project.upper()} завершена с ошибками",
+                summary_msg,
+                "⚠️"
+            )
+        else:
+            self._log(
+                spreadsheet_id,
+                "ПРАЙС",
+                f"Полная обработка {project.upper()} завершена",
+                f"Циклов: {len(cycles)}, строк: {total_rows}, новых: {total_new}",
+                "🏁"
+            )
 
         return {
-            "status": "success",
-            "message": f"Полная обработка {project.upper()}: {len(cycles)} циклов, {total_rows} строк",
+            "status": final_status,
+            "message": f"Полная обработка {project.upper()}: {len(cycles)} циклов, {total_rows} строк"
+                       + (f" (ошибок: {len(failed_cycles)})" if has_errors else ""),
             "cycles": len(cycles),
             "total_rows": total_rows,
             "total_new": total_new,
+            "errors": [r.get("message", "") for r in failed_cycles] if has_errors else [],
             "results": results
         }
 
@@ -275,7 +300,8 @@ class PriceProcessor:
         mode: str,
         spreadsheet_id: str,
         source_doc_id: Optional[str] = None,
-        dry_run: bool = False
+        dry_run: bool = False,
+        start_idp: int = 0
     ) -> Dict[str, Any]:
         """
         Main processing method - FULL GAS LOGIC IMPLEMENTATION.
@@ -334,24 +360,14 @@ class PriceProcessor:
                 source_sheets = config.get("source", {}).get("sheets", {})
                 source_sheet_name = source_sheets.get(mode, "-Б/З поставщик")
 
-            # 2. Create snapshot in source document (NEW - matches GAS)
-            if not dry_run and actual_source_doc_id:
-                try:
-                    await self._create_source_snapshot(
-                        actual_source_doc_id,
-                        source_sheet_name,
-                        spreadsheet_id
-                    )
-                except Exception as e:
-                    logger.warning(f"Snapshot creation failed (non-critical): {e}")
-
-            # 3. Read source data
+            # 2. Read source data
             source_data = await self._read_source_data(
                 spreadsheet_id,
                 project,
                 mode,
-                source_doc_id,
-                config
+                actual_source_doc_id,
+                config,
+                resolved_source_sheet=source_sheet_name
             )
 
             if not source_data or not source_data.get("values"):
@@ -361,7 +377,7 @@ class PriceProcessor:
                     "processed_rows": 0
                 }
 
-            # 4. Parse data based on project/mode
+            # 3. Parse data based on project/mode
             processed = self._parse_data(
                 source_data["values"],
                 project,
@@ -376,6 +392,18 @@ class PriceProcessor:
                     "message": "Не найдено данных для обработки",
                     "processed_rows": 0
                 }
+
+            # 4. Create structured snapshot in source document (after parsing)
+            if not dry_run and actual_source_doc_id:
+                try:
+                    await self._create_structured_snapshot(
+                        actual_source_doc_id,
+                        source_sheet_name,
+                        spreadsheet_id,
+                        processed
+                    )
+                except Exception as e:
+                    logger.warning(f"Snapshot creation failed (non-critical): {e}")
 
             # 5. If dry_run, return preview
             if dry_run:
@@ -413,7 +441,8 @@ class PriceProcessor:
                 processed,
                 config,
                 project,
-                product_matcher=ProductMatcher(spreadsheet_id)
+                product_matcher=ProductMatcher(spreadsheet_id),
+                min_idp=start_idp
             )
 
             # 8. Fill ID-G for rows without ID-P (NEW - matches GAS _fillIdgForRowsWithoutIdp)
@@ -486,6 +515,7 @@ class PriceProcessor:
                 "updated_articles": len(sync_result.updated_rows),
                 "barcode_mismatches": len(sync_result.barcode_mismatches),
                 "idp_filled": len(id_to_idp),
+                "last_idp": sync_result.last_idp,
                 "errors": []
             }
 
@@ -505,7 +535,8 @@ class PriceProcessor:
         project: str,
         mode: str,
         source_doc_id: Optional[str],
-        config: Dict
+        config: Dict,
+        resolved_source_sheet: Optional[str] = None
     ) -> Dict[str, Any]:
         """Read source data from external document"""
 
@@ -519,45 +550,39 @@ class PriceProcessor:
                 # Fallback: use the same spreadsheet
                 source_doc_id = spreadsheet_id
 
-        # Get source sheet name based on mode from config
-        source_config = config.get("source", {})
-        source_sheets = source_config.get("sheets", {})
-
-        # Map mode to sheet name from config
-        mode_to_key = {
-            "main": "main",
-            "tester": "tester",
-            "samples": "samples",
-            "probes": "probes"
-        }
-        sheet_key = mode_to_key.get(mode, "main")
-        sheet_name = source_sheets.get(sheet_key, "-Б/З поставщик")
-
-        # Override from parser config if available
-        parser_config = config.get("parser", {}).get(mode, {})
-        if parser_config.get("sheet_name"):
-            sheet_name = parser_config["sheet_name"]
+        # Use pre-resolved sheet name if provided (from process() method)
+        # This avoids the bug where parser_config.sheet_name (e.g. "Прайс")
+        # would override the correct source sheet (e.g. "-Б/З поставщик")
+        if resolved_source_sheet:
+            sheet_name = resolved_source_sheet
+        else:
+            # Fallback: resolve from config
+            source_config = config.get("source", {})
+            source_sheets = source_config.get("sheets", {})
+            mode_to_key = {
+                "main": "main",
+                "tester": "tester",
+                "samples": "samples",
+                "probes": "probes"
+            }
+            sheet_key = mode_to_key.get(mode, "main")
+            sheet_name = source_sheets.get(sheet_key, "-Б/З поставщик")
 
         try:
             logger.info(f"Reading source data: doc={source_doc_id}, sheet='{sheet_name}', mode={mode}")
             ws = self.sheets.get_worksheet(source_doc_id, sheet_name)
             values = ws.get_all_values()
             logger.info(f"Source sheet '{sheet_name}': {len(values)} rows, {len(values[0]) if values else 0} cols")
-            if values and len(values) > 1:
-                logger.info(f"Source sheet '{sheet_name}' row[0] (headers): {values[0][:8]}")
-                logger.info(f"Source sheet '{sheet_name}' row[1] (first data): {values[1][:8]}")
-
-            # Try to get backgrounds for color-based parsing (SK)
-            backgrounds = None
-            if project == "sk":
-                try:
-                    backgrounds = ws.get_all_backgrounds()
-                except Exception:
-                    pass
+            if values:
+                # Log first 30 rows to help diagnose header location
+                for ridx in range(min(len(values), 30)):
+                    row_preview = [str(c)[:40] for c in values[ridx][:10]]
+                    if any(str(c).strip() for c in values[ridx][:10]):
+                        logger.info(f"Source row[{ridx}]: {row_preview}")
 
             return {
                 "values": values,
-                "backgrounds": backgrounds,
+                "backgrounds": None,
                 "sheet_name": sheet_name,
                 "source_doc_id": source_doc_id
             }
@@ -701,14 +726,20 @@ class PriceProcessor:
         backgrounds: Optional[List[List[str]]] = None
     ) -> ProcessedData:
         """
-        Parse SK project data with color-based group detection.
-
-        SK specifics:
-        - Groups detected by yellow background color (#ffff00)
-        - Combined group format: "{line} - {group}"
-        - RRP column present
-        - Probes mode has different logic (not_starts_with_00)
+        Parse SK project data (Carmado).
+        Dispatches to _parse_sk_probes() for probes mode.
         """
+        # Probes sheet has completely different structure
+        if mode == "probes":
+            return self._parse_sk_probes(values, parser_config)
+
+        # --- Main mode ---
+        # SK source file structure:
+        # - Rows 0-19: Legal header (company name, address, terms)
+        # - Row ~21+: Data starts with group row "SkinClinic - FACIAL CARE"
+        # - Group rows: column B has text, column C is EMPTY
+        # - Article rows: column B = code, column C = product name
+        # - Prices use European format with € (e.g., "18,53€")
 
         rows: List[ParsedRow] = []
         articles: List[str] = []
@@ -716,58 +747,51 @@ class PriceProcessor:
         current_group = ""
         current_line = ""
 
-        # Group detection config
-        group_detection = parser_config.get("group_detection", {})
-        group_color = group_detection.get("group_color", "#ffff00").lower()
+        # Column indices from config (no header search — SK has no header row)
+        excel_cols = parser_config.get("excel_columns", {})
+        code_col = excel_cols.get("CODE", 1)       # Column B
+        product_col = excel_cols.get("PRODUCT", 2)  # Column C
+        units_col = excel_cols.get("UNITS", 5)      # Column F (MASTER BOX)
+        price_col = excel_cols.get("PRICE", 6)      # Column G (DISTR. PRICE)
+        rrp_col = excel_cols.get("RRP", 8)           # Column I (RRP)
 
-        # Find header row
-        header_row_index = self._find_header_row_sk(values)
-        if header_row_index == -1:
-            # Fallback to MT-style parsing
-            logger.warning("SK header row not found, falling back to MT parsing")
-            return self._parse_mt_data(values, mode, parser_config)
+        # Data start row — skip legal header (company info, terms, etc.)
+        data_start = parser_config.get("data_start_row", 20)
 
-        headers = values[header_row_index]
-
-        # Get column indices from headers
-        code_col = self._find_column_index(headers, "CODE", -1)
-        product_col = self._find_column_index(headers, "PRODUCT", -1)
-        units_col = self._find_column_index(headers, "UNITS", -1)
-        price_col = self._find_column_index(headers, "PRICE", -1)
-        rrp_col = self._find_column_index(headers, "RRP", -1)
-
-        if code_col == -1 or product_col == -1:
-            logger.warning("Required columns not found in SK sheet")
-            return self._parse_mt_data(values, mode, parser_config)
+        logger.info(
+            f"_parse_sk_data mode={mode}: data_start={data_start}, total_rows={len(values)}, "
+            f"code_col={code_col}, product_col={product_col}, units_col={units_col}, "
+            f"price_col={price_col}, rrp_col={rrp_col}"
+        )
 
         # Parse rows
-        for i in range(header_row_index + 1, len(values)):
+        group_rows = 0
+        skipped_empty = 0
+        for i in range(data_start, len(values)):
             row = values[i]
-
-            # Check background color for group detection
-            is_group_row = False
-            if backgrounds and i < len(backgrounds):
-                row_backgrounds = backgrounds[i]
-                # Check if first cell has group color
-                if row_backgrounds and len(row_backgrounds) > 0:
-                    cell_color = row_backgrounds[0].lower() if row_backgrounds[0] else ""
-                    is_group_row = self._colors_match(cell_color, group_color)
 
             code_value = self._as_trimmed_string(self._safe_get(row, code_col))
             product_value = self._as_trimmed_string(self._safe_get(row, product_col))
 
-            # Group detection by color
-            if is_group_row and product_value:
+            # Skip fully empty rows
+            if not code_value and not product_value:
+                skipped_empty += 1
+                continue
+
+            # Group detection: column B has text AND column C is empty
+            # Example: B="SkinClinic - FACIAL CARE", C=""
+            if code_value and not product_value:
                 # Parse group: could be "Line - Group" or just "Group"
-                if " - " in product_value:
-                    parts = product_value.split(" - ", 1)
+                if " - " in code_value:
+                    parts = code_value.split(" - ", 1)
                     current_line = parts[0].strip()
                     current_group = parts[1].strip() if len(parts) > 1 else ""
                 else:
-                    current_group = product_value
+                    current_group = code_value
+                group_rows += 1
                 continue
 
-            # Article detection: has code and product name
+            # Article detection: column B has code AND column C has product name
             if code_value and product_value:
                 units_value = self._get_value(row, units_col)
                 price_value = self._parse_price(self._get_value(row, price_col))
@@ -779,8 +803,8 @@ class PriceProcessor:
                 parsed_row = ParsedRow(
                     article=code_value,
                     name_eng=product_value,
-                    volume="",  # SK doesn't have separate volume column
-                    barcode="",  # SK doesn't have barcode in price list
+                    volume="",
+                    barcode="",
                     units_per_pack=str(units_value) if units_value else "",
                     price=price_value,
                     group=combined_group
@@ -789,6 +813,109 @@ class PriceProcessor:
                 rows.append(parsed_row)
                 articles.append(code_value)
                 groups.append(combined_group)
+
+        logger.info(
+            f"_parse_sk_data mode={mode} result: "
+            f"parsed={len(rows)}, groups={group_rows}, "
+            f"skipped_empty={skipped_empty}, "
+            f"total_data_rows={len(values) - data_start}"
+        )
+
+        return ProcessedData(
+            headers=self.OUTPUT_HEADERS.copy(),
+            rows=rows,
+            articles=articles,
+            groups=groups
+        )
+
+    def _parse_sk_probes(
+        self,
+        values: List[List[Any]],
+        parser_config: Dict
+    ) -> ProcessedData:
+        """
+        Parse SK probes sheet (-Пробники).
+
+        Structure:
+        - Rows 0-10: Company header (Carmado S.L., address, MARKETING MATERIALS)
+        - Row 11: Headers (REFERENC. | PRODUCT | PRODUCTO | TYPE | AREA | UNITS | PRICE | TOTAL)
+        - Row 12+: Data
+        - Group detection: article NOT starting with "00" = group row
+        - Article: starts with "00" (e.g., "0001CARM3")
+        - Stop marker: "CATÁLOGOS Y MATERIALES IMPRESOS" — stop parsing
+        """
+        rows: List[ParsedRow] = []
+        articles: List[str] = []
+        groups: List[str] = []
+        current_group = ""
+
+        excel_cols = parser_config.get("excel_columns", {})
+        code_col = excel_cols.get("CODE", 0)       # Column A (REFERENC.)
+        product_col = excel_cols.get("PRODUCT", 1)  # Column B (PRODUCT)
+        units_col = excel_cols.get("UNITS", 5)      # Column F (UNITS)
+        price_col = excel_cols.get("PRICE", 6)      # Column G (PRICE)
+
+        data_start = parser_config.get("data_start_row", 12)
+        stop_marker = parser_config.get("stop_marker", "CATÁLOGOS Y MATERIALES IMPRESOS")
+        group_pattern = parser_config.get("group_detection", {}).get("pattern", r"^0{2}")
+
+        logger.info(
+            f"_parse_sk_probes: data_start={data_start}, total_rows={len(values)}, "
+            f"code_col={code_col}, product_col={product_col}, "
+            f"stop_marker='{stop_marker}'"
+        )
+
+        group_rows = 0
+        skipped_empty = 0
+        for i in range(data_start, len(values)):
+            row = values[i]
+
+            # Check stop marker in any cell
+            row_text = " ".join(str(c) for c in row[:8]).upper()
+            if stop_marker.upper() in row_text:
+                logger.info(f"_parse_sk_probes: stop marker found at row {i}")
+                break
+
+            code_value = self._as_trimmed_string(self._safe_get(row, code_col))
+            product_value = self._as_trimmed_string(self._safe_get(row, product_col))
+
+            # Skip empty rows
+            if not code_value and not product_value:
+                skipped_empty += 1
+                continue
+
+            # Group detection: code does NOT start with "00"
+            # Articles start with "00" (e.g., "0001CARM3", "0020CARM3")
+            if code_value and not re.match(group_pattern, code_value):
+                current_group = code_value
+                group_rows += 1
+                continue
+
+            # Article: code starts with "00"
+            if code_value and re.match(group_pattern, code_value):
+                units_value = self._get_value(row, units_col)
+                price_value = self._parse_price(self._get_value(row, price_col))
+
+                parsed_row = ParsedRow(
+                    article=code_value,
+                    name_eng=product_value,
+                    volume="",
+                    barcode="",
+                    units_per_pack=str(units_value) if units_value else "",
+                    price=price_value,
+                    group=current_group
+                )
+
+                rows.append(parsed_row)
+                articles.append(code_value)
+                groups.append(current_group)
+
+        logger.info(
+            f"_parse_sk_probes result: "
+            f"parsed={len(rows)}, groups={group_rows}, "
+            f"skipped_empty={skipped_empty}, "
+            f"total_data_rows={len(values) - data_start}"
+        )
 
         return ProcessedData(
             headers=self.OUTPUT_HEADERS.copy(),
@@ -848,7 +975,7 @@ class PriceProcessor:
         current_group = ""
         is_professional_mode = False
 
-        # Get column config
+        # Get column config (SS source has row numbers in col A, data starts from col B = index 1)
         excel_cols = parser_config.get("excel_columns", {})
         code_idx = excel_cols.get("CODE", 1)
         name_idx = excel_cols.get("PRODUCT_NAME", 2)
@@ -857,6 +984,13 @@ class PriceProcessor:
         barcode_idx = excel_cols.get("BAR_CODE_ACL", 5)
         qty_idx = excel_cols.get("QTY_BOX", 6)
         price_idx = excel_cols.get("EX_WORKS_CARROS", 7)
+
+        logger.info(
+            f"_parse_ss_data: column indices: CODE={code_idx}, NAME={name_idx}, "
+            f"SIZE={size_idx}, PACK={pack_idx}, BARCODE={barcode_idx}, QTY={qty_idx}, PRICE={price_idx}"
+        )
+        if values and len(values) > 1:
+            logger.info(f"_parse_ss_data: first data row sample: {values[1][:8]}")
 
         # Get markers config
         markers = parser_config.get("markers", {})
@@ -961,12 +1095,27 @@ class PriceProcessor:
                 return i
         return 0  # Default to first row
 
-    def _find_column_index(self, headers: List[Any], keyword: str, default: int = -1) -> int:
-        """Find column index by keyword in headers"""
-        keyword_upper = keyword.upper()
+    def _find_column_index(self, headers: List[Any], keyword: str, default: int = -1, exact: bool = False) -> int:
+        """Find column index by keyword in headers.
+
+        Args:
+            headers: List of header values
+            keyword: Keyword to search for
+            default: Default index if not found (-1 means not found)
+            exact: If True, match the full header text exactly (case-insensitive)
+        """
+        keyword_upper = keyword.upper().strip()
+        # First pass: try exact match (prevents "ID" matching "ID-P")
         for i, header in enumerate(headers):
-            if keyword_upper in str(header or "").strip().upper():
+            header_str = str(header or "").strip().upper()
+            if header_str == keyword_upper:
                 return i
+        # Second pass: substring match (unless exact=True)
+        if not exact:
+            for i, header in enumerate(headers):
+                header_str = str(header or "").strip().upper()
+                if keyword_upper in header_str:
+                    return i
         return default if default >= 0 else -1
 
     def _as_trimmed_string(self, value: Any) -> str:
@@ -1061,7 +1210,8 @@ class PriceProcessor:
         processed: ProcessedData,
         config: Dict,
         project: str,
-        product_matcher: Optional[ProductMatcher] = None
+        product_matcher: Optional[ProductMatcher] = None,
+        min_idp: int = 0
     ) -> SyncResult:
         """Sync processed data with main sheet (Главная)"""
 
@@ -1080,16 +1230,30 @@ class PriceProcessor:
 
             headers = all_values[0]
 
-            # Find column indices
-            id_col = self._find_column_index(headers, "ID", 0)
-            idp_col = self._find_column_index(headers, "ID-P", 1)
-            article_col = self._find_column_index(headers, "Арт. произв", 5)
-            name_col = self._find_column_index(headers, "Название ENG", 8)
-            volume_col = self._find_column_index(headers, "Объём", 11)
-            barcode_col = self._find_column_index(headers, "BAR CODE", 17)
-            units_col = self._find_column_index(headers, "шт./уп", 13)
+            # Find column indices (use exact match for ID to avoid matching ID-P/ID-G/ID-L)
+            id_col = self._find_column_index(headers, "ID", -1, exact=True)
+            idp_col = self._find_column_index(headers, "ID-P", -1)
+            article_col = self._find_column_index(headers, "Арт. произв", -1)
+            name_col = self._find_column_index(headers, "Название ENG", -1)
+            if name_col == -1:
+                name_col = self._find_column_index(headers, "Название  ENG", -1)
+            volume_col = self._find_column_index(headers, "Объём", -1)
+            barcode_col = self._find_column_index(headers, "BAR CODE", -1)
+            units_col = self._find_column_index(headers, "шт./уп", -1)
             price_col = self._find_column_index(headers, "ЦЕНА EXW", -1)
-            group_col = self._find_column_index(headers, "Группа", 16)
+            group_col = self._find_column_index(headers, "Группа", -1)
+
+            # Validate critical columns
+            if idp_col < 0:
+                raise ValueError(f"Колонка 'ID-P' не найдена на листе '{primary_sheet}'. Заголовки: {headers[:20]}")
+            if article_col < 0:
+                raise ValueError(f"Колонка 'Арт. произв' не найдена на листе '{primary_sheet}'. Заголовки: {headers[:20]}")
+
+            logger.info(
+                f"_sync_with_main columns: ID={id_col}, ID-P={idp_col}, Article={article_col}, "
+                f"Name={name_col}, Volume={volume_col}, Barcode={barcode_col}, "
+                f"Units={units_col}, Price={price_col}, Group={group_col}"
+            )
             
             # Additional columns for Supabase sync
             idg_col = self._find_column_index(headers, "ID-G", -1)
@@ -1119,7 +1283,8 @@ class PriceProcessor:
                     article_map[art] = i
 
             # Find max numbers for IDs
-            max_idp = 0
+            # Use min_idp from previous cycle to ensure continuation
+            max_idp = min_idp
             max_id = 0
             for row in all_values[1:]:
                 # ID-P — plain numbers (1, 2, 3...)
@@ -1319,8 +1484,11 @@ class PriceProcessor:
             if new_rows:
                 ws.append_rows(new_rows, value_input_option="USER_ENTERED")
 
+            # Store last ID-P for cycle continuation
+            result.last_idp = max_idp
+
             logger.info(
-                f"Sync complete: {len(result.updated_rows)} updated, {len(result.created_rows)} created"
+                f"Sync complete: {len(result.updated_rows)} updated, {len(result.created_rows)} created, last_idp={max_idp}"
             )
 
         except Exception as e:
@@ -1591,37 +1759,29 @@ class PriceProcessor:
     # NEW METHODS - Full GAS Logic Implementation
     # ============================================================================
 
-    async def _create_source_snapshot(
+    async def _create_structured_snapshot(
         self,
         source_doc_id: str,
         sheet_name: str,
-        spreadsheet_id: str
+        spreadsheet_id: str,
+        processed: 'ProcessedData'
     ) -> str:
         """
-        Create a snapshot of the source sheet with current date.
-        Matches GAS behavior: creates "{sheet_name} {dd.MM.yy}" in source document.
+        Create a structured snapshot with parsed data and standard headers.
+        Sheet name: "{sheet_name} {dd.MM.yy}" in the source document.
 
-        Args:
-            source_doc_id: Source document ID
-            sheet_name: Base sheet name (e.g., "-Б/З поставщик")
-            spreadsheet_id: Target spreadsheet ID (for logging)
+        Instead of raw copy of source data, creates a table with:
+        ID-P | Арт. произв. | Название ENG | Объём | шт./уп. | ЦЕНА EXW | Группа
 
-        Returns:
-            Name of created snapshot sheet
+        This structured format is used for database verification.
         """
         try:
-            # Format date like GAS: dd.MM.yy
             date_str = datetime.now().strftime("%d.%m.%y")
             snapshot_name = f"{sheet_name} {date_str}"
 
-            self._log(spreadsheet_id, "ПРАЙС", "Создание snapshot", f"Лист: {snapshot_name}", "📸")
+            self._log(spreadsheet_id, "ПРАЙС", "Создание snapshot", f"Лист: {snapshot_name} ({len(processed.rows)} строк)", "📸")
 
-            # Get source spreadsheet
             source_ss = self.sheets.open_by_key(source_doc_id)
-
-            # Read original sheet data
-            original_ws = source_ss.worksheet(sheet_name)
-            original_values = original_ws.get_all_values()
 
             # Delete old snapshots with same base name
             all_sheets = source_ss.worksheets()
@@ -1635,30 +1795,44 @@ class PriceProcessor:
                         pass
 
             # Create or get snapshot sheet
+            num_rows = max(len(processed.rows) + 1, 10)
             try:
                 snapshot_ws = source_ss.worksheet(snapshot_name)
                 snapshot_ws.clear()
             except Exception:
                 snapshot_ws = source_ss.add_worksheet(
                     title=snapshot_name,
-                    rows=max(len(original_values), 100),
-                    cols=max(len(original_values[0]) if original_values else 10, 26)
+                    rows=num_rows,
+                    cols=8
                 )
 
-            # Copy data to snapshot
-            if original_values:
-                snapshot_ws.update(
-                    range_name='A1',
-                    values=original_values,
-                    value_input_option='RAW'
-                )
+            # Build structured data: headers + parsed rows
+            headers = ["ID-P", "Арт. произв.", "Название ENG", "Объём", "шт./уп.", "ЦЕНА EXW", "Группа"]
+            snapshot_values = [headers]
 
-            logger.info(f"Created snapshot: {snapshot_name}")
+            for idx, row in enumerate(processed.rows, start=1):
+                snapshot_values.append([
+                    str(idx),           # ID-P (sequential)
+                    row.article,        # Арт. произв.
+                    row.name_eng,       # Название ENG
+                    row.volume,         # Объём
+                    row.units_per_pack, # шт./уп.
+                    str(row.price) if row.price else "",  # ЦЕНА EXW
+                    row.group           # Группа
+                ])
+
+            snapshot_ws.update(
+                range_name='A1',
+                values=snapshot_values,
+                value_input_option='RAW'
+            )
+
+            logger.info(f"Created structured snapshot: {snapshot_name} ({len(processed.rows)} rows)")
             return snapshot_name
 
         except Exception as e:
             logger.warning(f"Failed to create snapshot: {e}")
-            return sheet_name  # Return original name if snapshot fails
+            return sheet_name
 
     async def _clear_idg_column_on_main(self, spreadsheet_id: str, config: Dict):
         """

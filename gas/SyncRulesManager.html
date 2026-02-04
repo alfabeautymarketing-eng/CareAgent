@@ -762,6 +762,23 @@
                             <option value="">Выберите из списка...</option>
                         </select>
                     </div>
+
+                    <div class="field"
+                        style="grid-column: span 2; margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(15,118,110,0.2);">
+                        <label class="toggle">
+                            <input type="checkbox" id="projectScopeAll" checked onchange="toggleProjectScope()">
+                            Применять ко всем проектам (MT, SS, SK)
+                        </label>
+                        <div id="projectScopeSelect"
+                            style="display:none; margin-top:10px; gap:16px; flex-wrap:wrap; padding-left: 12px;">
+                            <label class="toggle" style="font-size:13px;"><input type="checkbox" name="projectScope"
+                                    value="MT" checked> Master (MT)</label>
+                            <label class="toggle" style="font-size:13px;"><input type="checkbox" name="projectScope"
+                                    value="SS"> StyleScan (SS)</label>
+                            <label class="toggle" style="font-size:13px;"><input type="checkbox" name="projectScope"
+                                    value="SK"> StyleKind (SK)</label>
+                        </div>
+                    </div>
                 </div>
 
                 <input type="hidden" id="ruleCategory" />
@@ -1118,12 +1135,23 @@
             onSheetsChanged();
         }
 
+        function toggleProjectScope() {
+            const isAll = $("projectScopeAll").checked;
+            $("projectScopeSelect").style.display = isAll ? "none" : "flex";
+        }
+
         async function openRuleModal(ruleId = null) {
             state.editingId = ruleId;
             $("ruleForm").reset();
             $("ruleEnabled").checked = true;
             $("isExternal").checked = false;
             $("sharedColumnBox").classList.remove("active");
+
+            // Reset Scope to Default
+            $("projectScopeAll").checked = true;
+            toggleProjectScope();
+            document.querySelectorAll('input[name="projectScope"]').forEach(cb => cb.checked = false);
+
             if (ruleId) {
                 const rule = state.rules.find(r => r.id === ruleId);
                 if (!rule) return;
@@ -1143,6 +1171,19 @@
                     $("sharedColumn").value = commonCol;
                     onColumnSelected();
                 }
+
+                // Restore Scope
+                const projects = rule.projects || ["ALL"];
+                if (projects.includes("ALL")) {
+                    $("projectScopeAll").checked = true;
+                } else {
+                    $("projectScopeAll").checked = false;
+                    document.querySelectorAll('input[name="projectScope"]').forEach(cb => {
+                        cb.checked = projects.some(p => p.toUpperCase() === cb.value);
+                    });
+                }
+                toggleProjectScope();
+
             } else {
                 $("modalTitle").textContent = "Новое правило";
                 setRuleMode("unidirectional");
@@ -1171,8 +1212,14 @@
             toggleExternal();
         }
 
+        let isSubmitting = false;
         async function submitRule(event) {
             event.preventDefault();
+            if (isSubmitting) {
+                console.log("[submitRule] Already submitting, ignoring duplicate");
+                return;
+            }
+            isSubmitting = true;
             try {
                 const id = getSpreadsheetId();
                 const mode = $("ruleMode").value;
@@ -1183,8 +1230,15 @@
                     enabled: $("ruleEnabled").checked,
                     category: col,
                     is_external: $("isExternal").checked,
-                    target_doc_id: $("targetDocId").value
+                    target_doc_id: $("targetDocId").value,
+                    projects: $("projectScopeAll").checked ? ["ALL"] :
+                        Array.from(document.querySelectorAll('input[name="projectScope"]:checked')).map(el => el.value)
                 };
+
+                if (payload.projects.length === 0 && !$("projectScopeAll").checked) {
+                    // Fallback if nothing selected but unchecked all
+                    payload.projects = ["ALL"];
+                }
 
                 if (mode === "bidirectional") {
                     payload.sheet_a = $("sourceSheet").value;
@@ -1214,6 +1268,8 @@
             } catch (e) {
                 console.error("[submitRule] Error:", e);
                 notify(e.message, "error");
+            } finally {
+                isSubmitting = false;
             }
         }
 
@@ -1303,6 +1359,7 @@
         }
 
         const collapsedGroups = new Set();
+        let isFirstRender = true;
         function toggleGroup(title) {
             const groupEl = document.querySelector(`.group[data-title="${CSS.escape(title)}"]`);
             if (groupEl) {
@@ -1325,7 +1382,9 @@
                 .sort((a, b) => a[0].localeCompare(b[0], "ru"))
                 .map(([title, rules]) => {
                     const cards = rules.map(r => renderRuleCard(r)).join("");
-                    const isCollapsed = collapsedGroups.has(title);
+                    // Collapse all groups on first render, then respect user's toggle state
+                    const isCollapsed = isFirstRender ? true : collapsedGroups.has(title);
+                    if (isFirstRender) collapsedGroups.add(title);
                     return `
                         <div class="group ${isCollapsed ? 'collapsed' : ''}" data-title="${escapeHtml(title)}">
                             <div class="group-title" onclick="toggleGroup('${title.replace(/'/g, "\\'")}')" style="margin-bottom: 12px; margin-top: 8px;">
@@ -1337,6 +1396,7 @@
                         </div>
                     `;
                 }).join("");
+            isFirstRender = false;
         }
 
         function renderRuleCard(rule) {
@@ -1346,12 +1406,18 @@
             const col = rule.source_header || rule.header_a || "?";
             const extLabel = rule.is_external ? `<span class="pill outline" style="margin-left:5px; border-color:var(--accent); color:var(--accent)">EXT</span>` : "";
 
+            const projects = rule.projects || ["ALL"];
+            const scopeLabel = projects.includes("ALL")
+                ? `<span class="pill" style="margin-left:5px; background:rgba(255,255,255,0.1); color:var(--muted); font-size:10px;">ALL</span>`
+                : `<span class="pill" style="margin-left:5px; background:rgba(245,158,11,0.1); color:var(--accent-2); font-size:10px;">${projects.join(", ")}</span>`;
+
             return `
                 <div class="rule-card ${rule.enabled ? "" : "disabled"}" data-id="${rule.id}">
                     <div class="rule-main">
                         <div>
                             <span class="pill">${escapeHtml(rule.category)}</span>
                             ${extLabel}
+                            ${scopeLabel}
                             <div class="rule-path">
                                 ${escapeHtml(source)} 
                                 <span style="margin:0 8px; color:var(--muted)">${isBi ? "⟷" : "⟶"}</span>

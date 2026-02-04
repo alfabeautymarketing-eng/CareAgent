@@ -106,6 +106,69 @@ class SyncLogService:
 
         return payload
 
+    def add_entries_batch(
+        self,
+        spreadsheet_id: str,
+        entries_data: List[Dict[str, Any]]
+    ) -> int:
+        """
+        Add multiple log entries in one go (batch).
+        entries_data: list of dicts with keys matching add_entry arguments.
+        """
+        if not entries_data:
+            return 0
+            
+        timestamp = datetime.utcnow()
+        payloads = []
+        
+        for data in entries_data:
+            # Prepare entry object
+            entry = SyncLogEntry(
+                spreadsheet_id=spreadsheet_id,
+                project=data.get("project"),
+                row_key=data.get("row_key"),
+                source_info=data.get("source_info", ""),
+                target_info=data.get("target_info", ""),
+                old_value=data.get("old_value"),
+                new_value=data.get("new_value"),
+                category=data.get("category"),
+                status=data.get("status"),
+                event=data.get("event"),
+                tags=data.get("tags"),
+                rule_id=data.get("rule_id"),
+                extra=data.get("extra") or {},
+                timestamp=timestamp # Same timestamp for batch? Or individual?
+            )
+            # Override timestamp if provided
+            # entry.timestamp is already set by default factory, but we might want uniform batch time
+            # For now let's keep it simple.
+            
+            payloads.append(entry.model_dump(mode="json"))
+
+        path = self._log_path(spreadsheet_id)
+        lock = self._lock_path(spreadsheet_id)
+
+        # 1. Write to local file (append multiple lines)
+        try:
+            with FileLock(lock):
+                with open(path, "a", encoding="utf-8") as handle:
+                    for p in payloads:
+                        handle.write(json.dumps(p, ensure_ascii=False) + "\n")
+            # Enforce retention is expensive, maybe skip for batch or run async? 
+            # We'll run it once after batch.
+            self._enforce_retention(path, lock)
+        except Exception as exc:
+            logger.error("sync_log_batch_write_failed", error=str(exc))
+
+        # 2. Write to Supabase (batch insert)
+        if self.supabase.is_configured():
+            try:
+                self.supabase.client.table("sync_logs").insert(payloads).execute()
+            except Exception as exc:
+                logger.error("supabase_log_batch_write_failed", error=str(exc))
+
+        return len(payloads)
+
     def list_entries(
         self,
         *,

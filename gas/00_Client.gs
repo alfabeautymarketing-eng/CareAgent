@@ -1651,12 +1651,14 @@ function callServerProcessPrice(project, mode, options) {
         return result;
       }
 
-      if (result.status === 'queued' || result.status === 'success') {
+      if (result.status === 'success') {
         const message = result.message || 'Обработка завершена';
-        const details = result.processed_rows
-          ? 'Строк: ' + result.processed_rows + ', групп: ' + (result.groups_found || 0)
-          : '';
-        ss.toast('✅ ' + message, project.toUpperCase(), 10);
+        const details = result.total_rows
+          ? 'Строк: ' + result.total_rows + ', новых: ' + (result.total_new || 0)
+          : result.processed_rows
+            ? 'Строк: ' + result.processed_rows + ', групп: ' + (result.groups_found || 0)
+            : '';
+        ss.toast('✅ ' + message + (details ? '\n' + details : ''), project.toUpperCase(), 10);
 
         if (typeof Lib !== 'undefined' && typeof Lib.logInfo === 'function') {
           Lib.logInfo('[' + project.toUpperCase() + '] ' + message + '. ' + details);
@@ -1665,9 +1667,15 @@ function callServerProcessPrice(project, mode, options) {
         return result;
       }
 
-      // Error from server
-      const errorMsg = result.message || result.error || 'Unknown error';
-      ss.toast('❌ Ошибка: ' + errorMsg, project.toUpperCase(), 10);
+      // Error from server (includes partial errors from process_all)
+      var errorMsg = result.message || result.error || 'Unknown error';
+      if (result.errors && result.errors.length > 0) {
+        errorMsg += '\n' + result.errors.join('\n');
+      }
+      ss.toast('❌ Ошибка: ' + errorMsg, project.toUpperCase(), 15);
+      if (typeof Lib !== 'undefined' && typeof Lib.logError === 'function') {
+        Lib.logError('[' + project.toUpperCase() + '] Ошибка обработки: ' + errorMsg);
+      }
       return { status: 'error', message: errorMsg };
 
     } else {
@@ -1789,27 +1797,49 @@ function openServerUrl(path, title) {
   
   const html = `
     <html>
-      <body style="font-family: sans-serif; text-align: center; padding: 20px; background: #0f172a; color: white;">
-        <p>Переход на страницу ${title}...</p>
-        <p><a href="${url}" target="_blank" style="color: #0d9488; font-weight: bold;">Нажмите здесь, если окно не открылось</a></p>
-        <script>
-          window.open('${url}', '_blank');
-          setTimeout(function() { google.script.host.close(); }, 1000);
-        </script>
+      <body style="font-family: sans-serif; text-align: center; padding: 20px; background: #1e293b; color: white;">
+        <h3 style="margin-bottom: 20px;">${title}</h3>
+        <p>Для просмотра журнала нажмите кнопку ниже:</p>
+        <p>
+          <a href="${url}" target="_blank" style="
+            display: inline-block;
+            background: #0d9488;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 16px;">
+            Открыть журнал
+          </a>
+        </p>
+        <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">
+          ID таблицы: <br>
+          <span style="font-family: monospace; background: #0f172a; padding: 4px; border-radius: 4px;">${path.split('id=')[1] || 'Не указан'}</span>
+        </p>
+        <p style="margin-top: 10px; font-size: 10px; color: #64748b;">
+          Ссылка: <br>
+          ${url}
+        </p>
       </body>
     </html>
   `;
   
   const userInterface = HtmlService.createHtmlOutput(html)
-    .setWidth(350)
-    .setHeight(150);
+    .setWidth(400)
+    .setHeight(300);
     
-  SpreadsheetApp.getUi().showModalDialog(userInterface, '🚀 Переход к ' + title);
+  SpreadsheetApp.getUi().showModalDialog(userInterface, '🚀 ' + title);
 }
 
 // Функции-обертки для меню
 function openServerMainPage() { openServerUrl('/', 'Главная страница'); }
 function openServerRulesPage() { openServerUrl('/api/v1/rules-ui', 'Правила синхронизации'); }
 function openServerDocsPage() { openServerUrl('/docs', 'Swagger UI'); }
-function openLogDashboard_proxy() { openServerUrl('/api/v1/logs-ui', 'Журнал синхронизации'); }
-function openLogsManager() { openServerUrl('/api/v1/logs-ui', 'Журнал синхронизации'); }
+function openLogDashboard_proxy() { openServerUrl('/api/v1/logs-ui', 'Журнал логов'); }
+function openLogsManager() { openServerUrl('/api/v1/logs-ui', 'Журнал логов'); }
+function showSyncLogDialog() { 
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const id = ss.getId();
+  openServerUrl('/api/v1/logs-ui?id=' + id, 'Журнал синхронизации'); 
+}

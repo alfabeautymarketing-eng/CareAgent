@@ -82,12 +82,12 @@
   header_b: None
   is_external: false
   target_doc_id: None
-- id: 007-Г-С(Объём)
+- id: 007-Г-С(Мера)
   enabled: true
   category: Сертификация
   mode: unidirectional
   source_sheet: Главная
-  source_header: Объём
+  source_header: Мера
   target_sheet: Сертификация
   target_header: Объём
   sheet_a: None
@@ -180,12 +180,12 @@
   header_b: None
   is_external: false
   target_doc_id: None
-- id: 014-Г-Э(Объём)
+- id: 014-Г-Э(Мера)
   enabled: true
   category: Этикетки
   mode: unidirectional
   source_sheet: Главная
-  source_header: Объём
+  source_header: Мера
   target_sheet: Этикетки
   target_header: Объём
   sheet_a: None
@@ -254,10 +254,10 @@
   enabled: true
   category: Заказ
   mode: bidirectional
-  source_sheet: ''
-  source_header: ''
-  target_sheet: ''
-  target_header: ''
+  source_sheet: ""
+  source_header: ""
+  target_sheet: ""
+  target_header: ""
   sheet_a: Главная
   header_a: Статус
   sheet_b: Заказ
@@ -320,12 +320,12 @@
   header_b: None
   is_external: false
   target_doc_id: None
-- id: 024-Г-З(Объём)
+- id: 024-Г-З(Мера)
   enabled: true
   category: Заказ
   mode: unidirectional
   source_sheet: Главная
-  source_header: Объём
+  source_header: Мера
   target_sheet: Заказ
   target_header: Объём
   sheet_a: None
@@ -404,12 +404,12 @@
   header_b: None
   is_external: false
   target_doc_id: None
-- id: 030-Г-П(Объём)
+- id: 030-Г-П(Мера)
   enabled: false
   category: Прайс
   mode: unidirectional
   source_sheet: Главная
-  source_header: Объём
+  source_header: Мера
   target_sheet: Прайс
   target_header: Объём
   sheet_a: None
@@ -656,12 +656,12 @@
   header_b: None
   is_external: false
   target_doc_id: None
-- id: 048-Г-Д(Объём)
+- id: 048-Г-Д(Мера)
   enabled: true
   category: Динамика цены
   mode: unidirectional
   source_sheet: Главная
-  source_header: Объём
+  source_header: Мера
   target_sheet: Динамика цены
   target_header: Объём
   sheet_a: None
@@ -670,12 +670,12 @@
   header_b: None
   is_external: false
   target_doc_id: None
-- id: 049-Г-Р(Объём)
+- id: 049-Г-Р(Мера)
   enabled: true
   category: Расчет цены
   mode: unidirectional
   source_sheet: Главная
-  source_header: Объём
+  source_header: Мера
   target_sheet: Расчет цены
   target_header: Объём
   sheet_a: None
@@ -790,6 +790,146 @@
   source_header: H1
   target_sheet: T1
   target_header: H1
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
+- id: 058-С-З2026(ДС до)
+  enabled: true
+  category: Заказ2026
+  mode: unidirectional
+  source_sheet: Сертификация
+  source_header: ДС до
+  target_sheet: Заказ2026
+  target_header: ДС до
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
+- id: 059-Г-З2026(ID-P)
+  enabled: true
+  category: Заказ2026
+  mode: unidirectional
+  source_sheet: Главная
+  source_header: ID-P
+  target_sheet: Заказ2026
+  target_header: ID-P
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
+- id: 060-Г<->З2026(Статус)
+  enabled: true
+  category: Заказ2026
+  mode: bidirectional
+  source_sheet: ""
+  source_header: ""
+  target_sheet: ""
+  target_header: ""
+  sheet_a: Главная
+  header_a: Статус
+  sheet_b: Заказ2026
+  header_b: Статус
+  is_external: false
+  target_doc_id: None
+- id: 061-Г-З2026(Арт. Рус)
+  enabled: true
+  category: Заказ2026
+  mode: unidirectional
+  source_sheet: Главная
+  source_header: Арт. Рус
+  target_sheet: Заказ2026
+  target_header: Арт. Рус
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
+- id: 062-Г-З2026(Арт. произв.)
+  enabled: true
+  category: Заказ2026
+  mode: unidirectional
+  source_sheet: Главная
+  source_header: Арт. произв.
+  target_sheet: Заказ2026
+  target_header: Арт. произв.
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
+- id: 063-Г-З2026(Название  ENG прайс произв)
+  enabled: true
+  category: Заказ2026
+  mode: unidirectional
+  source_sheet: Главная
+  source_header: Название  ENG прайс произв
+  target_sheet: Заказ2026
+  target_header: Название  ENG прайс произв
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
+- id: 064-Г-З2026(Наименования рус по ДС)
+  enabled: true
+  category: Заказ2026
+  mode: unidirectional
+  source_sheet: Главная
+  source_header: Наименования рус по ДС
+  target_sheet: Заказ2026
+  target_header: Наименования рус по ДС
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
+- id: 065-Г-З2026(Мера)
+  enabled: true
+  category: Заказ2026
+  mode: unidirectional
+  source_sheet: Главная
+  source_header: Мера
+  target_sheet: Заказ2026
+  target_header: Мера
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
+- id: 066-Г-З2026(шт./уп.)
+  enabled: true
+  category: Заказ2026
+  mode: unidirectional
+  source_sheet: Главная
+  source_header: шт./уп.
+  target_sheet: Заказ2026
+  target_header: шт./уп.
+  sheet_a: None
+  header_a: None
+  sheet_b: None
+  header_b: None
+  is_external: false
+  target_doc_id: None
+- id: 067-Г-З2026(Категория товара)
+  enabled: true
+  category: Заказ2026
+  mode: unidirectional
+  source_sheet: Главная
+  source_header: Категория товара
+  target_sheet: Заказ2026
+  target_header: Категория товара
   sheet_a: None
   header_a: None
   sheet_b: None

@@ -29,7 +29,7 @@ var ServerApi = ServerApi || {};
     var serverUrl = scriptProperties.getProperty('SERVER_URL');
     if (!serverUrl) {
       // Default - should be overridden in production
-      serverUrl = 'https://agentcare.example.com/api/v1';
+      serverUrl = 'https://agentcare.example.com';
     }
     return serverUrl;
   }
@@ -66,7 +66,7 @@ var ServerApi = ServerApi || {};
 
     var ui = SpreadsheetApp.getUi();
     var serverUrl = _getServerUrl();
-    var url = serverUrl + '/price/process/' + project.toLowerCase();
+    var url = serverUrl + '/api/v1/price/process/' + project.toLowerCase();
 
     var payload = {
       spreadsheet_id: spreadsheetId,
@@ -139,7 +139,7 @@ var ServerApi = ServerApi || {};
     }
 
     var serverUrl = _getServerUrl();
-    var url = serverUrl + '/price/status/' + taskId;
+    var url = serverUrl + '/api/v1/price/status/' + taskId;
 
     var options = {
       method: 'get',
@@ -169,7 +169,7 @@ var ServerApi = ServerApi || {};
     }
 
     var serverUrl = _getServerUrl();
-    var url = serverUrl + '/price/cancel/' + taskId;
+    var url = serverUrl + '/api/v1/price/cancel/' + taskId;
 
     var options = {
       method: 'post',
@@ -203,7 +203,7 @@ var ServerApi = ServerApi || {};
     options = options || {};
 
     var serverUrl = _getServerUrl();
-    var url = serverUrl + '/sort/structure';
+    var url = serverUrl + '/api/v1/sort/structure';
 
     var payload = {
       spreadsheet_id: spreadsheetId,
@@ -250,7 +250,7 @@ var ServerApi = ServerApi || {};
     options = options || {};
 
     var serverUrl = _getServerUrl();
-    var url = serverUrl + '/formulas/price-dynamics';
+    var url = serverUrl + '/api/v1/formulas/price-dynamics';
 
     var payload = {
       spreadsheet_id: spreadsheetId,
@@ -292,7 +292,7 @@ var ServerApi = ServerApi || {};
     options = options || {};
 
     var serverUrl = _getServerUrl();
-    var url = serverUrl + '/formulas/price-calculation';
+    var url = serverUrl + '/api/v1/formulas/price-calculation';
 
     var payload = {
       spreadsheet_id: spreadsheetId,
@@ -355,7 +355,8 @@ var ServerApi = ServerApi || {};
   exports.getServerStatus = function () {
     try {
       var serverUrl = _getServerUrl();
-      var response = UrlFetchApp.fetch(serverUrl + '/status', {
+      var url = serverUrl.includes('/api/v1') ? serverUrl + '/status' : serverUrl + '/api/v1/status';
+      var response = UrlFetchApp.fetch(url, {
         method: 'get',
         muteHttpExceptions: true,
         timeout: 10
@@ -365,6 +366,47 @@ var ServerApi = ServerApi || {};
     } catch (error) {
       Lib.logWarning('Failed to get server status: ' + error.toString());
       return null;
+    }
+  };
+
+  /**
+   * Run full synchronization on the server
+   *
+   * @param {string} spreadsheetId - Spreadsheet ID
+   * @param {string} project - Project code (e.g. 'MT', 'SK', 'SS')
+   * @param {string} sourceSheet - Name of the source sheet (optional in global mode, but good to pass if needed)
+   * @returns {Object} { status, details, task_id }
+   */
+  exports.syncFull = function (spreadsheetId, project, sourceSheet) {
+    if (!spreadsheetId || !project) {
+      throw new Error('Missing required parameters: spreadsheetId, project');
+    }
+
+    var serverUrl = _getServerUrl();
+    var baseUrl = serverUrl.includes('/api/v1') ? serverUrl : serverUrl + '/api/v1';
+    var url = baseUrl + '/sync/full?project=' + encodeURIComponent(project) + 
+              '&source_sheet=' + encodeURIComponent(sourceSheet || 'ALL') + 
+              '&spreadsheet_id=' + encodeURIComponent(spreadsheetId);
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      muteHttpExceptions: true,
+      timeout: 300 // 5 minutes
+    };
+
+    try {
+      var response = UrlFetchApp.fetch(url, options);
+      var result = JSON.parse(response.getContentText());
+
+      if (response.getResponseCode() >= 400) {
+        throw new Error('Server error: ' + (result.detail || result.message || 'Unknown error'));
+      }
+
+      return result;
+    } catch (error) {
+      Lib.logError('Full sync failed: ' + error.toString());
+      throw error;
     }
   };
 

@@ -40,6 +40,7 @@ class RuleCreateRequest(BaseModel):
     header_b: Optional[str] = Field(None, description="Заголовок B")
     is_external: bool = Field(False, description="Внешняя ли таблица")
     target_doc_id: Optional[str] = Field(None, description="ID внешней таблицы")
+    projects: List[str] = Field(default=["ALL"], description="Список проектов (например ['ss', 'mt']) или ['ALL']")
 
     class Config:
         title = "Запрос на создание правила"
@@ -59,6 +60,7 @@ class RuleUpdateRequest(BaseModel):
     header_b: Optional[str] = Field(None, description="Заголовок B")
     is_external: Optional[bool] = Field(None, description="Внешняя ли")
     target_doc_id: Optional[str] = Field(None, description="ID внешней таблицы")
+    projects: Optional[List[str]] = Field(None, description="Список проектов")
 
     class Config:
         title = "Запрос на обновление правила"

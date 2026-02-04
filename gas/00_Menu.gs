@@ -136,24 +136,40 @@ function addMenuItems(ui, menu, items) {
 function buildFallbackMenu(ui) {
   const menu = ui.createMenu('⚠️ Ecosystem (Offline)');
 
-  menu.addItem('🔄 Обновить меню', 'refreshMenu')
+  // Submenu 1: Synchronization
+  const syncSub = ui.createMenu('🔄 Синхронизация')
+      .addItem('🔄 Синхронизировать всё', 'runFullSync')
+      .addItem('🔄 Синхронизировать строку', 'syncSelectedRow')
+      .addSeparator()
+      .addItem('📝 Правила синхронизации', 'showSyncRulesManagerDialog');
+
+  // Submenu 2: Server Settings
+  const serverSub = ui.createMenu('🛠️ Настройки сервера')
+      .addItem('🔧 Обновить триггеры', 'setupTriggers')
+      .addItem('📋 Журнал синхронизации', 'showSyncLogDialog')
+      .addSeparator()
       .addItem('🔴 Проверить статус сервера', 'checkServerStatus')
-      .addSeparator()
-      .addItem('🧪 Тест AI (быстрый анализ)', 'menuSimpleAnalyze')
-      .addItem('🤖 Анализ строки (полный)', 'menuAnalyzeSelected')
-      .addSeparator()
-      .addItem('🏭 Сортировать по производителю', 'sortByManufacturer')
-      .addItem('💰 Сортировать по цене', 'sortByPrice')
-      .addSeparator()
-      .addItem('🔄 Обновить данные', 'callServerLoadFunctions')
+      .addItem('🔗 Установить URL (ngrok)', 'serverSetLocalTunnel')
+      .addItem('🚀 Reset to Production', 'serverResetToProduction');
+
+  // Submenu 3: Ecosystem
+  const ecosystemSub = ui.createMenu('🟢 Ecosystem')
+      .addItem('🏠 Главная страница', 'openServerMainPage')
       .addItem('📑 Упорядочить листы', 'reorderSheets')
       .addSeparator()
-      .addSubMenu(ui.createMenu('🛠️ Инструменты разработчика')
-          .addItem('🔗 Установить URL туннеля (ngrok)', 'serverSetLocalTunnel')
-          .addItem('🚀 Вернуть на Production (VPS)', 'serverResetToProduction')
-          .addSeparator()
-          .addItem('ℹ️ Показать текущий SERVER_URL', 'serverShowCurrentUrl')
-          .addItem('🆔 Показать ID таблицы', 'debugShowSpreadsheetId'))
+      .addItem('🧪 Тест AI (быстрый)', 'menuSimpleAnalyze');
+
+  // Submenu 4: Supabase
+  const supabaseSub = ui.createMenu('🗄️ Supabase')
+      .addItem('🔗 Открыть Console', 'openSupabaseConsole')
+      .addItem('📊 Просмотр данных', 'showSupabaseTablesView');
+
+  menu.addSubMenu(syncSub)
+      .addSubMenu(serverSub)
+      .addSubMenu(ecosystemSub)
+      .addSubMenu(supabaseSub)
+      .addSeparator()
+      .addItem('🔄 Обновить меню', 'refreshMenu')
       .addToUi();
 
   console.log('Fallback menu created (server unavailable)');

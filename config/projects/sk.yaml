@@ -108,17 +108,21 @@ parser:
     function: processSkPriceSheet
     sheet_name: "Прайс"
     header_row: 1
+    # Реальная структура исходного файла Carmado:
+    # Первые ~20 строк — юридическая шапка (адрес, условия)
+    # Данные начинаются со строки ~21 (группа + заголовки колонок в одной строке)
+    # Строки-группы: столбец B заполнен, столбец C пуст (напр. "SkinClinic - FACIAL CARE")
+    # Строки-артикулы: столбец B = код, столбец C = название товара
+    data_start_row: 20  # Пропустить юридическую шапку
     excel_columns:
-      CODE: "CODE"
-      PRODUCT: "PRODUCT"
-      UNITS: "UNITS"
-      PRICE: "PRICE"
-      TOTAL: "TOTAL"
-      RRP: "RRP"
-    # ВАЖНО: Парсинг по цвету фона ячейки
+      CODE: 1        # Арт. произв. (колонка B)
+      PRODUCT: 2     # Название товара (колонка C)
+      UNITS: 5       # Master Box / шт. в уп. (колонка F)
+      PRICE: 6       # DISTR. PRICE / Цена EXW (колонка G)
+      RRP: 8         # RRP (колонка I)
+    # Парсинг по пустым значениям: CODE (B) заполнен + PRODUCT (C) пуст = группа
     group_detection:
-      method: "background_color"
-      group_color: "#ffff00" # config.GROUP_HEADER_COLOR
+      method: "empty_product"
     # Комбинирование полей
     transformations:
       combined_group: "{line} - {group}" # "Линия - Группа"
@@ -127,32 +131,29 @@ parser:
       - fill_discount_for_price_dynamics # Заполняет 20% скидку
       - clear_idl_column # Очистка ID-L (только SK)
 
-  # Режим 2: Пробники
+  # Режим 2: Пробники (лист "-Пробники")
   probes:
     type: sk_probes
     function: processSkPriceProbes
-    # Точный блок заголовков для поиска
-    header_block:
-      - "REFERENC."
-      - "PRODUCT"
-      - "PRODUCTO"
-      - "TYPE"
-      - "AREA"
-      - "UNITS"
-      - "PRICE"
-      - "TOTAL"
-    # Маркер остановки
-    stop_marker: "CATÁLOGOS Y MATERIALES IMPRESOS / CATALOGUES & PRINTED MATERIALS"
+    # Строки 0-10: шапка компании (Carmado S.L., адрес, MARKETING MATERIALS)
+    # Строка 11: заголовки (REFERENC. | PRODUCT | PRODUCTO | TYPE | AREA | UNITS | PRICE | TOTAL)
+    # Строка 12+: данные
+    data_start_row: 12
+    # Индексы колонок (0-based) на листе -Пробники:
+    # A(0)=REFERENC., B(1)=PRODUCT, C(2)=PRODUCTO, D(3)=TYPE, E(4)=AREA, F(5)=UNITS, G(6)=PRICE, H(7)=TOTAL
+    excel_columns:
+      CODE: 0         # REFERENC. (колонка A) — артикул пробника
+      PRODUCT: 1      # PRODUCT (колонка B) — название ENG
+      UNITS: 5        # UNITS (колонка F) — количество
+      PRICE: 6        # PRICE (колонка G) — цена
+    # Маркер остановки — прекращает парсинг
+    stop_marker: "CATÁLOGOS Y MATERIALES IMPRESOS"
     # Логика определения группы:
-    # Если артикул НЕ начинается с "00" → это группа
+    # Артикул начинается с "00" → это товар (напр. "0001CARM3")
+    # Артикул НЕ начинается с "00" → это группа (напр. "ANTI-AGING")
     group_detection:
-      condition: "not_starts_with_00"
+      method: "not_starts_with_00"
       pattern: "^0{2}"
-    # Последовательная нумерация ID-P
-    idp_assignment:
-      method: "sequential"
-      function: _assignSequentialIdpForProbes_
-      override_from_source: true
 
 # ============================================================
 # Порядок синхронизации SK
@@ -191,7 +192,7 @@ processing_cycles:
     clear_columns: true
     price_multiplier: 1
   - mode: probes
-    source_sheet: "-пробники"
+    source_sheet: "-Пробники"
     clear_columns: false
     price_multiplier: 1
     update_statuses_after: true
@@ -273,7 +274,7 @@ source:
   doc_id: "1zSu0PzKKa5wvwMZCicwLN8N7Rwhs8XlJVrTrt2LMzQs"
   sheets:
     main: "-Б/З поставщик"
-    probes: "-пробники"
+    probes: "-Пробники"
     stocks: "-остатки"
 
 # ============================================================

@@ -98,14 +98,22 @@ PROJECT_MENUS: Dict[str, Dict[str, Any]] = {
                     {"label": "📋 Показать настройки AI", "function_name": "showGeminiSettings"},
                 ],
             },
-            # ============== ГРУППА 7: НАСТРОЙКА ==============
+            # ============== ГРУППА 7: НАСТРОЙКА > СИНХРОНИЗАЦИЯ ==============
             {
                 "title": "⚙️ Настройка",
                 "items": [
-                    {"label": "⚙️ Настроить правила синхронизации", "function_name": "showSyncRulesManagerDialog"},
-                    {"label": "🔄 Установить триггеры", "function_name": "setupTriggers_proxy"},
+                    {"label": "🔄 Синхронизировать всё", "function_name": "runFullSync"},
+                    {"label": "🔄 Синхронизировать строку", "function_name": "syncSelectedRow"},
                     {"separator": True},
-                    {"label": "📜 Открыть Журнал (UI)", "function_name": "openLogDashboard_proxy"},
+                    {"label": "➕ Добавить артикул", "function_name": "addArticleManually"},
+                    {"label": "❌ Удалить строку с синхронизацией", "function_name": "deleteSelectedRowsWithSync"},
+                    {"separator": True},
+                    {"label": "📝 Настройка правил синхронизации", "function_name": "showSyncRulesManagerDialog"},
+                    {"label": "🔧 Обновить триггеры", "function_name": "setupTriggers"},
+                    {"separator": True},
+                    {"label": "📋 Журнал синхронизации", "function_name": "showSyncLogDialog"},
+                    {"label": "📜 Журнал логов", "function_name": "openLogDashboard_proxy"},
+                    {"separator": True},
                     {"label": "🔍 Проверить статус сервера", "function_name": "showAllServicesStatus_proxy"},
                 ],
             },

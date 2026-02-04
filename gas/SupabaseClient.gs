@@ -434,9 +434,9 @@ function testSupabaseConnection() {
 }
 
 /**
- * Запустить тест из меню
+ * Запустить тест из основного триггера (вызывается из GlobalApiBridge)
  */
-function onOpen() {
+function onOpenSupabase(e) {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('⚡ Supabase')
     .addItem('Test Connection', 'testSupabaseConnection')

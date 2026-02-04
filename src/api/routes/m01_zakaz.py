@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from src.utils.logger import logger
 from src.api.endpoints import (
     sheets_service, sorting_service, price_processor, 
@@ -116,18 +116,36 @@ async def run_load_functions(request: LoadFunctionsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/price/process/{project}", summary="Обработать прайс поставщика")
-async def process_price(project: str, request: PriceProcessRequest, background_tasks: BackgroundTasks):
+async def process_price(project: str, request: PriceProcessRequest):
+    """
+    Обрабатывает прайс поставщика.
+
+    mode="all" запускает ВСЕ циклы последовательно (main → tester → samples и т.д.)
+    mode="main"/"tester"/"samples"/"probes" запускает конкретный цикл.
+
+    Выполняется синхронно, чтобы GAS получил результат или ошибку.
+    """
     try:
-        if request.dry_run:
+        if request.mode == "all":
+            # Run ALL processing cycles sequentially (main → tester → samples etc.)
+            if request.dry_run:
+                # For dry_run with "all", just preview the first cycle (main)
+                return await price_processor.process(
+                    project=project, mode="main", spreadsheet_id=request.spreadsheet_id,
+                    source_doc_id=request.source_doc_id, dry_run=True
+                )
+            result = await price_processor.process_all(
+                project=project,
+                spreadsheet_id=request.spreadsheet_id,
+                source_doc_id=request.source_doc_id
+            )
+            return result
+        else:
+            # Run a single specific cycle
             return await price_processor.process(
                 project=project, mode=request.mode, spreadsheet_id=request.spreadsheet_id,
-                source_doc_id=request.source_doc_id, dry_run=True
+                source_doc_id=request.source_doc_id, dry_run=request.dry_run
             )
-        background_tasks.add_task(
-            price_processor.process, project=project, mode=request.mode, 
-            spreadsheet_id=request.spreadsheet_id, source_doc_id=request.source_doc_id, dry_run=False
-        )
-        return {"status": "queued", "message": f"Processing {project.upper()} {request.mode} started"}
     except Exception as e:
         logger.error("price_process_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
